@@ -2,6 +2,7 @@ package asn
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -221,5 +222,166 @@ func TestMalformedAndOversizedPersistence(t *testing.T) {
 			t.Fatal("invalid persisted data loaded")
 		}
 		s.Close()
+	}
+}
+
+type brokenCacheFile struct {
+	cacheFile
+	mode string
+}
+
+func (f brokenCacheFile) Write(p []byte) (int, error) {
+	if f.mode == "write" {
+		n := min(4, len(p))
+		_, _ = f.cacheFile.Write(p[:n])
+		return n, errors.New("disk full")
+	}
+	return f.cacheFile.Write(p)
+}
+func (f brokenCacheFile) Sync() error {
+	if f.mode == "sync" {
+		return errors.New("interrupted sync")
+	}
+	return f.cacheFile.Sync()
+}
+func TestPersistenceFailurePreservesExistingFile(t *testing.T) {
+	for _, mode := range []string{"create", "write", "sync", "rename"} {
+		t.Run(mode, func(t *testing.T) {
+			c := cfg()
+			c.Persist = true
+			c.Path = filepath.Join(t.TempDir(), "cache.json")
+			original := []byte("[]")
+			if err := os.WriteFile(c.Path, original, 0400); err != nil {
+				t.Fatal(err)
+			}
+			s := New(c, nil)
+			defer s.Close()
+			now := time.Now()
+			s.mu.Lock()
+			s.put(Entry{ASN: 13335, Description: "name", LookedUp: now, Expires: now.Add(time.Hour)})
+			s.dirty = true
+			s.mu.Unlock()
+			fs := defaultCacheFS()
+			create := fs.createTemp
+			fs.createTemp = func(dir, pattern string) (cacheFile, error) {
+				if mode == "create" {
+					return nil, os.ErrPermission
+				}
+				f, err := create(dir, pattern)
+				if err != nil {
+					return nil, err
+				}
+				return brokenCacheFile{f, mode}, nil
+			}
+			if mode == "rename" {
+				fs.rename = func(string, string) error { return errors.New("rename failure") }
+			}
+			s.fs = fs
+			if err := s.flush(); err == nil {
+				t.Fatal("expected write error")
+			}
+			got, err := os.ReadFile(c.Path)
+			if err != nil || string(got) != string(original) {
+				t.Fatalf("existing cache changed: %q %v", got, err)
+			}
+			matches, _ := filepath.Glob(filepath.Join(filepath.Dir(c.Path), ".asn-cache-*"))
+			if len(matches) != 0 {
+				t.Fatalf("temporary files remain: %v", matches)
+			}
+		})
+	}
+}
+func TestPersistenceAtomicReplacementAndExpiredEntries(t *testing.T) {
+	c := cfg()
+	c.Persist = true
+	c.Path = filepath.Join(t.TempDir(), "cache.json")
+	now := time.Now()
+	old := []Entry{{ASN: 1, Description: "expired", LookedUp: now.Add(-2 * time.Hour), Expires: now.Add(-time.Hour)}, {ASN: 2, Description: "valid", LookedUp: now.Add(-time.Minute), Expires: now.Add(time.Minute)}}
+	b, _ := json.Marshal(old)
+	if err := os.WriteFile(c.Path, b, 0400); err != nil {
+		t.Fatal(err)
+	}
+	s := New(c, nil)
+	defer s.Close()
+	if _, ok := s.Get(1); ok {
+		t.Fatal("expired loaded")
+	}
+	if _, ok := s.Get(2); !ok {
+		t.Fatal("valid entry missing")
+	}
+	s.mu.Lock()
+	s.put(Entry{ASN: 3, Description: "new", LookedUp: now, Expires: now.Add(time.Hour)})
+	s.dirty = true
+	s.mu.Unlock()
+	renamed := false
+	real := s.fs.rename
+	s.fs.rename = func(from, to string) error {
+		before, err := os.ReadFile(to)
+		if err != nil || string(before) != string(b) {
+			t.Error("old file changed before rename")
+		}
+		data, err := os.ReadFile(from)
+		if err != nil || !json.Valid(data) {
+			t.Error("temporary file incomplete before rename")
+		}
+		renamed = true
+		return real(from, to)
+	}
+	if err := s.flush(); err != nil {
+		t.Fatal(err)
+	}
+	if !renamed {
+		t.Fatal("rename not called")
+	}
+	data, _ := os.ReadFile(c.Path)
+	if !json.Valid(data) || string(data) == string(b) {
+		t.Fatal("replacement failed")
+	}
+	info, _ := os.Stat(c.Path)
+	if info.Mode().Perm() != 0600 {
+		t.Fatalf("mode %v", info.Mode())
+	}
+}
+func TestPersistenceMissingDirectory(t *testing.T) {
+	c := cfg()
+	c.Persist = true
+	c.Path = filepath.Join(t.TempDir(), "missing", "cache.json")
+	s := New(c, nil)
+	now := time.Now()
+	s.mu.Lock()
+	s.put(Entry{ASN: 1, Description: "one", LookedUp: now, Expires: now.Add(time.Hour)})
+	s.dirty = true
+	s.mu.Unlock()
+	if err := s.flush(); err == nil {
+		t.Fatal("missing directory accepted")
+	}
+	if _, ok := s.Get(1); !ok {
+		t.Fatal("in-memory cache lost")
+	}
+	s.Close()
+}
+
+func TestPersistenceReadOnlyDirectory(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0500); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(dir, 0700)
+	c := cfg()
+	c.Persist = true
+	c.Path = filepath.Join(dir, "cache.json")
+	s := New(c, nil)
+	defer s.Close()
+	now := time.Now()
+	s.mu.Lock()
+	s.put(Entry{ASN: 1, Description: "one", LookedUp: now, Expires: now.Add(time.Hour)})
+	s.dirty = true
+	s.mu.Unlock()
+	err := s.flush()
+	if err == nil {
+		t.Skip("process can write despite read-only permissions; injected permission failure is tested separately")
+	}
+	if _, ok := s.Get(1); !ok {
+		t.Fatal("cache unavailable after write failure")
 	}
 }

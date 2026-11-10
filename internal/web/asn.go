@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"unicode"
 
 	"github.com/HextetSystems/hextet-lg/internal/asn"
 )
@@ -37,6 +36,11 @@ func (h *Handler) pathParts(s string) []pathPart {
 	if s == "" {
 		return []pathPart{{Text: "—"}}
 	}
+	for i := 0; i < len(s); i++ {
+		if (s[i] < '0' || s[i] > '9') && !pathDelimiter(s[i]) {
+			return []pathPart{{Text: s}}
+		}
+	}
 	var out []pathPart
 	start := 0
 	for i := 0; i < len(s); {
@@ -53,7 +57,7 @@ func (h *Handler) pathParts(s string) []pathPart {
 		}
 		v := s[i:j]
 		part := pathPart{Text: v}
-		if h.asn != nil && parseASN(v) != 0 {
+		if h.asn != nil && parseASN(v) != 0 && (i == 0 || pathDelimiter(s[i-1])) && (j == len(s) || pathDelimiter(s[j])) {
 			part.ASN = v
 			part.Title = h.asnTitle(v)
 		}
@@ -66,6 +70,10 @@ func (h *Handler) pathParts(s string) []pathPart {
 	}
 	return out
 }
+
+// Only annotate decimal tokens separated by AS path delimiters. Malformed
+// strings remain visible, but their fragments must not trigger DNS lookups.
+func pathDelimiter(c byte) bool { return strings.ContainsRune(" \t\r\n{},()[]", rune(c)) }
 func (h *Handler) scheduleASNs(p *Page) {
 	if h.asn == nil {
 		return
@@ -94,8 +102,8 @@ func (h *Handler) scheduleASNs(p *Page) {
 		}
 		for _, sec := range p.Sections {
 			for _, r := range sec.Rows {
-				for _, v := range strings.FieldsFunc(r.ASPath, func(r rune) bool { return !unicode.IsDigit(r) }) {
-					add(v)
+				for _, part := range h.pathParts(r.ASPath) {
+					add(part.ASN)
 				}
 			}
 		}

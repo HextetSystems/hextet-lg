@@ -434,7 +434,15 @@ func TestM44MigratedAS395089Inventory(t *testing.T) {
 	}
 	cfg, closeAll := testConfig(defaults(), routeBackend(`{"rib":[{"prefix":"192.0.2.0/24","large_communities":["395089:0:8"]}]}`))
 	defer closeAll()
-	cfg.CommunityDefinitions = config.CommunityDefinitions{Enabled: true, Directory: "../../examples/communities"}
+	files := make(map[string]string)
+	for _, name := range []string{"as395089.txt", "metadata.yaml"} {
+		data, err := os.ReadFile(filepath.Join("../../examples/communities", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[name] = string(data)
+	}
+	cfg.CommunityDefinitions = config.CommunityDefinitions{Enabled: true, Directory: writeDefs(t, files)}
 	h, err := NewHandler(cfg)
 	if err != nil {
 		t.Fatal(err)

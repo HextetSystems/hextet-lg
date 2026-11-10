@@ -26,7 +26,7 @@ document.body.addEventListener('htmx:afterRequest',function(e){if(e.target.id!==
    if(current!==generation||!nodes.some(n=>n.isConnected))return;
    fetch('/asn-status?asn='+encodeURIComponent(ids.join(',')),{headers:{'Accept':'application/json'},cache:'no-store'}).then(r=>r.ok?r.json():{}).then(data=>{
     if(current!==generation)return;
-    nodes.forEach(n=>{if(n.isConnected&&data[n.dataset.asn])n.title=data[n.dataset.asn]});
+    nodes.forEach(n=>{if(n.isConnected&&data && typeof data[n.dataset.asn]==='string' && data[n.dataset.asn])n.title=data[n.dataset.asn]});
     if(++attempts<24 && nodes.some(n=>n.isConnected && !n.title))setTimeout(poll,1500);
    }).catch(()=>{});
   }
@@ -35,4 +35,5 @@ document.body.addEventListener('htmx:afterRequest',function(e){if(e.target.id!==
  document.addEventListener('DOMContentLoaded',update);
  document.body.addEventListener('htmx:afterSwap',update);
  window.addEventListener('pagehide',()=>{generation++});
+ window.addEventListener('pageshow',e=>{if(e.persisted)update()});
 })();

@@ -72,7 +72,28 @@ func Parse(n uint32, records []string) (Entry, error) {
 	return *found, nil
 }
 
+type cacheFile interface {
+	Name() string
+	Chmod(os.FileMode) error
+	Write([]byte) (int, error)
+	Sync() error
+	Close() error
+}
+type cacheFS struct {
+	createTemp func(string, string) (cacheFile, error)
+	rename     func(string, string) error
+	remove     func(string) error
+}
+
+func defaultCacheFS() cacheFS {
+	return cacheFS{
+		createTemp: func(dir, pattern string) (cacheFile, error) { return os.CreateTemp(dir, pattern) },
+		rename:     os.Rename, remove: os.Remove,
+	}
+}
+
 type Service struct {
+	fs       cacheFS
 	cfg      Config
 	resolver Resolver
 	mu       sync.Mutex
@@ -91,7 +112,7 @@ func New(c Config, r Resolver) *Service {
 		r = net.DefaultResolver
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &Service{cfg: c, resolver: r, entries: make(map[uint32]Entry), pending: make(map[uint32]bool), retry: make(map[uint32]time.Time), queue: make(chan uint32, c.MaxConcurrent*16), ctx: ctx, cancel: cancel}
+	s := &Service{fs: defaultCacheFS(), cfg: c, resolver: r, entries: make(map[uint32]Entry), pending: make(map[uint32]bool), retry: make(map[uint32]time.Time), queue: make(chan uint32, c.MaxConcurrent*16), ctx: ctx, cancel: cancel}
 	if c.Persist {
 		s.load()
 	}
@@ -258,7 +279,7 @@ func (s *Service) flush() error {
 	if err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(filepath.Dir(s.cfg.Path), ".asn-cache-*")
+	f, err := s.fs.createTemp(filepath.Dir(s.cfg.Path), ".asn-cache-*")
 	if err != nil {
 		s.mu.Lock()
 		s.dirty = true
@@ -266,7 +287,7 @@ func (s *Service) flush() error {
 		return err
 	}
 	name := f.Name()
-	defer os.Remove(name)
+	defer s.fs.remove(name)
 	if err = f.Chmod(0600); err == nil {
 		_, err = f.Write(data)
 	}
@@ -277,7 +298,7 @@ func (s *Service) flush() error {
 		err = e
 	}
 	if err == nil {
-		err = os.Rename(name, s.cfg.Path)
+		err = s.fs.rename(name, s.cfg.Path)
 	}
 	if err != nil {
 		s.mu.Lock()

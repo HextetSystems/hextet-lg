@@ -428,3 +428,15 @@ volumes:
 The cache file is written atomically with restrictive permissions, periodically
 and at shutdown. An unavailable or unwritable cache file does not prevent the
 looking glass from serving requests. The root filesystem remains read-only.
+
+OpenBGPD supplies the AS path used here as display text. Enrichment preserves
+its ordering and set/confederation delimiters; it does not reconstruct path
+segments or assign meaning to malformed text.
+
+To check browser behavior without automated browser tooling, use a local test
+backend and mock DNS resolver: load a route page with uncached ASNs, confirm
+numbers and links appear immediately, then confirm titles appear after lookup.
+Navigate with the HTMX pager and browser back/forward while responses are
+delayed, and confirm titles never migrate to the next page. Repeat with
+enrichment disabled and with the resolver returning errors. Do not use a
+production backend or live DNS for this check.
