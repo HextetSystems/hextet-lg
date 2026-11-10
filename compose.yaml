@@ -1,7 +1,13 @@
 services:
   hextet-lg:
     build: .
-    image: hextet-lg:local
+    # HEXTET_LG_IMAGE selects the image: a release tag or, for production, an
+    # immutable digest (ghcr.io/hextetsystems/hextet-lg@sha256:...). The default
+    # keeps the local development workflow (`docker compose build` / `up`).
+    # `hextet-lg:local` is a mutable tag and is never a rollback reference; see
+    # README, "Upgrade and rollback". Set the variable in the shell or in an
+    # untracked .env file next to this file (see .env.example).
+    image: ${HEXTET_LG_IMAGE:-hextet-lg:local}
     container_name: hextet-lg
     restart: unless-stopped
     ports:

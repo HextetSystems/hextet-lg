@@ -158,6 +158,7 @@ The public server has no `/metrics` route (it returns 404 whatever headers the c
 | `hextet_lg_http_requests_total{method,route,status_class}` | counter | requests; `status_class` is `2xx`…`5xx` or `client_closed` (client left before the response completed; kept out of the error rate). `route` is one of `index`, `neighbors`, `summary`, `communities`, `healthz`, `readyz`, `static`, `other` |
 | `hextet_lg_http_request_duration_seconds{method,route}` | histogram | request duration |
 | `hextet_lg_http_active_requests` | gauge | requests being served |
+| `hextet_lg_build_info{version,revision,go_version}` | gauge | always 1; one series identifying the running build (same values as `hextet-lg version`) |
 | `hextet_lg_http_rate_limited_total{bucket}` | counter | per-peer rate-limit refusals (`page`, `live`) |
 | `hextet_lg_http_client_aborts_total{route,kind}` | counter | `canceled`, `disconnected`, `write_timeout` |
 | `hextet_lg_work_gate_rejections_total{reason}` | counter | admission refusals: `queue_full`, `wait_timeout`, `canceled`, `shutdown` |
@@ -294,18 +295,30 @@ Then set each backend's `url` to the OpenBGPD `bgplgd` HTTP API address reachabl
 Compose runs only Hextet LG on port 8080. It mounts `./configs/config.docker.yaml` read-only at `/etc/hextet-lg/config.yaml`, runs as an unprivileged user, drops Linux capabilities, enables a read-only root filesystem, and provides a health check. Create the Docker file from the completed development configuration only if it does not already exist, then set its `server.listen` port to 8080 while preserving backend and resource settings. Ensure the non-root container can read it. Do not overwrite either existing file.
 
 ```sh
-docker compose config
-docker compose build
+docker compose config -q
+docker compose build            # local development image hextet-lg:local (version "dev")
 docker compose up -d
 docker compose ps
 curl -fsS http://127.0.0.1:8080/healthz
 ```
+
+The image comes from `HEXTET_LG_IMAGE` and defaults to `hextet-lg:local`, so the development workflow above is unchanged. To run a published release, select it by version or, for production, by immutable digest:
+
+```sh
+HEXTET_LG_IMAGE=ghcr.io/hextetsystems/hextet-lg@sha256:<digest> docker compose up -d --no-build --pull never
+```
+
+`hextet-lg:local` is a mutable tag and is **not** a rollback reference. Upgrades and rollbacks, which preserve the exact previously running image, are described in [docs/RELEASING.md](docs/RELEASING.md) and automated by `scripts/deploy.sh` (`status`, `upgrade <image>`, `rollback`, with `--dry-run`).
 
 For the suggested host layout, keep Compose files in `/srv/docker/compose/hextet-lg/` and place the Docker runtime file at `configs/config.docker.yaml` relative to that Compose project, or adjust the Compose bind mount to your chosen local config path.
 
 Size the container using the measurements and limitations above; set a deployment-specific hard memory limit only with sufficient headroom, and lower `max_retained_bytes`/`max_concurrent_queries` on small hosts. To validate a different configuration without touching `configs/config.yaml`, use a Compose override file that replaces the config bind mount.
 
 OpenBGPD is not bundled. `localhost:9099` inside the Hextet LG container means that container itself. If OpenBGPD runs in a separate Compose project, attach both services to a shared user-defined Docker network and use the backend service name and port, such as `http://openbgpd:9099`, or configure another reachable address. Keep `bgplgd` reachable only from trusted application networks.
+
+## Releases and versions
+
+Releases are built by GoReleaser from Git tags (`vMAJOR.MINOR.PATCH`, prereleases `-rc.N`) in GitHub Actions: Linux amd64/arm64 archives and `checksums.txt` on GitHub Releases, and a multi-architecture image at `ghcr.io/hextetsystems/hextet-lg` tagged `vX.Y.Z`, `sha-<commit>` and, for stable releases only, `latest`. `hextet-lg version` prints the version, commit, build time and Go toolchain. See [docs/RELEASING.md](docs/RELEASING.md) for versioning, CI/CD, artifacts, GitHub settings, and the upgrade and rollback procedure.
 
 ## Local development
 
@@ -326,9 +339,13 @@ go mod tidy
 go fmt ./...
 go vet ./...
 go test ./...
+go test -race ./...
 go mod verify
 go build ./cmd/hextet-lg
+./hextet-lg version
 ```
+
+Requires the Go version declared in `go.mod` (1.24 or newer). Release tooling: `make docker` (local image), `goreleaser check` (`make release-check`) and `make snapshot` (local release build into `dist/`, no credentials, nothing published). CI (`.github/workflows/ci.yaml`) runs the checks above plus the image, Compose and GoReleaser snapshot validation on every pull request and push to `main`.
 
 Tests use `httptest` fixtures and do not require a live OpenBGPD process. Dependencies use normal Go module metadata and are not vendored.
 

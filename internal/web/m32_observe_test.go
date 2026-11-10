@@ -292,6 +292,17 @@ func TestMetricsExpositionFormat(t *testing.T) {
 			t.Errorf("exposition lacks %q", want)
 		}
 	}
+	// Build identity: exactly one series, labelled only with fixed build data.
+	var buildLines []string
+	for _, l := range strings.Split(body, "\n") {
+		if strings.HasPrefix(l, "hextet_lg_build_info{") {
+			buildLines = append(buildLines, l)
+		}
+	}
+	if len(buildLines) != 1 || !strings.HasSuffix(buildLines[0], "} 1") ||
+		!strings.Contains(buildLines[0], `go_version="go`) || !strings.Contains(buildLines[0], `revision="`) || !strings.Contains(buildLines[0], `version="`) {
+		t.Errorf("build info series = %q", buildLines)
+	}
 	if rr := get(h.MetricsHandler(), "/"); rr.Code != 404 {
 		t.Errorf("management listener served %d for /", rr.Code)
 	}

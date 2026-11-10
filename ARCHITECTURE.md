@@ -43,11 +43,11 @@ Each backend carries its own `Completion`; statuses are summarized but never mer
 
 The web layer embeds HTML templates and CSS. Search forms work as ordinary GET forms (a simple box plus Advanced Filters, generated from the field table in `form.go`) and use HTMX to replace the results region when the browser can load its runtime; HTMX updates push the canonical URL, and history-restore requests receive full pages. HTML shows 100 routes per page (`paginate` slices without copying). Plain text is rendered from the same decoded routes by a streaming writer whose columns widen to the longest prefix or next hop, with conspicuous warnings for partial or failed backends and `X-Hextet-LG-*` completion headers. Community status is derived from a `routeros:` evidence block in the embedded YAML.
 
-Compose builds a static Go executable in a multistage build and runs it as UID 10001 with a read-only root filesystem. Configuration is a read-only bind mount. OpenBGPD remains an independently managed service reachable through a shared network or explicit address.
+Compose builds a static Go executable in a multistage build (the same Dockerfile GoReleaser uses for released images) and runs it as UID 10001 with a read-only root filesystem. Configuration is a read-only bind mount. OpenBGPD remains an independently managed service reachable through a shared network or explicit address.
 
 ## Current scope
 
-M2 includes route, neighbor, summary and locally embedded community views, compound server-side route queries, dual-stack IPv4/IPv6 parity, and the large-response, partial-result and pagination remediation. Public GET URLs capture the requested view and are live queries rather than snapshots. Session counts are derived per backend from the returned summary neighbor records; raw JSON preserves version-specific fields. M3.1 adds HTTP, rate, admission, and lifecycle controls. M3.2 adds structured logging, Prometheus metrics, backend health visibility, the cache admission fix and clean disconnect handling (below); M3.3 remains out of scope.
+M2 includes route, neighbor, summary and locally embedded community views, compound server-side route queries, dual-stack IPv4/IPv6 parity, and the large-response, partial-result and pagination remediation. Public GET URLs capture the requested view and are live queries rather than snapshots. Session counts are derived per backend from the returned summary neighbor records; raw JSON preserves version-specific fields. M3.1 adds HTTP, rate, admission, and lifecycle controls. M3.2 adds structured logging, Prometheus metrics, backend health visibility, the cache admission fix and clean disconnect handling (below); M3.3 adds release engineering (below).
 
 ## Public request lifecycle
 
@@ -71,3 +71,18 @@ request ─► protect (request id, active count, respWriter) ─► guard (limi
 - **Backend health**: `recordBackend` updates counters and a per-backend `backendHealth` (last success, last backend-side failure and its reason) from real traffic only; nothing polls. Local limits and cancellations are deliberately not backend failures.
 - **Response handling**: every response passes through `respWriter`, which applies the per-write deadline, remembers whether the header is committed and the first write error, and swallows a second `WriteHeader`. `renderFailed` answers 500 only before the first byte; after it, a write failure means the client is gone (classified `disconnected`/`canceled`, quiet, status class `client_closed`), and a template failure aborts the connection with `http.ErrAbortHandler` so a truncated page cannot look complete. Leases and work slots are released by the handlers' deferred calls on every path.
 - **Shutdown**: `Handler.Shutdown` logs initiation, admission closing with the outstanding-work counters, a grace-expiry warning, and the final counts with duration. The application grace (40 s) must stay below the Compose `stop_grace_period` (45 s).
+
+## Release engineering (M3.3)
+
+```text
+git tag vX.Y.Z ─► release.yaml: validate-tag ─► ci.yaml (go, docker, goreleaser jobs) ─► GoReleaser
+                                                                                          │
+   internal/version ◄── -ldflags (Version, ShortCommit, Date) ── build linux/{amd64,arm64} ┤ static, CGO off
+                                                                                          ├─► tar.gz archives + checksums.txt ─► GitHub Release
+                                                                                          └─► dockers_v2 (buildx, Dockerfile BINARY_SOURCE=prebuilt) ─► GHCR manifest list
+```
+
+- **Single source of version**: the Git tag. `internal/version` holds link-time variables (`Version`, `Commit`, `Date`) and falls back to the module/VCS information the Go toolchain embeds, then to `dev`/`unknown`. `hextet-lg version` (handled in `main` before flag parsing, no CLI framework), the `listening` log record, the OCI labels and `hextet_lg_build_info{version,revision,go_version}` all read the same values. The build-info series has constant labels fixed per build, so cardinality is one.
+- **One runtime image design**: the `Dockerfile` defines the runtime stage once; `BINARY_SOURCE` chooses between compiling from source (`compiled`, cross-compiling on the build host so no emulation is needed) and the binary GoReleaser built (`prebuilt`), so a released image contains the archive's executable.
+- **GoReleaser owns the release** (builds, archives, checksums, GitHub Release, image build, tags and manifest push via `dockers_v2`); the workflow only supplies Go, Buildx and the GHCR login, and records the pushed digest. `latest` is templated to exist only for non-prerelease, non-snapshot builds.
+- **Deployment**: `compose.yaml` takes `HEXTET_LG_IMAGE`; `scripts/deploy.sh` wraps native Compose commands to preserve the running image under an immutable local tag, verify health, readiness, metrics isolation and log format, and roll back. It never reads or changes runtime configuration.

@@ -15,10 +15,19 @@ import (
 
 	"github.com/HextetSystems/hextet-lg/internal/config"
 	"github.com/HextetSystems/hextet-lg/internal/obs"
+	"github.com/HextetSystems/hextet-lg/internal/version"
 	"github.com/HextetSystems/hextet-lg/internal/web"
 )
 
 func main() {
+	// `hextet-lg version` needs no configuration and no CLI framework.
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "version", "-version", "--version":
+			fmt.Print(version.Get().String())
+			return
+		}
+	}
 	configPath := flag.String("config", "/etc/hextet-lg/config.yaml", "path to YAML configuration")
 	flag.Parse()
 	cfg, err := config.Load(*configPath)
@@ -71,7 +80,8 @@ func main() {
 	defer stop()
 	done := make(chan error, 1)
 	go func() { done <- srv.ListenAndServe() }()
-	logger.Info("listening", "title", cfg.Server.Title, "listen", cfg.Server.Listen, "backends", len(cfg.Backends), "log_level", cfg.Logging.Level, "log_format", cfg.Logging.Format, "metrics", cfg.Metrics.Enabled)
+	vi := version.Get()
+	logger.Info("listening", "version", vi.Version, "commit", vi.Commit, "title", cfg.Server.Title, "listen", cfg.Server.Listen, "backends", len(cfg.Backends), "log_level", cfg.Logging.Level, "log_format", cfg.Logging.Format, "metrics", cfg.Metrics.Enabled)
 	code := 0
 	select {
 	case err := <-done:

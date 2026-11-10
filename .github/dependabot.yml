@@ -1,0 +1,16 @@
+# Keeps the SHA-pinned actions, Go modules and base images current through
+# reviewable pull requests (which must pass CI before they can be merged).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

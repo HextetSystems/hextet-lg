@@ -12,6 +12,8 @@
 - `internal/config`: strict YAML decoding and startup validation.
 - `internal/bgp`: OpenBGPD HTTP transport types, native query construction, and client.
 - `internal/web`: handlers, embedded templates, and static assets.
+- `internal/version`: build identity (link-time `Version`/`Commit`/`Date` with toolchain fallbacks).
+- `.goreleaser.yaml`, `.github/workflows`: release automation and CI. `scripts/deploy.sh`: upgrade/rollback wrapper. `docs/RELEASING.md`: release and deployment guide.
 - `configs`: example YAML configuration.
 
 ## Frontend embedding
@@ -52,7 +54,7 @@
 
 ## Milestones
 
-- M3.1 is accepted and M3.2 (observability) is in scope by explicit request; do not begin M3.3 or M4 without an explicit request.
+- M3.1 and M3.2 are accepted and M3.3 (release engineering) is in scope by explicit request; do not begin M4 without an explicit request.
 
 ## Public URLs
 
@@ -72,7 +74,14 @@
 ## Observability
 
 - Log with `log/slog` (JSON default, `logging.level`/`logging.format`). Never log query strings, prefixes, ASNs, headers, credentials, client addresses, backend URLs or response bodies; log fixed route names and configured backend IDs only. Request IDs are generated, never accepted from clients.
-- Prometheus metrics are optional (`metrics.enabled`, default false) and served only by the separate `metrics.listen` listener (`Handler.MetricsHandler`, never in `Routes()`). Do not publish the metrics port in Compose, and do not rely on forwarded headers to protect it. Metric labels come only from fixed sets and configured backend IDs.
+- Prometheus metrics are optional (`metrics.enabled`, default false) and served only by the separate `metrics.listen` listener (`Handler.MetricsHandler`, never in `Routes()`). Do not publish the metrics port in Compose, and do not rely on forwarded headers to protect it. Metric labels come only from fixed sets and configured backend IDs (plus the constant per-build labels of `hextet_lg_build_info`).
 - Resource, work-gate and cache metrics read the authoritative counters at scrape time (O(1)); do not add a second accounting or scan the cache per scrape.
 - Cache admission is decided from the typed `bgp.Reason` (`skipReason` in `internal/web/cache.go`), never from message text: partial results caused by `capacity`, `busy` or `canceled` are never cached. The per-query `memory_limit` and the aggregate `capacity` stay distinct reasons.
 - After the response header is committed, never call `http.Error`/`WriteHeader`; use `Handler.renderFailed`. Keep `server.shutdown_grace` below the Compose `stop_grace_period`.
+
+## Release engineering
+
+- GoReleaser Community Edition (`.goreleaser.yaml`, `version: 2`, `dockers_v2`) is the only release tool; do not add a parallel release script or a second image pipeline. Versions come from Git tags only; never store a version number in a file. Do not create tags, push, publish releases or images, or replace the running production container without explicit authorization.
+- One Dockerfile defines the runtime image; `BINARY_SOURCE` selects `compiled` (source) or `prebuilt` (GoReleaser). Keep it non-root (UID 10001), read-only-root compatible, with the `HEALTHCHECK` and no RUN step that would need emulation to build arm64.
+- `latest` exists only for stable (non-prerelease, non-snapshot) releases. Production and rollback use image digests or preserved immutable local tags, never `hextet-lg:local`. `scripts/deploy.sh` must keep validating before replacing, never touch `configs/`, never prune or delete images, and never act without an explicit subcommand and image.
+- Archives use an explicit file allow-list; runtime configuration (`configs/config.yaml`, `configs/config.docker.yaml`) is never packaged, committed or baked into an image. Pin third-party GitHub Actions to commit SHAs, keep workflow permissions least-privilege, and let only `release.yaml` publish (after `ci.yaml` passes).

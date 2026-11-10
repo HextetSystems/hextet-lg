@@ -1,0 +1,128 @@
+# Continuous integration. Needs no secrets, no operator configuration, no
+# OpenBGPD and no Prometheus: the Go tests use httptest backends, and the image
+# smoke test uses the committed example configuration (nothing contacts a
+# backend at startup).
+#
+# Triggers: pull requests, pushes to main, and workflow_call. Release tags do
+# not run this file on their own; release.yaml calls it so that the tagged
+# commit passes the same checks before anything is published.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+# Least privilege: CI only reads the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  GORELEASER_VERSION: v2.20.0
+
+jobs:
+  go:
+    name: Go checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod # the version the module declares
+          check-latest: true # newest patch release of that version
+      - name: Formatting (go fmt)
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then echo "Run 'go fmt ./...' on:"; echo "$unformatted"; exit 1; fi
+      - name: Module integrity
+        run: go mod verify
+      - name: Vet
+        run: go vet ./...
+      - name: Build
+        run: go build ./cmd/hextet-lg
+      - name: Test
+        run: go test ./...
+      - name: Test (race detector)
+        run: go test -race ./...
+
+  docker:
+    name: Docker image and Compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build both architectures (not pushed)
+        # Validates the multi-architecture build path. The Dockerfile
+        # cross-compiles, so the arm64 build needs no emulation.
+        run: docker buildx build --platform linux/amd64,linux/arm64 --build-arg REVISION="${GITHUB_SHA}" .
+      - name: Build amd64 image for the smoke test
+        run: docker buildx build --load --platform linux/amd64 --build-arg REVISION="${GITHUB_SHA}" -t hextet-lg:ci .
+      - name: Smoke test (non-root, read-only, no capabilities)
+        run: |
+          set -euo pipefail
+          docker run --rm hextet-lg:ci version
+          docker run -d --name lg --read-only --cap-drop ALL --security-opt no-new-privileges:true \
+            --tmpfs /tmp:size=8m,mode=1777 -p 127.0.0.1:18080:8080 \
+            -v "$PWD/configs/config.example.yaml:/etc/hextet-lg/config.yaml:ro" hextet-lg:ci
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/healthz >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18080/healthz
+          curl -fsS http://127.0.0.1:18080/readyz
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/metrics)" = 404
+          test "$(docker exec lg id -u)" = 10001
+          docker logs lg 2>&1 | head -n 3
+          docker stop -t 45 lg
+          test "$(docker inspect --format '{{.State.ExitCode}}' lg)" = 0
+      - name: Compose configuration
+        run: |
+          docker compose config -q
+          HEXTET_LG_IMAGE=ghcr.io/hextetsystems/hextet-lg@sha256:0000000000000000000000000000000000000000000000000000000000000000 docker compose config -q
+
+  goreleaser:
+    name: GoReleaser configuration and snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # GoReleaser derives version and changelog from Git
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          distribution: goreleaser
+          version: ${{ env.GORELEASER_VERSION }}
+          args: check
+      - name: Snapshot release (builds locally; publishes nothing)
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          distribution: goreleaser
+          version: ${{ env.GORELEASER_VERSION }}
+          args: release --snapshot --clean
+      - name: Check snapshot artifacts
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -c checksums.txt
+          ls hextet-lg_*_linux_amd64.tar.gz hextet-lg_*_linux_arm64.tar.gz
+          if tar tzf hextet-lg_*_linux_amd64.tar.gz | grep -E '(^|/)config(\.docker)?\.yaml$'; then
+            echo "runtime configuration must never be packaged"; exit 1
+          fi
+          mkdir x && tar xzf hextet-lg_*_linux_amd64.tar.gz -C x && ./x/hextet-lg version

@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/HextetSystems/hextet-lg/internal/bgp"
+	"github.com/HextetSystems/hextet-lg/internal/version"
 )
 
 // Backend operations are a fixed set so they can label metrics.
@@ -67,7 +68,13 @@ func newMetrics(backendIDs []string) *metrics {
 			}
 		}
 	}
-	m.reg.MustRegister(m.httpRequests, m.httpDuration, m.rateLimited, m.clientAborts, m.backendRequests, m.backendDuration, m.backendFailures, m.backendActive, m.queryRejected,
+	// Build identity: one constant series per process, so cardinality is 1.
+	// It carries only the release version, abbreviated revision and Go
+	// toolchain, never configuration.
+	vi := version.Get()
+	buildInfo := prometheus.NewGauge(prometheus.GaugeOpts{Name: "hextet_lg_build_info", Help: "Build identity of the running binary (value is always 1).", ConstLabels: prometheus.Labels{"version": vi.Version, "revision": vi.Commit, "go_version": vi.GoVersion}})
+	buildInfo.Set(1)
+	m.reg.MustRegister(buildInfo, m.httpRequests, m.httpDuration, m.rateLimited, m.clientAborts, m.backendRequests, m.backendDuration, m.backendFailures, m.backendActive, m.queryRejected,
 		collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	return m
 }

@@ -2,7 +2,7 @@ GO ?= go
 BINARY ?= hextet-lg
 BUILD_DIR ?= build
 
-.PHONY: all build run test coverage vet fmt fmt-check tidy clean help
+.PHONY: all build run test coverage vet fmt fmt-check tidy clean help docker release-check snapshot
 
 all: build
 
@@ -31,8 +31,17 @@ fmt-check:
 tidy:
 	$(GO) mod tidy
 
+docker: ## build the local development image hextet-lg:local (version "dev")
+	docker build --build-arg REVISION=$$(git rev-parse HEAD 2>/dev/null || echo unknown) --build-arg CREATED=$$(date -u +%Y-%m-%dT%H:%M:%SZ) -t hextet-lg:local .
+
+release-check: ## validate .goreleaser.yaml
+	goreleaser check
+
+snapshot: ## local GoReleaser build into dist/; publishes nothing
+	goreleaser release --snapshot --clean
+
 clean:
-	rm -rf $(BUILD_DIR) coverage.out
+	rm -rf $(BUILD_DIR) dist coverage.out
 
 help:
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
