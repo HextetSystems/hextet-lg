@@ -19,28 +19,30 @@ import (
 // Route is the normalized, presentation-facing form of one bgplgd rib entry.
 // A prefix with several paths yields several Routes.
 type Route struct {
-	Raw              string // compact raw JSON of this route object
-	Best             bool
-	Prefix           string
-	ASPath           string
-	ExitNexthop      string
-	TrueNexthop      string
-	Neighbor         string
-	Valid            *bool
-	Source           string
-	OVS              string
-	AVS              string
-	Origin           string
-	OriginASN        string
-	Metric           *int64
-	LocalPref        *int64
-	Weight           *int64
-	DMetric          *int64
-	LastUpdate       string
-	LastUpdateSec    *int64
-	Communities      []string
-	ExtCommunities   []string
-	LargeCommunities []string
+	Raw                 string // compact raw JSON of this route object
+	Best                bool
+	Prefix              string
+	ASPath              string
+	ExitNexthop         string
+	TrueNexthop         string
+	Neighbor            string
+	NeighborAddress     string
+	NeighborDescription string
+	Valid               *bool
+	Source              string
+	OVS                 string
+	AVS                 string
+	Origin              string
+	OriginASN           string
+	Metric              *int64
+	LocalPref           *int64
+	Weight              *int64
+	DMetric             *int64
+	LastUpdate          string
+	LastUpdateSec       *int64
+	Communities         []string
+	ExtCommunities      []string
+	LargeCommunities    []string
 }
 
 // Family reports the route's address family, "IPv4" or "IPv6", from its prefix.

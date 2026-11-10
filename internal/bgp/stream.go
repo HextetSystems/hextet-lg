@@ -323,9 +323,10 @@ func parseRoute(raw []byte, buf *bytes.Buffer) (Route, error) {
 		rawText = string(raw)
 	}
 	path := Flexible(w.ASPath)
+	neighbor, address, description := neighborFields(w.Neighbor)
 	r := Route{
 		Raw: rawText, Best: string(w.Best) == "true", Prefix: Flexible(w.Prefix), ASPath: path,
-		ExitNexthop: Flexible(w.ExitNexthop), TrueNexthop: Flexible(w.TrueNexthop), Neighbor: neighborName(w.Neighbor),
+		ExitNexthop: Flexible(w.ExitNexthop), TrueNexthop: Flexible(w.TrueNexthop), Neighbor: neighbor, NeighborAddress: address, NeighborDescription: description,
 		Source: Flexible(w.Source), OVS: Flexible(w.OVS), AVS: Flexible(w.AVS), Origin: Flexible(w.Origin),
 		OriginASN: originASN(path), Metric: optionalInt(w.Metric), LocalPref: optionalInt(w.LocalPref),
 		Weight: optionalInt(w.Weight), DMetric: optionalInt(w.DMetric), LastUpdate: Flexible(w.LastUpdate),
@@ -345,29 +346,30 @@ func parseRoute(raw []byte, buf *bytes.Buffer) (Route, error) {
 	return r, nil
 }
 
-// neighborName reads bgpctl's neighbor object ({description, remote_addr, bgp_id})
+// neighborFields reads bgpctl's neighbor object ({description, remote_addr, bgp_id})
 // or a plain string.
-func neighborName(raw json.RawMessage) string {
+func neighborFields(raw json.RawMessage) (string, string, string) {
 	if len(raw) == 0 || string(raw) == "null" {
-		return ""
+		return "", "", ""
 	}
 	if raw[0] != '{' {
-		return Flexible(raw)
+		s := Flexible(raw)
+		return s, s, ""
 	}
 	var n struct {
 		Description string `json:"description"`
 		RemoteAddr  string `json:"remote_addr"`
 	}
 	if json.Unmarshal(raw, &n) != nil {
-		return Flexible(raw)
+		return Flexible(raw), "", ""
 	}
 	switch {
 	case n.Description != "" && n.RemoteAddr != "":
-		return n.Description + " (" + n.RemoteAddr + ")"
+		return n.Description + " (" + n.RemoteAddr + ")", n.RemoteAddr, n.Description
 	case n.Description != "":
-		return n.Description
+		return n.Description, "", n.Description
 	default:
-		return n.RemoteAddr
+		return n.RemoteAddr, n.RemoteAddr, ""
 	}
 }
 
@@ -376,7 +378,7 @@ func neighborName(raw json.RawMessage) string {
 // only to bound retention.
 func (r *Route) MemSize() int64 {
 	n := int64(unsafe.Sizeof(*r)) * 3 / 2
-	n += int64(len(r.Raw) + len(r.Prefix) + len(r.ASPath) + len(r.ExitNexthop) + len(r.TrueNexthop) + len(r.Neighbor) +
+	n += int64(len(r.Raw) + len(r.Prefix) + len(r.ASPath) + len(r.ExitNexthop) + len(r.TrueNexthop) + len(r.Neighbor) + len(r.NeighborAddress) + len(r.NeighborDescription) +
 		len(r.Source) + len(r.OVS) + len(r.AVS) + len(r.Origin) + len(r.OriginASN) + len(r.LastUpdate))
 	for _, list := range [][]string{r.Communities, r.ExtCommunities, r.LargeCommunities} {
 		for _, s := range list {

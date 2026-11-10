@@ -8,6 +8,8 @@ The optional `features.communities` and `features.large_communities` settings de
 
 Advanced Filters start collapsed and collapse after a successful search; validation errors open them. The indicator counts active advanced criteria, and expanding the section retains their values. CIDR searches default to exact prefix; select **Include more specifics** (`all=1`) or **Include covering prefixes** (`or-shorter=1`) for other scopes. For example, `/?type=prefix&q=8.8.8.0%2F24&all=1` and `/?type=prefix&q=2001%3Adb8%3A%3A%2F32&or-shorter=1` are shareable links. Bare IPv4 and IPv6 addresses use longest-prefix match and cannot be combined with these scope flags. Route visibility exclusions apply to every mode and enabled community search before results are cached or counted.
 
+Neighbor addresses in the Neighbor Explorer and route tables link to a fresh route search on the originating backend. The search does not infer an address family from the session address, so it includes both families unless a filter is explicitly selected. Route tables show the full address compactly; native tooltips provide available descriptions and, in the Neighbor Explorer, remote ASNs. Expanded route details retain the description. Descriptions are shown only when the backend supplies them; no additional neighbor lookup is made.
+
 ## Route visibility exclusions
 
 Optionally configure `route_visibility.exclude.ipv4` and `ipv6` to hide destination routes across all backends and route outputs. No prefixes are excluded by default. For example:

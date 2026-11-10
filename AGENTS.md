@@ -55,12 +55,13 @@
 
 ## Milestones
 
-- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) are in scope by explicit request; do not begin other M4 work without an explicit request.
+- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) are in scope by explicit request; do not begin other M4 work without an explicit request.
 
 ## Public URLs
 
 - Preserve bookmarkable GET URLs: `/` uses `type`+`q` (single prefix, source-AS or Large Community search) or the named filters above, plus `backend`, `view` and `page`; `/neighbors` and `/summary` use `backend`; `/communities` uses `q` and `category`. Backend values are stable IDs or `all`, never addresses. Existing simple `type`/`q` URLs must keep working.
 - Emit canonical URLs: single-filter simple searches in the `type`/`q` form, compound searches with filters in the fixed order of `bgp.StringFilterKeys` then `bgp.FlagFilterKeys`, then `backend`, `view`, `page` (omitted for page 1). Redirect form noise (empty fields) once; for HTMX set `HX-Push-Url`; serve a full page for `HX-History-Restore-Request`.
+- Neighbor links use the backend-supplied address and source backend ID, without an inferred `af` or unrelated filters. Keep descriptions escaped and supplementary to the visible address.
 - Route views are `table`, `text`, and `detail`; `output=plain` requests text/plain for text views and returns all routes unless `page` is given. Plain responses carry `X-Hextet-LG-Completeness`, `X-Hextet-LG-Routes` and `X-Hextet-LG-Backends`, and use HTTP 400/404/502/503/504 only for invalid, out-of-range or fully failed requests (partial = 200 plus headers and an in-body warning). Links are live queries, not snapshots. Keep ordinary navigation functional without JavaScript and preserve HTMX history.
 
 ## Communities

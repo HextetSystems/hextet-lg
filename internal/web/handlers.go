@@ -133,6 +133,8 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 		return nil, err
 	}
 	h.templates, err = template.New("root").Funcs(template.FuncMap{
+		"neighborURL":   neighborURL,
+		"neighborTitle": neighborTitle,
 		"searchURL": func(kind, value, backend string) string {
 			// Canonical legacy form: type, q, backend (view is left to the target page).
 			return "/?type=" + url.QueryEscape(kind) + "&q=" + url.QueryEscape(value) + "&backend=" + url.QueryEscape(backend)

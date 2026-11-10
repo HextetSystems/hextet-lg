@@ -43,7 +43,7 @@ func TestMixedFamilyHTMLTextAndDetailAreComplete(t *testing.T) {
 	base := "/?large-community=395089%3A0%3A8&backend=a"
 
 	html := get(h, base+"&view=table").Body.String()
-	for _, want := range []string{"10.0.0.0/24", "2001:db8:1::/48", "2001:db8:2:1::/64", longV6, "2001:db8:ffff::1", "fe80::1", "v6-peer (2001:db8:ffff::2)", "v4-peer (192.0.2.254)", "IPv4", "IPv6", "fe80::2"} {
+	for _, want := range []string{"10.0.0.0/24", "2001:db8:1::/48", "2001:db8:2:1::/64", longV6, "2001:db8:ffff::1", "fe80::1", "v6-peer", "2001:db8:ffff::2", "v4-peer", "192.0.2.254", "IPv4", "IPv6", "fe80::2"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("HTML missing %q", want)
 		}

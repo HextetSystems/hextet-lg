@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -113,6 +114,28 @@ func publicQuery(q bgp.Query, backend, view string, page int, plain bool) string
 
 func publicURL(q bgp.Query, backend, view string, page int, plain bool) string {
 	return "/?" + publicQuery(q, backend, view, page, plain)
+}
+
+// neighborURL uses only an address supplied by the backend, never a label.
+func neighborURL(address, backend string) string {
+	a, err := netip.ParseAddr(address)
+	if err != nil || backend == "" || backend == "all" {
+		return ""
+	}
+	return publicURL(bgp.Query{Neighbor: a.String()}, backend, "table", 1, false)
+}
+
+func neighborTitle(description, address, remoteAS string) string {
+	var parts []string
+	for _, s := range []string{description, address} {
+		if s != "" {
+			parts = append(parts, s)
+		}
+	}
+	if remoteAS != "" {
+		parts = append(parts, "AS"+remoteAS)
+	}
+	return strings.Join(parts, " — ")
 }
 
 func (p *Pager) setLinks(q bgp.Query, backend, view string) {
