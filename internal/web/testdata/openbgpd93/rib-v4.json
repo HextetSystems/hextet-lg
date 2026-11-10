@@ -1,0 +1,56 @@
+{
+ "rib": [
+  {
+   "prefix": "198.51.100.0/24",
+   "aspath": "64501 64502",
+   "exit_nexthop": "192.0.2.1",
+   "true_nexthop": "192.0.2.1",
+   "neighbor": {
+    "description": "example-peer",
+    "remote_addr": "192.0.2.1",
+    "bgp_id": "192.0.2.254"
+   },
+   "valid": true,
+   "best": true,
+   "source": "internal",
+   "ovs": "valid",
+   "avs": "unknown",
+   "origin": "IGP",
+   "metric": 0,
+   "localpref": 200,
+   "weight": 0,
+   "dmetric": 5,
+   "last_update": "01:00:35",
+   "last_update_sec": 3635,
+   "communities": [
+    "64500:100"
+   ],
+   "large_communities": [
+    "64500:0:8",
+    "64500:5:2"
+   ],
+   "attributes": [
+    {
+     "type": "Atomic Aggregate",
+     "flags": {
+      "partial": false,
+      "transitive": true,
+      "optional": false
+     },
+     "length": 0
+    },
+    {
+     "type": "Aggregator",
+     "flags": {
+      "partial": false,
+      "transitive": true,
+      "optional": true
+     },
+     "length": 8,
+     "AS": 64502,
+     "router_id": "192.0.2.9"
+    }
+   ]
+  }
+ ]
+}

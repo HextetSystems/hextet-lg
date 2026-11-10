@@ -1,0 +1,13 @@
+{
+ "neighbors": [
+  {
+   "remote_as": "64500",
+   "description": "example-description",
+   "remote_addr": "192.0.2.1",
+   "bgpid": "192.0.2.1",
+   "state": "Established",
+   "last_updown": "01:00:37",
+   "last_updown_sec": 3637
+  }
+ ]
+}

@@ -22,6 +22,9 @@ document.body.addEventListener('htmx:beforeRequest',e=>{if(e.target.matches('for
 // Validation fragments are deliberately returned with HTTP 400.
 document.body.addEventListener('htmx:beforeSwap',function(e){if(e.detail.xhr.status===400){e.detail.shouldSwap=true;e.detail.isError=false}});
 
+// HTMX 2 swaps a history-restore response only for status 200-399 and otherwise fires this event, leaving the old page under the already-changed URL. A rejected search (HTTP 400) is a legitimate history entry, so fall back to an ordinary navigation of the current URL: the server still answers 400, and the browser shows that document exactly as a reload does. A full navigation sends no history-restore request, so this cannot loop.
+document.body.addEventListener('htmx:historyCacheMissLoadError',function(){location.reload()});
+
 // The form is outside the HTMX results target, so update its disclosure after each response.
 document.body.addEventListener('htmx:afterRequest',function(e){if(e.target.id!=='search-form')return;var d=document.getElementById('advanced');if(e.detail.xhr.status===400){d.open=true;return}if(e.detail.xhr.status>=200&&e.detail.xhr.status<300){d.open=false;var n=0;var canonical=new URL(e.detail.xhr.getResponseHeader('HX-Push-Url')||location.href,location.href);d.querySelectorAll('input,select').forEach(function(x){if(x.name==='prefix'&&canonical.searchParams.get('type')==='prefix'&&canonical.searchParams.has('q'))return;if(!x.disabled&&((x.type==='checkbox'&&x.checked)||(x.type!=='checkbox'&&x.value.trim()!=='')))n++});document.getElementById('advanced-count').textContent=n?'('+n+' active)':''}});
 

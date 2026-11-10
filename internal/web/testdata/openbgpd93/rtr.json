@@ -1,0 +1,50 @@
+{
+ "rtrs": [
+  {
+   "descr": "validator-1",
+   "remote_addr": "192.0.2.3",
+   "remote_port": 3323,
+   "state": "established",
+   "version": 1,
+   "minimal_version": 0,
+   "session_id": 4321,
+   "serial": 80,
+   "refresh": 1016,
+   "retry": 600,
+   "expire": 7200,
+   "timers": [
+    {
+     "name": "RTR RefreshTimer",
+     "due": 549
+    },
+    {
+     "name": "RTR ExpireTimer",
+     "due": 6733
+    }
+   ]
+  },
+  {
+   "descr": "validator-2",
+   "remote_addr": "192.0.2.4",
+   "remote_port": 3323,
+   "state": "established",
+   "version": 1,
+   "minimal_version": 0,
+   "session_id": 8765,
+   "serial": 127,
+   "refresh": 1034,
+   "retry": 600,
+   "expire": 7200,
+   "timers": [
+    {
+     "name": "RTR RefreshTimer",
+     "due": 589
+    },
+    {
+     "name": "RTR ExpireTimer",
+     "due": 6755
+    }
+   ]
+  }
+ ]
+}

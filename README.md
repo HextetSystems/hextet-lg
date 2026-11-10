@@ -151,6 +151,8 @@ The optional `display` section is presentation only: it never changes the OpenBG
 
 Back and Forward re-render the page from the server using the canonical URL (`historyCacheSize` is 0, so HTMX never restores a DOM snapshot, whose form values are stale). The search box, search type, backend, view, advanced filters, title and results therefore always agree with the URL, exactly as after a reload. Backend queries are subject to the normal result cache. Search controls and the theme button are wired through delegated listeners so they keep working after the page body is replaced.
 
+**Rejected searches in history.** A rejected search (HTTP 400) is a legitimate history entry. HTMX 2 swaps a history-restore response only for status 200-399, so going Back or Forward to such an entry used to change the URL and leave the previous page. `app.js` now handles `htmx:historyCacheMissLoadError` by reloading the current URL as an ordinary navigation: the server still answers 400 (never masked), and the browser shows the error page with the form, title and footer exactly as a reload does. Covered by the browser regression and `testdata/m51-history.test.js`.
+
 ## Page generation timing
 
 HTML pages end with a muted footer note such as `Generated in 42.7 ms`. It is on by default and is switched off with `features.page_timing: false` (existing configurations need no change). The flag only removes the display: the HTTP duration metric and the access log keep measuring every request.
@@ -505,7 +507,7 @@ go build ./cmd/hextet-lg
 
 Requires the Go version declared in `go.mod` (1.24 or newer). Release tooling: `make docker` (local image), `goreleaser check` (`make release-check`) and `make snapshot` (local release build into `dist/`, no credentials, nothing published). CI (`.github/workflows/ci.yaml`) runs the checks above plus the image, Compose and GoReleaser snapshot validation on every pull request and push to `main`.
 
-Tests use `httptest` fixtures and do not require a live OpenBGPD process. Dependencies use normal Go module metadata and are not vendored.
+Tests use `httptest` fixtures and do not require a live OpenBGPD process. Dependencies use normal Go module metadata and are not vendored. Opt-in headless-Chromium regression tests and an opt-in, read-only live OpenBGPD compatibility check are described in [docs/TESTING.md](docs/TESTING.md); without their environment variables they are skipped, never reported as passing.
 
 ## Known limitations
 
@@ -524,6 +526,8 @@ Tests use `httptest` fixtures and do not require a live OpenBGPD process. Depend
 - The embedded HTMX runtime is pinned at version 2.0.4. No external browser assets are required.
 - Absent route fields display as unknown or an em dash. RPKI OVS, ASPA AVS, and route validity remain separate values.
 - Live route results depend on the separately managed OpenBGPD API.
+- Between 701 and about 900 px the nine-column route table scrolls inside its own container (the page does not scroll); the card layout starts at 700 px.
+- Integration coverage with a real OpenBGPD 9.3 backend was bounded and read-only (see [docs/TESTING.md](docs/TESTING.md)); IPv6 BGP neighbors, non-`unknown` ASPA results and community searches were not exercised live and rely on mock tests.
 
 ### Optional ASN registration descriptions
 

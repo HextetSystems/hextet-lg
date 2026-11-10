@@ -5,6 +5,7 @@
 - Use the standard module `github.com/HextetSystems/hextet-lg`; keep dependencies in `go.mod`/`go.sum` and do not add vendoring or `go.work`.
 - Keep dependencies small. Prefer Go standard library packages for HTTP, URL handling, JSON, templates, and validation.
 - Run `gofmt` on Go files and validate with `go vet ./...` and `go test ./...`.
+- Also run `go test -race ./...` and `node --test internal/web/testdata/*.test.js`. Browser regression (`HEXTET_LG_BROWSER=1`, `NODE_PATH` to a Playwright install) and the live check (`HEXTET_LG_LIVE=1`) are opt-in, read-only and documented in `docs/TESTING.md`; skipped tests are never reported as passing. Never commit real backend responses: sanitize fixtures to documentation addresses and private ASNs.
 
 ## Project layout
 
@@ -17,7 +18,7 @@
 - `internal/site`: deployment identity (`site` section): validation, startup-loaded logo/favicon assets, footer items, built-in favicon. No web or BGP dependencies.
 - `internal/version`: build identity (link-time `Version`/`Commit`/`Date` with toolchain fallbacks).
 - `.goreleaser.yaml`, `.github/workflows`: release automation and CI. `scripts/deploy.sh`: upgrade/rollback wrapper. `docs/RELEASING.md`: release and deployment guide.
-- `configs`: example YAML configuration. `examples/communities`: example community definitions (data, not defaults). `docs/COMMUNITIES.md`: definitions guide. `docs/SESSION_VISIBILITY.md`: BGP neighbor and RTR session guide. `docs/BRANDING.md`: site identity, logo and favicon guide.
+- `configs`: example YAML configuration. `examples/communities`: example community definitions (data, not defaults). `docs/COMMUNITIES.md`: definitions guide. `docs/SESSION_VISIBILITY.md`: BGP neighbor and RTR session guide. `docs/BRANDING.md`: site identity, logo and favicon guide. `docs/TESTING.md`: deterministic, browser and live test layers.
 
 ## Frontend embedding
 
@@ -59,7 +60,7 @@
 
 ## Milestones
 
-- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) and M4.5.1 (configurable themes) are in scope by explicit request; M4.6 (next-hop PTR enrichment) and M4.7 (BGP neighbor and RPKI RTR session visibility) and M4.8 (page generation timing) and M4.8.1 (compact Route Explorer layout and dynamic page titles) and M4.8.2 (mobile usability, route presentation and configurable columns) and M4.9 (generic operator branding and deployment identity) are in scope by explicit request; do not begin M5 or later without an explicit request.
+- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) and M4.5.1 (configurable themes) are in scope by explicit request; M4.6 (next-hop PTR enrichment) and M4.7 (BGP neighbor and RPKI RTR session visibility) and M4.8 (page generation timing) and M4.8.1 (compact Route Explorer layout and dynamic page titles) and M4.8.2 (mobile usability, route presentation and configurable columns) and M4.9 (generic operator branding and deployment identity) and M5.1 (live OpenBGPD integration and regression testing) are in scope by explicit request; do not begin M5.2 or later without an explicit request.
 
 ## Public URLs
 
@@ -99,7 +100,7 @@
 - Route details and Raw JSON are two independent native `<details>` in one `.disclosures` row (also on the neighbor pages). `display.raw_json` (default false) gates every Raw JSON presentation; when off, render nothing and embed no payload. Never add an endpoint that serves raw backend data. `bgp.Route.Raw` retention and accounting do not depend on the setting.
 - `display.route_columns` (neighbor false, neighbor_format name|ip|both, rpki true, aspa true) is presentation only: it must not change the backend request, route parsing, cache keys, filters or visibility. A hidden column's value stays in Route details; header, cells and the details colspan must stay aligned for every combination.
 - Neighbor names reuse the M4.6 PTR service (cache, workers, TTLs, dedup, `/ptr-status`); never add a resolver or cache. They share the per-page budget, are scheduled after next hops and only while the Neighbor column is visible with `name`/`both`. The hostname is display text only: links, identity and keys use the backend-supplied address and backend ID.
-- Browser history restores from the server (`historyCacheSize:0`), never from HTMX DOM snapshots, so the form always matches the canonical URL. Search-form and theme handlers must stay delegated or be rebound on `htmx:historyRestore`.
+- Browser history restores from the server (`historyCacheSize:0`), never from HTMX DOM snapshots, so the form always matches the canonical URL. A history restore that returns non-2xx/3xx (a rejected search, HTTP 400) is handled by the `htmx:historyCacheMissLoadError` reload in `app.js`; never mask the status to make restoring work. Search-form and theme handlers must stay delegated or be rebound on `htmx:historyRestore`.
 
 ## Public deployment controls
 
