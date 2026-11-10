@@ -115,3 +115,7 @@ results live in a separate bounded cache. A rate-limited cache-only status
 endpoint supports a finite sequence of browser updates to native titles, and
 cannot initiate DNS lookups. Optional cache persistence uses atomic replacement
 in an explicitly writable directory; it is disabled by default.
+
+## Next-hop reverse DNS
+
+Optional PTR enrichment uses independent bounded workers and an in-memory cache. Only addresses in rendered, visibility-filtered route table pages are scheduled, and the cache-only status endpoint shares the ASN frontend update lifecycle. DNS never blocks rendering or changes route results. See [PTR enrichment](docs/PTR_ENRICHMENT.md).

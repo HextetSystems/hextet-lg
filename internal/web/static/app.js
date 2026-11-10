@@ -19,18 +19,21 @@ document.body.addEventListener('htmx:afterRequest',function(e){if(e.target.id!==
  let generation=0;
  function update(){
   const current=++generation;
-  let nodes=Array.from(document.querySelectorAll('[data-asn]')).filter(n=>!n.title && /^[0-9]{1,10}$/.test(n.dataset.asn));
-  nodes.sort((a,b)=>(a.dataset.asnPriority==='0'?0:1)-(b.dataset.asnPriority==='0'?0:1));
-  let ids=Array.from(new Set(nodes.map(n=>n.dataset.asn))).slice(0,256);
-  if(!ids.length)return;
+  let asns=Array.from(document.querySelectorAll('[data-asn]')).filter(n=>!n.title && /^[0-9]{1,10}$/.test(n.dataset.asn||''));
+  asns.sort((a,b)=>(a.dataset.asnPriority==='0'?0:1)-(b.dataset.asnPriority==='0'?0:1));
+  let ptrs=Array.from(document.querySelectorAll('[data-ptr]')).filter(n=>!n.title && typeof n.dataset.ptr==='string' && n.dataset.ptr.length<=45);
+  ptrs.sort((a,b)=>(a.dataset.ptrPriority==='0'?0:1)-(b.dataset.ptrPriority==='0'?0:1));
+  let groups=[{nodes:asns,key:'asn',url:'/asn-status?asn='},{nodes:ptrs,key:'ptr',url:'/ptr-status?ip='}];
+  groups.forEach(g=>g.ids=Array.from(new Set(g.nodes.map(n=>n.dataset[g.key]))).slice(0,256));
+  if(!groups.some(g=>g.ids.length))return;
   let attempts=0;
   function poll(){
-   if(current!==generation||!nodes.some(n=>n.isConnected))return;
-   fetch('/asn-status?asn='+encodeURIComponent(ids.join(',')),{headers:{'Accept':'application/json'},cache:'no-store'}).then(r=>r.ok?r.json():{}).then(data=>{
+   if(current!==generation||!groups.some(g=>g.nodes.some(n=>n.isConnected && !n.title)))return;
+   let work=groups.filter(g=>g.ids.length && g.nodes.some(n=>n.isConnected && !n.title)).map(g=>fetch(g.url+encodeURIComponent(g.ids.join(',')),{headers:{'Accept':'application/json'},cache:'no-store'}).then(r=>r.ok?r.json():{}).then(data=>{
     if(current!==generation)return;
-    nodes.forEach(n=>{if(n.isConnected&&data && typeof data[n.dataset.asn]==='string' && data[n.dataset.asn])n.title=data[n.dataset.asn]});
-    if(++attempts<24 && nodes.some(n=>n.isConnected && !n.title))setTimeout(poll,1500);
-   }).catch(()=>{});
+    g.nodes.forEach(n=>{if(n.isConnected&&data && typeof data[n.dataset[g.key]]==='string' && data[n.dataset[g.key]])n.title=data[n.dataset[g.key]]});
+   }).catch(()=>{}));
+   Promise.all(work).then(()=>{if(current===generation && ++attempts<24 && groups.some(g=>g.nodes.some(n=>n.isConnected && !n.title)))setTimeout(poll,1500)});
   }
   setTimeout(poll,500);
  }

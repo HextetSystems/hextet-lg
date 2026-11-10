@@ -258,3 +258,20 @@ func TestExampleThemeMatchesBuiltInDefaults(t *testing.T) {
 		t.Fatalf("example theme differs from the built-in defaults (warnings %v)", example.Warnings)
 	}
 }
+
+func TestPTRDefaultsAndValidation(t *testing.T) {
+	c, err := Decode(strings.NewReader(validConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.PTREnrichment.Enabled || c.PTREnrichment.Cache.PositiveTTL != 720*time.Hour || c.PTREnrichment.Cache.NegativeTTL != 24*time.Hour || c.PTREnrichment.MaxConcurrent != 4 || c.PTREnrichment.MaxLookupsPerPage != 64 || c.PTREnrichment.Cache.MaxEntries != 10000 || c.PTREnrichment.Timeout != 2*time.Second {
+		t.Fatalf("defaults: %+v", c.PTREnrichment)
+	}
+	for _, mutate := range []func(*PTREnrichment){func(p *PTREnrichment) { p.Timeout = 0 }, func(p *PTREnrichment) { p.Timeout = time.Minute + 1 }, func(p *PTREnrichment) { p.MaxConcurrent = 0 }, func(p *PTREnrichment) { p.MaxLookupsPerPage = 257 }, func(p *PTREnrichment) { p.Cache.PositiveTTL = 0 }, func(p *PTREnrichment) { p.Cache.NegativeTTL = 0 }, func(p *PTREnrichment) { p.Cache.MaxEntries = 10001 }} {
+		bad := c
+		mutate(&bad.PTREnrichment)
+		if bad.Validate() == nil {
+			t.Fatal("invalid PTR settings accepted")
+		}
+	}
+}

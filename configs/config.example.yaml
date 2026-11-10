@@ -205,3 +205,15 @@ asn_enrichment:
     max_entries: 10000
     persist: false
     path: /var/lib/hextet-lg/asn-cache.json
+
+# Optional asynchronous reverse DNS for displayed next-hop addresses.
+# DNS is never required for route rendering and the cache is memory-only.
+ptr_enrichment:
+  enabled: false
+  timeout: 2s
+  max_concurrent: 4
+  max_lookups_per_page: 64
+  cache:
+    positive_ttl: 720h
+    negative_ttl: 24h
+    max_entries: 10000

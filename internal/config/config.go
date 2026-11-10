@@ -65,7 +65,25 @@ func ASNDefaults() ASNEnrichment {
 	return ASNEnrichment{Provider: "team_cymru", Timeout: 2 * time.Second, MaxConcurrent: 4, MaxLookupsPerPage: 64, Cache: ASNCache{PositiveTTL: 168 * time.Hour, NegativeTTL: 24 * time.Hour, MaxEntries: 10000, Path: "/var/lib/hextet-lg/asn-cache.json"}}
 }
 
+type PTRCache struct {
+	PositiveTTL time.Duration `yaml:"positive_ttl"`
+	NegativeTTL time.Duration `yaml:"negative_ttl"`
+	MaxEntries  int           `yaml:"max_entries"`
+}
+type PTREnrichment struct {
+	Enabled           bool          `yaml:"enabled"`
+	Timeout           time.Duration `yaml:"timeout"`
+	MaxConcurrent     int           `yaml:"max_concurrent"`
+	MaxLookupsPerPage int           `yaml:"max_lookups_per_page"`
+	Cache             PTRCache      `yaml:"cache"`
+}
+
+func PTRDefaults() PTREnrichment {
+	return PTREnrichment{Timeout: 2 * time.Second, MaxConcurrent: 4, MaxLookupsPerPage: 64, Cache: PTRCache{PositiveTTL: 720 * time.Hour, NegativeTTL: 24 * time.Hour, MaxEntries: 10000}}
+}
+
 type Config struct {
+	PTREnrichment        PTREnrichment        `yaml:"ptr_enrichment"`
 	ASNEnrichment        ASNEnrichment        `yaml:"asn_enrichment"`
 	Features             Features             `yaml:"features"`
 	CommunityDefinitions CommunityDefinitions `yaml:"community_definitions"`
@@ -267,7 +285,7 @@ func Load(path string) (Config, error) {
 func Decode(r io.Reader) (Config, error) {
 	dec := yaml.NewDecoder(r)
 	dec.KnownFields(true)
-	c := Config{ASNEnrichment: ASNDefaults(), Logging: Logging{Level: DefaultLogLevel, Format: DefaultLogFormat}, Metrics: Metrics{Listen: DefaultMetricsListen}, LookingGlass: Defaults(), Server: Server{MaxURLBytes: 8192, MaxQueryBytes: 6144, MaxQueryParams: 64, MaxHeaderBytes: 32768, RatePerSecond: 10, RateBurst: 60, LiveRatePerSecond: 1, LiveRateBurst: 8, ShutdownGrace: 40 * time.Second}}
+	c := Config{PTREnrichment: PTRDefaults(), ASNEnrichment: ASNDefaults(), Logging: Logging{Level: DefaultLogLevel, Format: DefaultLogFormat}, Metrics: Metrics{Listen: DefaultMetricsListen}, LookingGlass: Defaults(), Server: Server{MaxURLBytes: 8192, MaxQueryBytes: 6144, MaxQueryParams: 64, MaxHeaderBytes: 32768, RatePerSecond: 10, RateBurst: 60, LiveRatePerSecond: 1, LiveRateBurst: 8, ShutdownGrace: 40 * time.Second}}
 	if err := dec.Decode(&c); err != nil {
 		return Config{}, fmt.Errorf("decode config: %w", err)
 	}
@@ -285,6 +303,10 @@ func Decode(r io.Reader) (Config, error) {
 }
 
 func (c *Config) Validate() error {
+	p := c.PTREnrichment
+	if p.Timeout <= 0 || p.Timeout > time.Minute || p.MaxConcurrent < 1 || p.MaxConcurrent > 64 || p.MaxLookupsPerPage < 1 || p.MaxLookupsPerPage > 256 || p.Cache.PositiveTTL <= 0 || p.Cache.NegativeTTL <= 0 || p.Cache.MaxEntries < 1 || p.Cache.MaxEntries > 10000 {
+		return errors.New("invalid ptr_enrichment settings")
+	}
 	a := c.ASNEnrichment
 	if a.Provider != "team_cymru" || a.Timeout <= 0 || a.Timeout > time.Minute || a.MaxConcurrent < 1 || a.MaxConcurrent > 64 || a.MaxLookupsPerPage < 1 || a.MaxLookupsPerPage > 256 || a.Cache.PositiveTTL <= 0 || a.Cache.NegativeTTL <= 0 || a.Cache.MaxEntries < 1 || a.Cache.MaxEntries > 10000 || (a.Cache.Persist && (!filepath.IsAbs(a.Cache.Path) || filepath.Clean(a.Cache.Path) != a.Cache.Path)) {
 		return errors.New("invalid asn_enrichment settings")

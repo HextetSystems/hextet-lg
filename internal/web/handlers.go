@@ -20,6 +20,7 @@ import (
 	"github.com/HextetSystems/hextet-lg/internal/bgp"
 	"github.com/HextetSystems/hextet-lg/internal/communities"
 	"github.com/HextetSystems/hextet-lg/internal/config"
+	"github.com/HextetSystems/hextet-lg/internal/ptr"
 	"github.com/HextetSystems/hextet-lg/internal/theme"
 )
 
@@ -32,6 +33,8 @@ type Handler struct {
 	cfg         config.Config
 	asn         *asn.Service
 	asnResolver asn.Resolver
+	ptr         *ptr.Service
+	ptrResolver ptr.Resolver
 	backends    []backendClient
 	templates   *template.Template
 	// defs holds the operator-supplied community definitions, compiled once at
@@ -64,6 +67,8 @@ type Option func(*Handler)
 func WithLogger(l *slog.Logger) Option { return func(h *Handler) { h.log = l } }
 
 func WithASNResolver(r asn.Resolver) Option { return func(h *Handler) { h.asnResolver = r } }
+
+func WithPTRResolver(r ptr.Resolver) Option { return func(h *Handler) { h.ptrResolver = r } }
 
 // Form is the search form state: the simple box plus the advanced filters.
 type Form struct {
@@ -154,6 +159,10 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 		a := cfg.ASNEnrichment
 		h.asn = asn.New(asn.Config{Timeout: a.Timeout, PositiveTTL: a.Cache.PositiveTTL, NegativeTTL: a.Cache.NegativeTTL, MaxConcurrent: a.MaxConcurrent, MaxEntries: a.Cache.MaxEntries, Persist: a.Cache.Persist, Path: a.Cache.Path}, h.asnResolver)
 	}
+	if cfg.PTREnrichment.Enabled {
+		p := cfg.PTREnrichment
+		h.ptr = ptr.New(ptr.Config{Timeout: p.Timeout, PositiveTTL: p.Cache.PositiveTTL, NegativeTTL: p.Cache.NegativeTTL, MaxConcurrent: p.MaxConcurrent, MaxEntries: p.Cache.MaxEntries}, h.ptrResolver)
+	}
 	h.metrics = newMetrics(ids)
 	h.budget = &resultBudget{limit: cfg.LookingGlass.MaxTotalRetainedBytes}
 	h.work = &workGate{active: make(chan struct{}, cfg.LookingGlass.MaxConcurrentWork), queue: make(chan struct{}, cfg.LookingGlass.MaxQueuedWork), wait: cfg.LookingGlass.QueueWait, stop: h.stopCh}
@@ -165,6 +174,8 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 		"themeDefault":  func() string { return h.theme.Default },
 		"assetURL":      h.assetURL,
 		"asnTitle":      h.asnTitle,
+		"ptrKey":        h.ptrKey,
+		"ptrTitle":      h.ptrTitle,
 		"asnEnabled":    func(s string) bool { return h.asn != nil && parseASN(s) != 0 },
 		"asnPath":       h.pathParts,
 		"neighborURL":   neighborURL,
@@ -268,6 +279,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /summary", h.overview)
 	mux.HandleFunc("GET /communities", h.communityPage)
 	mux.HandleFunc("GET /asn-status", h.asnStatus)
+	mux.HandleFunc("GET /ptr-status", h.ptrStatus)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("ok\n"))
@@ -469,6 +481,7 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.scheduleASNs(&p)
+	h.schedulePTRs(&p)
 	name := "index.html"
 	if hx && r.Header.Get("HX-History-Restore-Request") != "true" {
 		name = "results.html"
@@ -818,6 +831,9 @@ func (h *Handler) StopAdmission() { h.stopping.Store(true); h.stopOnce.Do(func()
 func (h *Handler) Close() {
 	h.StopAdmission()
 	h.cache.Close()
+	if h.ptr != nil {
+		h.ptr.Close()
+	}
 	if h.asn != nil {
 		h.asn.Close()
 	}

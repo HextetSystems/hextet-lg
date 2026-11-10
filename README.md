@@ -451,3 +451,5 @@ Navigate with the HTMX pager and browser back/forward while responses are
 delayed, and confirm titles never migrate to the next page. Repeat with
 enrichment disabled and with the resolver returning errors. Do not use a
 production backend or live DNS for this check.
+
+Optional asynchronous next-hop PTR tooltips are disabled by default. See [PTR enrichment](docs/PTR_ENRICHMENT.md) for configuration, DNS privacy, address eligibility and caching.
