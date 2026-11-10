@@ -13,6 +13,7 @@
 - `internal/bgp`: OpenBGPD HTTP transport types, native query construction, and client.
 - `internal/communities`: operator-supplied community definitions (legacy NLNOG text format): parser, matcher, loader. No web or BGP dependencies.
 - `internal/web`: handlers, embedded templates, and static assets.
+- `internal/theme`: strict `#RRGGBB` theme configuration, deterministic token derivation, contrast audit and the generated stylesheet. No web or BGP dependencies.
 - `internal/version`: build identity (link-time `Version`/`Commit`/`Date` with toolchain fallbacks).
 - `.goreleaser.yaml`, `.github/workflows`: release automation and CI. `scripts/deploy.sh`: upgrade/rollback wrapper. `docs/RELEASING.md`: release and deployment guide.
 - `configs`: example YAML configuration. `examples/communities`: example community definitions (data, not defaults). `docs/COMMUNITIES.md`: definitions guide.
@@ -57,7 +58,7 @@
 
 ## Milestones
 
-- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) are in scope by explicit request; do not begin other M4 work (M4.6 and later) without an explicit request.
+- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) and M4.5.1 (configurable themes) are in scope by explicit request; do not begin other M4 work (M4.6 and later) without an explicit request.
 
 ## Public URLs
 
@@ -85,6 +86,13 @@
 - Resource, work-gate and cache metrics read the authoritative counters at scrape time (O(1)); do not add a second accounting or scan the cache per scrape.
 - Cache admission is decided from the typed `bgp.Reason` (`skipReason` in `internal/web/cache.go`), never from message text: partial results caused by `capacity`, `busy` or `canceled` are never cached. The per-query `memory_limit` and the aggregate `capacity` stay distinct reasons.
 - After the response header is committed, never call `http.Error`/`WriteHeader`; use `Handler.renderFailed`. Keep `server.shutdown_grace` below the Compose `stop_grace_period`.
+
+## Themes
+
+- Every UI color is a semantic CSS custom property defined by the generated `/static/theme.css`; `static/app.css` must contain no color literals, gradients or shadows, templates no inline styles (CSP `style-src 'self'`). Add a token to `internal/theme` rather than a literal.
+- Theme configuration accepts only strict `#RRGGBB`, never CSS text; generate CSS only from validated values, once at startup. Derived tokens are deterministic. Contrast shortfalls warn (below 3:1 for primary text fails startup); never silently replace operator colors. See `docs/THEMING.md`.
+- Status colors (route `valid`, RPKI `ovs`, ASPA `avs`, completeness, warnings) are fixed, distinct from the single accent, and always paired with a text label. Do not collapse them into the accent.
+- The visitor's choice lives only in `localStorage` key `theme` (`light`/`dark`); no cookies or server-side preference. `theme-init.js` stays a synchronous script in `<head>` after the stylesheets. Do not begin M4.6 without explicit authorization.
 
 ## Release engineering
 

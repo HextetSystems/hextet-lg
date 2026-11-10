@@ -1,8 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme-default="{{themeDefault}}">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Title}}</title><link rel="stylesheet" href="/static/app.css">
+  <title>{{.Title}}</title>
+  <link rel="stylesheet" href="{{assetURL "app.css"}}"><link rel="stylesheet" href="{{assetURL "theme.css"}}"><script src="{{assetURL "theme-init.js"}}"></script>
   <meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false}'><script src="/static/htmx.min.js"></script>
 </head>
 <body>

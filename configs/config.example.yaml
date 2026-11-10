@@ -49,6 +49,47 @@ metrics:
   enabled: false
   listen: "127.0.0.1:9090"
 
+# Colors (optional). Every key may be omitted; omitted values use the built-in
+# themes and configurations without this section keep working. Colors are
+# strict #RRGGBB hex values only (no names, no CSS functions); anything else
+# fails startup. Changes take effect after a restart. See docs/THEMING.md.
+#
+#   default: auto  follow the browser/system preference (default)
+#            light | dark  start in that theme. A visitor's own choice, made
+#            with the theme button, overrides it in that browser (stored in
+#            localStorage under "theme"; clear it to return to the default).
+#   accent:  one accent color shared by both palettes (links, the primary
+#            button, active navigation, focus ring). Variants (hover, subtle
+#            background, readable link text, button text) are derived from it.
+#
+# The shortest useful configuration changes only the accent:
+#   theme:
+#     accent: "#0D9488"
+#
+# Route validity (RPKI/ASPA), partial/failed results and warnings use fixed
+# status colors that are not configurable and never follow the accent.
+# Startup logs a warning when a color pair is below WCAG AA contrast and
+# refuses to start when body text is below 3:1 on the page or panel background.
+theme:
+  default: auto
+  accent: "#2563EB"
+  light:
+    background: "#F7F8FA"     # page
+    surface: "#FFFFFF"        # panels, top bar, inputs
+    surface_alt: "#F0F2F5"    # table headers, route details, notices
+    surface_hover: "#E8ECF1"  # row hover, neutral pills
+    border: "#D8DDE3"         # separators and panel borders
+    text: "#252B32"
+    text_muted: "#626A76"
+  dark:
+    background: "#111316"
+    surface: "#1B1E23"
+    surface_alt: "#23272D"
+    surface_hover: "#292D34"
+    border: "#30353C"
+    text: "#E8EBEF"
+    text_muted: "#A0A7B2"
+
 looking_glass:
   # Backend preselected in the interface: "all" or an enabled backend id.
   default_backend: "all"

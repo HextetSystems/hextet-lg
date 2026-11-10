@@ -29,6 +29,17 @@ route_visibility:
 
 This is an application-level disclosure control and does not change BGP routing policy or what the backend receives. For highly sensitive routes, prevent them from reaching the public looking-glass backend at all. This feature does not make the underlying OpenBGPD API safe for public exposure. Other backend information, such as neighbor and summary data, is not route-filtered.
 
+## Themes
+
+The interface has a restrained light theme (white, light grey, dark grey) and a dark theme (near-black charcoal, layered grey surfaces), each with one accent color. Both are configured by the optional `theme` section; every value is independently overridable, omitted values keep the built-in defaults, and existing configurations need no change. Colors are strict `#RRGGBB` hex only; names, CSS functions, `url()`, `var()` and anything else fail startup. To change only the accent:
+
+```yaml
+theme:
+  accent: "#0D9488"
+```
+
+`theme.default` is `auto` (follow the browser, the default), `light` or `dark`. The theme button stores the visitor's choice in the browser's `localStorage` key `theme`; that overrides the default in that browser only (no cookies, no server state) and is reset by removing the key or clearing site data. The stylesheet is generated once at startup, so edit the YAML and restart. Poor contrast logs a warning (WCAG AA targets); unreadable body text (below 3:1) refuses to start. RPKI/ASPA validity, partial/failed results and warnings keep fixed status colors that are not the accent and are always labelled in text. See [docs/THEMING.md](docs/THEMING.md) for the palettes, derivations, tokens and a manual verification checklist.
+
 ## Views and shareable URLs
 
 The Route Explorer (`/`) runs native, server-side OpenBGPD queries. Neighbor Explorer (`/neighbors`) and BGP Summary (`/summary`) show live session data per backend. Community Explorer (`/communities`) is an embedded local reference and remains available if backends are down.
@@ -312,7 +323,7 @@ A 305-second run with 10,000 mock routes per dataset and 24 client workers compl
 cp configs/config.example.yaml configs/config.yaml
 ```
 
-Then set each backend's `url` to the OpenBGPD `bgplgd` HTTP API address reachable from the application. Backend URLs are configured exclusively through YAML; requests cannot supply or override them. `default_backend` can be `all` or an enabled backend ID. Startup validates the listen address, backend IDs, URLs and every limit. Every `looking_glass` setting is optional and falls back to the defaults above, so configurations written for earlier versions keep working; note that explicit older values (for example `query_timeout: 10s` and `max_response_bytes: 16777216`) are honoured and will turn large searches into partial results; remove those lines to adopt the new defaults. The optional `community_definitions` section (disabled by default) is described under Community definitions above. Use `--config /path/to/config.yaml`; the default is `/etc/hextet-lg/config.yaml`.
+Then set each backend's `url` to the OpenBGPD `bgplgd` HTTP API address reachable from the application. Backend URLs are configured exclusively through YAML; requests cannot supply or override them. `default_backend` can be `all` or an enabled backend ID. Startup validates the listen address, backend IDs, URLs and every limit. Every `looking_glass` setting is optional and falls back to the defaults above, so configurations written for earlier versions keep working; note that explicit older values (for example `query_timeout: 10s` and `max_response_bytes: 16777216`) are honoured and will turn large searches into partial results; remove those lines to adopt the new defaults. The optional `community_definitions` section (disabled by default) is described under Community definitions above; the optional `theme` section is described under Themes. Use `--config /path/to/config.yaml`; the default is `/etc/hextet-lg/config.yaml`.
 
 ## Docker deployment
 

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/HextetSystems/hextet-lg/internal/theme"
 )
 
 const validConfig = `server:
@@ -192,5 +194,67 @@ func TestASNEnrichmentDefaultsAndValidation(t *testing.T) {
 		if bad.Validate() == nil {
 			t.Fatal("invalid ASN settings accepted")
 		}
+	}
+}
+
+func TestThemeSectionIsOptionalAndPartial(t *testing.T) {
+	c, err := Decode(strings.NewReader(validConfig))
+	if err != nil {
+		t.Fatalf("a configuration without a theme section must keep working: %v", err)
+	}
+	if c.Theme.Default != "" || c.Theme.Accent != "" {
+		t.Fatalf("omitted theme must stay zero so built-in defaults apply: %#v", c.Theme)
+	}
+	for name, section := range map[string]string{
+		"accent only":      "theme:\n  accent: \"#0D9488\"\n",
+		"default only":     "theme:\n  default: dark\n",
+		"one palette key":  "theme:\n  light:\n    border: \"#CCCCCC\"\n",
+		"full light":       "theme:\n  light:\n    background: \"#F7F8FA\"\n    surface: \"#FFFFFF\"\n    surface_alt: \"#F0F2F5\"\n    surface_hover: \"#E8ECF1\"\n    border: \"#D8DDE3\"\n    text: \"#252B32\"\n    text_muted: \"#626A76\"\n",
+		"empty section":    "theme:\n",
+		"lowercase colors": "theme:\n  accent: \"#0d9488\"\n  dark:\n    text: \"#ffffff\"\n",
+	} {
+		if _, err := Decode(strings.NewReader(validConfig + section)); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestThemeSectionRejectsInvalidValues(t *testing.T) {
+	for name, section := range map[string]string{
+		"unknown key":      "theme:\n  accents: \"#0D9488\"\n",
+		"unknown palette":  "theme:\n  light:\n    foreground: \"#000000\"\n",
+		"bad mode":         "theme:\n  default: sepia\n",
+		"color name":       "theme:\n  accent: teal\n",
+		"short hex":        "theme:\n  accent: \"#fff\"\n",
+		"css function":     "theme:\n  dark:\n    surface: \"url(https://example.net/x)\"\n",
+		"css variable":     "theme:\n  light:\n    text: \"var(--color-surface)\"\n",
+		"injection":        "theme:\n  accent: \"#FFFFFF;} body{display:none\"\n",
+		"unreadable text":  "theme:\n  dark:\n    text: \"#1B1E23\"\n",
+		"not a scalar":     "theme:\n  accent: [\"#0D9488\"]\n",
+		"unknown dark key": "theme:\n  dark:\n    accent: \"#0D9488\"\n",
+	} {
+		if _, err := Decode(strings.NewReader(validConfig + section)); err == nil {
+			t.Errorf("%s: expected a startup error", name)
+		}
+	}
+}
+
+// The documented example must stay valid and must spell out exactly the
+// built-in themes, so the example cannot drift from the real defaults.
+func TestExampleThemeMatchesBuiltInDefaults(t *testing.T) {
+	c, err := Load("../../configs/config.example.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	example, err := theme.Compile(c.Theme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	builtin, err := theme.Compile(theme.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(example.CSS) != string(builtin.CSS) || len(example.Warnings) != 0 {
+		t.Fatalf("example theme differs from the built-in defaults (warnings %v)", example.Warnings)
 	}
 }

@@ -41,6 +41,7 @@ archives:
       - src: ARCHITECTURE.md
       - src: docs/RELEASING.md
       - src: docs/COMMUNITIES.md
+      - src: docs/THEMING.md
       - src: configs/config.example.yaml
       - src: examples/communities/*
       - src: LICENSE*

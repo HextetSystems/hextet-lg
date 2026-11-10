@@ -20,6 +20,7 @@ import (
 	"github.com/HextetSystems/hextet-lg/internal/bgp"
 	"github.com/HextetSystems/hextet-lg/internal/communities"
 	"github.com/HextetSystems/hextet-lg/internal/config"
+	"github.com/HextetSystems/hextet-lg/internal/theme"
 )
 
 type backendClient struct {
@@ -47,6 +48,8 @@ type Handler struct {
 	stopCh    chan struct{}
 	stopOnce  sync.Once
 
+	theme      *theme.Theme
+	assetVer   map[string]string
 	log        *slog.Logger
 	metrics    *metrics
 	health     map[string]*backendHealth // fixed at construction: one per enabled backend
@@ -109,6 +112,7 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 	if err := cfg.CompileVisibility(); err != nil {
 		return nil, err
 	}
+	var err error
 	h := &Handler{cfg: cfg, stopCh: make(chan struct{}), health: map[string]*backendHealth{}}
 	for _, o := range opts {
 		o(h)
@@ -116,6 +120,14 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 	if h.log == nil {
 		h.log = h.defaultLogger()
 	}
+	// The stylesheet is generated once from the validated configuration.
+	if h.theme, err = theme.Compile(cfg.Theme); err != nil {
+		return nil, err
+	}
+	for _, w := range h.theme.Warnings {
+		h.log.Warn("theme contrast below target; colors are used as configured", "detail", w)
+	}
+	h.assetVer = assetVersions()
 	// Definitions are read once, before anything else is started, so a bad
 	// configuration fails startup cleanly.
 	if err := h.loadCommunityDefinitions(); err != nil {
@@ -149,8 +161,9 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 	h.expensive = make(chan struct{}, cfg.LookingGlass.MaxConcurrentQueries)
 	h.queue = make(chan struct{}, cfg.LookingGlass.MaxQueuedQueries)
 	h.limiter = newRateLimiter(cfg.Server)
-	var err error
 	h.templates, err = template.New("root").Funcs(template.FuncMap{
+		"themeDefault":  func() string { return h.theme.Default },
+		"assetURL":      h.assetURL,
 		"asnTitle":      h.asnTitle,
 		"asnEnabled":    func(s string) bool { return h.asn != nil && parseASN(s) != 0 },
 		"asnPath":       h.pathParts,
@@ -259,6 +272,7 @@ func (h *Handler) Routes() http.Handler {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("ok\n"))
 	})
+	mux.HandleFunc("GET /static/theme.css", h.themeCSS)
 	mux.Handle("GET /static/", http.FileServer(http.FS(assets)))
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) {
 		if h.stopping.Load() {
