@@ -1,4 +1,4 @@
-# Next-hop reverse DNS
+# Next-hop and neighbor reverse DNS
 
 `ptr_enrichment` is optional and disabled by default. Enable it in the YAML and restart the service. The example configuration documents all settings. Defaults are a two-second timeout, four workers, 64 uncached addresses per visible page, 10,000 cache entries, a 720-hour positive TTL and a 24-hour negative TTL. The cache is in memory only, is lost on restart, and requires no writable filesystem.
 
@@ -11,3 +11,9 @@ The system resolver performs PTR lookups asynchronously with a timeout. A valid 
 The cache-only `/ptr-status?ip=...` endpoint accepts at most 256 comma-separated literal addresses and never starts DNS work. It shares the normal HTTP request limits and rate limiter. The existing bounded ASN UI update cycle also reads PTR status; navigation invalidates stale replies. DNS records and addresses sent to a resolver may disclose network topology to that resolver; use a trusted DNS service and consider this before enabling enrichment. Hostnames are escaped as HTML and are not included in logs or metric labels.
 
 For an expected deployment of 500–1,000 distinct next hops, the measured mock-backed cost for a 100-route page was approximately 10.0 ms disabled, 17.6 ms with a cold cache, and 12.5 ms with a warm cache. These variable measurements represent an accepted engineering tradeoff; DNS resolution remains asynchronous.
+
+## Neighbor names (`display.route_columns`)
+
+When the route table's Neighbor column is shown with `neighbor_format: name` or `both` (see the README), displayed neighbor addresses reuse this machinery: the same cache, workers, timeout, TTLs, negative caching, in-flight deduplication and cache-only `/ptr-status` endpoint (which already accepts any eligible literal address; it was not changed). No second resolver or cache exists.
+
+Neighbor addresses are scheduled through the same per-page pass as next hops, so the page-wide deduplication and the shared `max_lookups_per_page` budget apply: a neighbor shared by many routes or backends, or equal to a next hop, is one lookup, and the pass is bounded exactly as before. Scheduling order is primary next hops, then neighbor addresses, then the two detail next-hop fields; neighbors therefore never delay primary next-hop enrichment. Neighbor lookups only happen while the Neighbor column is visible (a hidden column, or `neighbor_format: ip`, schedules none; Route details then show the plain address). Link-local, loopback and other ineligible neighbor addresses are shown as addresses. Rendering never waits for DNS: a cache hit renders the name immediately, a miss renders the address and the page script fills the name in after `/ptr-status` answers. A name is display text; the neighbor link, backend identity and search behaviour always use the backend-supplied address.

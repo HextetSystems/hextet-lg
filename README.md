@@ -63,7 +63,7 @@ The Route Explorer is built to put the route table near the top of the page. Fro
 1. **Search panel.** One row with Backend, Search by, Search value (the widest control), View and **Search**. Each control has a real `<label>` (visually hidden to save height) and the form is a labelled `role="search"` landmark. A second line holds the **Advanced filters** disclosure (collapsed unless a search was rejected; the active-filter count stays visible) and, on the right, the query context, **Copy link** and **Clear search**. On narrow screens the controls wrap (the search value first) and grow to touch-sized heights; desktop controls stay compact.
 2. **Query context.** For an executed search: a `Loc-RIB` tag (searches always use the Loc-RIB), a chip for every filter that the search box does not already show (advanced filters and prefix modes, so the search value is never shown twice), and an **i** help popover with the live-query explanation (the `/rib?…` query sent to each backend, "not snapshots", cache lifetime). This element lives next to the form, outside `#results`, so HTMX responses replace it out of band.
 3. **Backend status.** One line directly above each backend's table: outcome (`COMPLETE`, `PARTIAL`, `FAILED`, always as text), backend name and location, route count, query duration, response size and, if applicable, `cached … ago`; a paged result adds `showing 1–100`. Failures and partial results get a compact notice inside that backend's panel, so a failed backend never hides a successful one and backends are never merged. Long names are truncated visually and stay complete in the tooltip. The line's duration is the *backend query* time; it is not the footer's page-generation time.
-4. **Route table.** Unchanged columns and row content; the table has a screen-reader caption naming its backend.
+4. **Route table.** The dense desktop table with a screen-reader caption naming its backend; optional columns and the phone layout are described in [Mobile layout, route columns and raw JSON](#mobile-layout-route-columns-and-raw-json).
 5. **Pager.** Shown (above and below the results) only when there is more than one page; a single-page result shows its count in the status line only. Page semantics are unchanged.
 6. **Footer** with the page-generation time.
 
@@ -88,6 +88,39 @@ Every HTML page has a title of the form `<subject> · <site name>`; the site nam
 A single selected backend is appended as `@ <backend name>` (neighbor addresses and route views are backend-specific); `all` adds nothing. Page 2 and later add `(page N)`. Values come from the normalized query, not the raw input; control and invisible characters are removed, long values are cut at 64 characters with `…`, backend names at 32, and the text is HTML-escaped. Backend addresses never appear.
 
 HTMX responses carry the title as a leading `<title>` element, which HTMX 2 applies to `document.title` in the same swap (no extra script). Full pages, including the one served for a history-restore request, have exactly one `<title>` in `<head>`. Back and forward restore each entry's title with its results; **Clear search** is a normal link to `/`, so it loads the default title.
+
+## Mobile layout, route columns and raw JSON
+
+The route table is one piece of markup that adapts to the available width through CSS media queries (no JavaScript viewport detection, no second query and no second set of rows):
+
+| Width | Presentation |
+|---|---|
+| above 1000 px | Desktop: the dense table, unchanged row heights; search controls in one row. |
+| 701–1000 px | Tablet: the same table, scrolled horizontally inside its own container instead of squeezing columns (the search controls wrap at 1000 px and 820 px as before). |
+| 700 px and below | Phone: each route becomes a compact card. The prefix (with `BEST`), origin ASN, RPKI and ASPA state (labelled text, not colour only), next hop and a two-line AS path are visible; neighbor, local preference, MED and age move into the expanded details together with the full AS path. |
+| 520 px and below | Backend and search type share a row, the view selector shares one with **Search**. Below 360 px controls stack and the details grid has one column. |
+
+Each route has one details row holding two independent native `<details>` disclosures on the same line: **Route details** and, only when enabled, **Raw JSON**. Either, both or neither can be open; opening one never opens the other. While both are collapsed the row is exactly as tall as the former single "Route details" row. An expanded disclosure takes the full width and the other one moves below it. The Neighbors and Summary pages use the same pair (**Neighbor details** and **Raw JSON**).
+
+### Display configuration
+
+The optional `display` section is presentation only: it never changes the OpenBGPD request, route parsing, cache keys, search filters or visibility. Omitting it keeps every existing configuration working.
+
+| Setting | Default | Effect |
+|---|---|---|
+| `display.raw_json` | `false` | Renders the Raw JSON disclosures (routes, BGP neighbors, BGP summary). When `false` no control is rendered and the payload is not embedded in the page. |
+| `display.route_columns.neighbor` | `false` | Shows the Neighbor column. When hidden, the neighbor stays in Route details and in neighbor searches. |
+| `display.route_columns.neighbor_format` | `name` | `ip`, `name` or `both`; anything else fails startup with the allowed values. |
+| `display.route_columns.rpki` | `true` | RPKI (OVS) column. Hidden: the state stays in Route details; the `ovs` filter is unchanged. |
+| `display.route_columns.aspa` | `true` | ASPA (AVS) column, same rules. |
+
+**Raw JSON discloses internal routing details.** The raw backend objects include fields the structured views leave out (router and BGP IDs, neighbor and session internals). Enable `raw_json` only for trusted deployments. It controls what is rendered, not how backend responses are parsed; there is no endpoint that serves raw data, the RTR page and the plaintext views never show it, and the response-size limits are unchanged.
+
+**Neighbor names** use the existing next-hop reverse DNS machinery ([PTR enrichment](docs/PTR_ENRICHMENT.md)): the same cache, workers, timeout, TTLs, negative caching and deduplication, and the same cache-only `/ptr-status` endpoint. `name` shows the PTR name and falls back to the address while it is unresolved or when there is none; `both` shows `name (address)` or just the address; `ip` never resolves anything. A name never replaces the identity of a neighbor: the link always targets the backend-supplied address and the source backend, and the address stays in the tooltip. Names are looked up only while the Neighbor column is visible and `ptr_enrichment` is enabled (otherwise the address is shown and a warning is logged at startup). Neighbor lookups share the page's `max_lookups_per_page` budget and are scheduled after next hops, so they cannot add DNS work. The column keeps a fixed width and truncates long names with an ellipsis, so a late answer does not move other columns.
+
+### Browser history
+
+Back and Forward re-render the page from the server using the canonical URL (`historyCacheSize` is 0, so HTMX never restores a DOM snapshot, whose form values are stale). The search box, search type, backend, view, advanced filters, title and results therefore always agree with the URL, exactly as after a reload. Backend queries are subject to the normal result cache. Search controls and the theme button are wired through delegated listeners so they keep working after the page body is replaced.
 
 ## Page generation timing
 
@@ -453,9 +486,11 @@ Tests use `httptest` fixtures and do not require a live OpenBGPD process. Depend
 - Extended-community syntax is validated by OpenBGPD, not by this application.
 - Metrics and log records are in-process only: counters reset on restart, and logs are as durable as the container log driver. There is no tracing and no bundled dashboard or alert rules.
 - The footer's page generation time is server-side only and is read before the footer is written, so it excludes the footer itself, network time and browser rendering; HTMX history restoration displays the original request's figure.
+- Browser Back/Forward re-queries the backends (through the result cache) instead of restoring a snapshot; results are always live queries.
+- On phones the Neighbors, Summary, RTR and Community Explorer tables keep their columns and scroll horizontally inside their own container rather than turning into cards; only the Route Explorer table is card-based.
 - Cached results can be up to `cache_ttl` old; disable with `cache_ttl: 0s` for strictly live results.
-- RTR sessions: OpenBGPD reports no record counts or last-synchronization time over `/rtr`, so none are shown; a bgplgd without `/rtr` is shown as unsupported. The neighbor pages still offer the raw backend JSON, which contains fields not otherwise displayed (see [docs/SESSION_VISIBILITY.md](docs/SESSION_VISIBILITY.md)).
-- OpenBGPD versions may expose different optional fields. Summary session counts are derived only from returned neighbor records; other data remains available as raw JSON per route.
+- RTR sessions: OpenBGPD reports no record counts or last-synchronization time over `/rtr`, so none are shown; a bgplgd without `/rtr` is shown as unsupported. The raw backend JSON on the neighbor pages (off unless `display.raw_json` is enabled) contains fields not otherwise displayed (see [docs/SESSION_VISIBILITY.md](docs/SESSION_VISIBILITY.md)).
+- OpenBGPD versions may expose different optional fields. Summary session counts are derived only from returned neighbor records; other data is available as raw JSON per route when `display.raw_json` is enabled.
 - Community definitions and any "Implemented" status are operator-supplied; they are not live verification. The loader is stricter than the NLNOG implementation (duplicates, unsupported tokens and leading-zero literals are startup errors), so some upstream files need editing; see [docs/COMMUNITIES.md](docs/COMMUNITIES.md). Extended-community definitions cover the numeric `label A[:B]` forms only, and the OpenBGPD well-known standard community names are mapped from knowledge of its output format, not verified against a live backend.
 - The embedded HTMX runtime is pinned at version 2.0.4. No external browser assets are required.
 - Absent route fields display as unknown or an em dash. RPKI OVS, ASPA AVS, and route validity remain separate values.

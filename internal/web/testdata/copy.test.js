@@ -5,7 +5,7 @@ const vm = require('node:vm');
 
 // The copy-button handler sits between the theme toggle and the search-form script.
 const app = fs.readFileSync('internal/web/static/app.js', 'utf8');
-const source = app.split('// Copy buttons confirm')[1].split("(function(){var f=document.getElementById('search-form')")[0];
+const source = app.split('// Copy buttons confirm')[1].split('// Search form behavior is delegated')[0];
 
 function harness({clipboard, status = {textContent: ''}, linkHref = 'https://lg.example/?type=prefix&q=192.0.2.1'} = {}) {
   let click, timers = [];

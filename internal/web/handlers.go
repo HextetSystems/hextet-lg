@@ -113,6 +113,8 @@ type Page struct {
 	CacheTTL              time.Duration
 	LargeCommunityEnabled bool
 	Groups                []FormGroup
+	// Cols is the route table's column layout (display.route_columns).
+	Cols RouteCols
 
 	// Started is when request handling began (zero when unknown); the footer
 	// computes the page generation time from it when it is rendered.
@@ -173,6 +175,9 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 		p := cfg.PTREnrichment
 		h.ptr = ptr.New(ptr.Config{Timeout: p.Timeout, PositiveTTL: p.Cache.PositiveTTL, NegativeTTL: p.Cache.NegativeTTL, MaxConcurrent: p.MaxConcurrent, MaxEntries: p.Cache.MaxEntries}, h.ptrResolver)
 	}
+	if cfg.Display.RouteColumns.NeighborNames() && h.ptr == nil {
+		h.log.Warn("display.route_columns.neighbor_format needs ptr_enrichment.enabled to show neighbor names; neighbor addresses are shown instead")
+	}
 	h.metrics = newMetrics(ids)
 	h.budget = &resultBudget{limit: cfg.LookingGlass.MaxTotalRetainedBytes}
 	h.work = &workGate{active: make(chan struct{}, cfg.LookingGlass.MaxConcurrentWork), queue: make(chan struct{}, cfg.LookingGlass.MaxQueuedWork), wait: cfg.LookingGlass.QueueWait, stop: h.stopCh}
@@ -194,6 +199,8 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 		"pageTiming":    pageTiming,
 		"neighborURL":   neighborURL,
 		"neighborTitle": neighborTitle,
+		"neighborCell":  h.neighborCell,
+		"rawJSONOn":     func() bool { return h.cfg.Display.RawJSON },
 		"searchURL":     searchURL,
 		"age":           FormatAge,
 		"formatRoutes":  formatRoutes,
@@ -417,7 +424,7 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 		defer h.work.release()
 	}
 	hx := r.Header.Get("HX-Request") == "true"
-	p := Page{Active: "routes", Started: requestStart(r), SelectedBackend: vals.Get("backend"), IsHTMX: hx, View: vals.Get("view"), Groups: h.formGroups(), Backends: h.backendList(), CacheTTL: h.cfg.LookingGlass.CacheTTL, LargeCommunityEnabled: h.cfg.Features.LargeCommunityEnabled()}
+	p := Page{Active: "routes", Started: requestStart(r), SelectedBackend: vals.Get("backend"), IsHTMX: hx, View: vals.Get("view"), Groups: h.formGroups(), Cols: h.routeCols(), Backends: h.backendList(), CacheTTL: h.cfg.LookingGlass.CacheTTL, LargeCommunityEnabled: h.cfg.Features.LargeCommunityEnabled()}
 	if p.View == "" {
 		p.View = "table"
 	}

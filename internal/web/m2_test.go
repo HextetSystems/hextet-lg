@@ -30,7 +30,7 @@ func TestM2Pages(t *testing.T) {
 	for _, tc := range []struct {
 		url   string
 		wants []string
-	}{{"/?type=prefix&q=8.8.8.8", []string{"BEST", "Raw OpenBGPD JSON", "395089%3A0%3A6", "Query failed"}}, {"/neighbors", []string{"192.0.2.1", "42", "&lt;script&gt;", "Backend unavailable"}}, {"/summary", []string{"Established", "Sessions reported", "Backend unavailable"}}, {"/communities?category=Route+classification&q=transit", []string{"No community definitions are configured", "No matching communities."}}} {
+	}{{"/?type=prefix&q=8.8.8.8", []string{"BEST", "Route details", "395089%3A0%3A6", "Query failed"}}, {"/neighbors", []string{"192.0.2.1", "42", "&lt;script&gt;", "Backend unavailable"}}, {"/summary", []string{"Established", "Sessions reported", "Backend unavailable"}}, {"/communities?category=Route+classification&q=transit", []string{"No community definitions are configured", "No matching communities."}}} {
 		t.Run(tc.url, func(t *testing.T) {
 			rr := httptest.NewRecorder()
 			h.Routes().ServeHTTP(rr, httptest.NewRequest("GET", tc.url, nil))

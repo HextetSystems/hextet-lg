@@ -4,7 +4,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
   <link rel="stylesheet" href="{{assetURL "app.css"}}"><link rel="stylesheet" href="{{assetURL "theme.css"}}"><script src="{{assetURL "theme-init.js"}}"></script>
-  <meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false}'><script src="/static/htmx.min.js"></script>
+  <meta name="htmx-config" content='{"includeIndicatorStyles":false,"historyCacheSize":0,"allowEval":false,"allowScriptTags":false}'><script src="/static/htmx.min.js"></script>
 </head>
 <body>
 <header class="topbar"><a class="brand" href="/" aria-label="Hextet Looking Glass home"><span class="mark">H</span><span>HEX<span class="accent">TET</span><small>NETWORK OPERATIONS</small></span></a>{{template "nav" .}}</header>

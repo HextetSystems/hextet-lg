@@ -58,6 +58,67 @@ func (f Features) RTRSessionAddressesEnabled() bool {
 }
 func (f Features) PageTimingEnabled() bool { return enabled(f.PageTiming, true) }
 
+// Neighbor name formats for the optional Neighbor column of the route table.
+const (
+	NeighborFormatIP   = "ip"
+	NeighborFormatName = "name"
+	NeighborFormatBoth = "both"
+)
+
+// RouteColumns selects the optional columns of the HTML route table. They are
+// presentation only: they never change an OpenBGPD request, route parsing,
+// cache keys or search filters, and a hidden column's values stay available in
+// the expandable Route details.
+type RouteColumns struct {
+	// Neighbor shows the Neighbor column (default false).
+	Neighbor bool `yaml:"neighbor"`
+	// NeighborFormat is ip, name or both (default name): the neighbor address,
+	// its reverse DNS name (falling back to the address), or both.
+	NeighborFormat string `yaml:"neighbor_format"`
+	// RPKI and ASPA show the validation columns (default true).
+	RPKI *bool `yaml:"rpki"`
+	ASPA *bool `yaml:"aspa"`
+}
+
+// Display holds server-side presentation settings. The whole section is
+// optional; configurations without it keep working.
+type Display struct {
+	// RawJSON enables the Raw JSON disclosures (route rows, BGP neighbors and
+	// summary). It is off by default because the raw backend objects can
+	// reveal internal routing details; it only affects what is rendered, not
+	// how backend responses are processed.
+	RawJSON      bool         `yaml:"raw_json"`
+	RouteColumns RouteColumns `yaml:"route_columns"`
+}
+
+// RPKIColumn reports whether the RPKI column is shown (default true).
+func (c RouteColumns) RPKIColumn() bool { return enabled(c.RPKI, true) }
+
+// ASPAColumn reports whether the ASPA column is shown (default true).
+func (c RouteColumns) ASPAColumn() bool { return enabled(c.ASPA, true) }
+
+// Format returns the effective neighbor format; an empty value means name.
+func (c RouteColumns) Format() string {
+	if c.NeighborFormat == "" {
+		return NeighborFormatName
+	}
+	return c.NeighborFormat
+}
+
+// NeighborNames reports whether the Neighbor column is shown with a name
+// format, the only case that needs reverse DNS for neighbor addresses.
+func (c RouteColumns) NeighborNames() bool {
+	return c.Neighbor && c.Format() != NeighborFormatIP
+}
+
+func (d Display) validate() error {
+	switch d.RouteColumns.Format() {
+	case NeighborFormatIP, NeighborFormatName, NeighborFormatBoth:
+		return nil
+	}
+	return fmt.Errorf("display.route_columns.neighbor_format %q must be one of: %s, %s, %s", d.RouteColumns.NeighborFormat, NeighborFormatIP, NeighborFormatName, NeighborFormatBoth)
+}
+
 // CommunityDefinitions configures the optional, operator-supplied BGP
 // community definitions (legacy NLNOG text format). They are disabled by
 // default; when enabled the directory is required and is read once at startup.
@@ -111,7 +172,10 @@ type Config struct {
 	RouteVisibility      visibility.Config    `yaml:"route_visibility"`
 	// Theme is the optional color configuration; the zero value selects the
 	// built-in light and dark themes.
-	Theme          theme.Config `yaml:"theme"`
+	Theme theme.Config `yaml:"theme"`
+	// Display holds optional presentation settings (route table columns and
+	// raw JSON disclosures).
+	Display        Display `yaml:"display"`
 	policy         visibility.Policy
 	policyCompiled bool
 	policySource   visibility.Config
@@ -306,7 +370,7 @@ func Load(path string) (Config, error) {
 func Decode(r io.Reader) (Config, error) {
 	dec := yaml.NewDecoder(r)
 	dec.KnownFields(true)
-	c := Config{PTREnrichment: PTRDefaults(), ASNEnrichment: ASNDefaults(), Logging: Logging{Level: DefaultLogLevel, Format: DefaultLogFormat}, Metrics: Metrics{Listen: DefaultMetricsListen}, LookingGlass: Defaults(), Server: Server{MaxURLBytes: 8192, MaxQueryBytes: 6144, MaxQueryParams: 64, MaxHeaderBytes: 32768, RatePerSecond: 10, RateBurst: 60, LiveRatePerSecond: 1, LiveRateBurst: 8, ShutdownGrace: 40 * time.Second}}
+	c := Config{Display: Display{RouteColumns: RouteColumns{NeighborFormat: NeighborFormatName}}, PTREnrichment: PTRDefaults(), ASNEnrichment: ASNDefaults(), Logging: Logging{Level: DefaultLogLevel, Format: DefaultLogFormat}, Metrics: Metrics{Listen: DefaultMetricsListen}, LookingGlass: Defaults(), Server: Server{MaxURLBytes: 8192, MaxQueryBytes: 6144, MaxQueryParams: 64, MaxHeaderBytes: 32768, RatePerSecond: 10, RateBurst: 60, LiveRatePerSecond: 1, LiveRateBurst: 8, ShutdownGrace: 40 * time.Second}}
 	if err := dec.Decode(&c); err != nil {
 		return Config{}, fmt.Errorf("decode config: %w", err)
 	}
@@ -336,6 +400,9 @@ func (c *Config) Validate() error {
 		return err
 	}
 	if _, err := theme.Compile(c.Theme); err != nil {
+		return err
+	}
+	if err := c.Display.validate(); err != nil {
 		return err
 	}
 	if math.IsNaN(c.Server.RatePerSecond) || math.IsInf(c.Server.RatePerSecond, 0) || math.IsNaN(c.Server.LiveRatePerSecond) || math.IsInf(c.Server.LiveRatePerSecond, 0) || c.Server.MaxURLBytes <= 0 || c.Server.MaxQueryBytes <= 0 || c.Server.MaxQueryParams <= 0 || c.Server.MaxHeaderBytes <= 0 || c.Server.RatePerSecond <= 0 || c.Server.RateBurst <= 0 || c.Server.LiveRatePerSecond <= 0 || c.Server.LiveRateBurst <= 0 || c.Server.ShutdownGrace <= 0 || c.LookingGlass.QueueWait <= 0 || c.LookingGlass.MaxQueuedQueries <= 0 {

@@ -58,7 +58,7 @@
 
 ## Milestones
 
-- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) and M4.5.1 (configurable themes) are in scope by explicit request; M4.6 (next-hop PTR enrichment) and M4.7 (BGP neighbor and RPKI RTR session visibility) and M4.8 (page generation timing) and M4.8.1 (compact Route Explorer layout and dynamic page titles) are in scope by explicit request; do not begin M4.9 or later without an explicit request.
+- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) and M4.5.1 (configurable themes) are in scope by explicit request; M4.6 (next-hop PTR enrichment) and M4.7 (BGP neighbor and RPKI RTR session visibility) and M4.8 (page generation timing) and M4.8.1 (compact Route Explorer layout and dynamic page titles) and M4.8.2 (mobile usability, route presentation and configurable columns) are in scope by explicit request; do not begin M4.9 or later without an explicit request.
 
 ## Public URLs
 
@@ -91,6 +91,14 @@
 - Order: compact search panel (one control row, a secondary row with Advanced filters, query context, Copy link, Clear search), one status line per backend directly above its table, the unchanged table, the footer. Do not reintroduce a query-summary panel, per-backend heading cards, repeated counts or long explanatory paragraphs; explanations belong in the help popover or Advanced filters.
 - Controls keep real labels (visually hidden is fine), the `role="search"` form, collapsed Advanced filters (opened only by validation errors) and the active-filter count. The query context (`context` template) is outside `#results`: fragments replace it with `hx-swap-oob`, singular and top-level, like `#page-timing`; it never repeats the search box value. Backend outcomes are text, never colour only; backends are never merged and a failed one never hides another. The pager exists only for more than one page.
 - Every HTML page has exactly one `<title>`, `<subject> · <site>`, built only in `internal/web/title.go` (`siteName` is the single suffix hook for M4.9). Subjects come from the normalized query, never raw input; rejected requests are "Invalid search"; no query strings beyond the bounded canonical primary filter, no backend addresses, advanced filters only counted, user-derived text stripped and bounded. A fragment starts with `<title>` (HTMX applies it); a full page (including history restore) has it only in `<head>`. Add no client-side title code.
+
+## Mobile layout, display settings and history
+
+- The route table is one DOM: phones (up to 700 px) restyle the same `<tbody class="route">` rows as cards with CSS media queries. Do not add a second (mobile) markup variant, a viewport-detecting script or a second set of enrichment targets, IDs or Raw JSON payloads. Desktop row height with both disclosures collapsed must not grow.
+- Route details and Raw JSON are two independent native `<details>` in one `.disclosures` row (also on the neighbor pages). `display.raw_json` (default false) gates every Raw JSON presentation; when off, render nothing and embed no payload. Never add an endpoint that serves raw backend data. `bgp.Route.Raw` retention and accounting do not depend on the setting.
+- `display.route_columns` (neighbor false, neighbor_format name|ip|both, rpki true, aspa true) is presentation only: it must not change the backend request, route parsing, cache keys, filters or visibility. A hidden column's value stays in Route details; header, cells and the details colspan must stay aligned for every combination.
+- Neighbor names reuse the M4.6 PTR service (cache, workers, TTLs, dedup, `/ptr-status`); never add a resolver or cache. They share the per-page budget, are scheduled after next hops and only while the Neighbor column is visible with `name`/`both`. The hostname is display text only: links, identity and keys use the backend-supplied address and backend ID.
+- Browser history restores from the server (`historyCacheSize:0`), never from HTMX DOM snapshots, so the form always matches the canonical URL. Search-form and theme handlers must stay delegated or be rebound on `htmx:historyRestore`.
 
 ## Public deployment controls
 

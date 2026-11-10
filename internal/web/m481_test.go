@@ -475,7 +475,7 @@ func TestPaginationIsOnlyShownWhenThereIsAnotherPage(t *testing.T) {
 	if !strings.Contains(two, `rel="prev"`) || strings.Contains(two, `rel="next"`) || !strings.Contains(two, "showing 101–150") || !strings.Contains(two, `aria-label="Result pages"`) {
 		t.Error("page 2 navigation")
 	}
-	if strings.Count(two, "<tbody>") != 1 || strings.Count(two, "<tr><td><a href") != 50 {
+	if strings.Count(two, `<tbody class="route">`) != 50 || strings.Count(two, "<tr><td><a href") != 50 {
 		t.Error("page size semantics changed")
 	}
 	// A short result has no pager and no duplicated count.
@@ -543,7 +543,7 @@ func TestFooterTimingSurvivesTheNewLayout(t *testing.T) {
 func TestRouteTablePreserved(t *testing.T) {
 	h := m481Handler(t)
 	body := get(h, "/?type=prefix&q=10.0.0.0/24&backend=a").Body.String()
-	for _, want := range []string{"<th>Prefix</th><th>AS path</th><th>Origin ASN</th><th>Next hop</th><th>Neighbor</th><th>Local pref</th><th>MED</th><th>Age</th><th>RPKI</th><th>ASPA</th>", "BEST", "Route details", "Raw OpenBGPD JSON", "395089%3A0%3A8", `<caption class="sr-only">Routes from Alpha</caption>`} {
+	for _, want := range []string{"<th>Prefix</th><th>AS path</th><th>Origin ASN</th><th>Next hop</th><th>Local pref</th><th>MED</th><th>Age</th><th>RPKI</th><th>ASPA</th>", "BEST", "Route details", "395089%3A0%3A8", `<caption class="sr-only">Routes from Alpha</caption>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
 		}

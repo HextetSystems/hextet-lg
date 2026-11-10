@@ -231,6 +231,34 @@ asn_enrichment:
     persist: false
     path: /var/lib/hextet-lg/asn-cache.json
 
+# Presentation of the Route Explorer (optional; the whole section may be omitted).
+# These are display settings only: they never change the OpenBGPD request,
+# route parsing, cache keys, search filters or visibility. A hidden column's
+# values stay available in the expandable Route details. Changes take effect
+# after a restart.
+display:
+  # Raw JSON disclosures (route rows, BGP neighbors and summary). DISABLED by
+  # default: the raw backend objects can reveal internal routing details
+  # (router IDs, interface and session internals) that the structured views do
+  # not. Enable only for trusted deployments. When false, no Raw JSON control
+  # is rendered and the payload is not embedded in the page.
+  raw_json: false
+  route_columns:
+    # Neighbor column in the route table (hidden by default). The neighbor is
+    # always available in Route details and in neighbor searches.
+    neighbor: false
+    # ip   - the neighbor address, e.g. 192.0.2.1
+    # name - the reverse DNS (PTR) name, falling back to the address while
+    #        unresolved or when there is none: peer1.example.net
+    # both - "peer1.example.net (192.0.2.1)", or the address alone
+    # Names use the ptr_enrichment cache, workers and per-page limit (see
+    # ptr_enrichment below); with ptr_enrichment disabled the address is shown.
+    neighbor_format: name
+    # RPKI (OVS) and ASPA (AVS) validation columns. Hiding one removes it from
+    # the table only; the state stays in Route details and in the filters.
+    rpki: true
+    aspa: true
+
 # Optional asynchronous reverse DNS for displayed next-hop addresses.
 # DNS is never required for route rendering and the cache is memory-only.
 ptr_enrichment:
