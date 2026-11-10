@@ -21,10 +21,21 @@ import (
 	"github.com/HextetSystems/hextet-lg/internal/visibility"
 )
 
+// Features holds optional switches. The three community flags control search
+// availability only. The session flags control whole views and are
+// independent of each other: bgp_neighbors governs the BGP session pages
+// (/neighbors and /summary), rtr_sessions governs the RPKI-RTR page (/rtr).
 type Features struct {
 	Communities         *bool `yaml:"communities"`
 	LargeCommunities    *bool `yaml:"large_communities"`
 	ExtendedCommunities *bool `yaml:"extended_communities"`
+	BGPNeighbors        *bool `yaml:"bgp_neighbors"`
+	RTRSessions         *bool `yaml:"rtr_sessions"`
+	// RTRSessionAddresses publishes RTR validator addresses, ports and local
+	// addresses on /rtr. It is off by default: validators are usually internal
+	// infrastructure, so sessions are identified by the operator's description
+	// (or an ordinal) unless this is enabled.
+	RTRSessionAddresses *bool `yaml:"rtr_session_addresses"`
 }
 
 func enabled(v *bool, fallback bool) bool {
@@ -36,6 +47,11 @@ func enabled(v *bool, fallback bool) bool {
 func (f Features) CommunityEnabled() bool         { return enabled(f.Communities, true) }
 func (f Features) LargeCommunityEnabled() bool    { return enabled(f.LargeCommunities, true) }
 func (f Features) ExtendedCommunityEnabled() bool { return enabled(f.ExtendedCommunities, false) }
+func (f Features) BGPNeighborsEnabled() bool      { return enabled(f.BGPNeighbors, true) }
+func (f Features) RTRSessionsEnabled() bool       { return enabled(f.RTRSessions, true) }
+func (f Features) RTRSessionAddressesEnabled() bool {
+	return enabled(f.RTRSessionAddresses, false)
+}
 
 // CommunityDefinitions configures the optional, operator-supplied BGP
 // community definitions (legacy NLNOG text format). They are disabled by

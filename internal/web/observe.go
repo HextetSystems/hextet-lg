@@ -59,7 +59,7 @@ func routeName(path string) string {
 	switch path {
 	case "/":
 		return "index"
-	case "/neighbors", "/summary", "/communities", "/healthz", "/readyz":
+	case "/neighbors", "/summary", "/rtr", "/communities", "/healthz", "/readyz":
 		return path[1:]
 	}
 	if strings.HasPrefix(path, "/static/") {

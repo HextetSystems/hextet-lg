@@ -92,7 +92,7 @@ Replace `192.0.2.10` with the private host address reachable from Hextet LG. Set
 
 ## Optional: RTR/RPKI
 
-RTR is not required for BGP collection or the JSON API. To add origin validation later, run an RTR-speaking validator and add an `rtr 192.0.2.100` directive to `bgpd.conf` using the validator's actual address (and any required non-default port). Follow that validator's authentication and network guidance. The image also provides `/var/lib/rpki-client` for validated ROA payload files when using `rpki-client` output instead. Do not enable either until a validator is configured.
+RTR is not required for BGP collection or the JSON API. To add origin validation later, run an RTR-speaking validator and add an `rtr 192.0.2.100` directive to `bgpd.conf` using the validator's actual address (and any required non-default port). Follow that validator's authentication and network guidance. The image also provides `/var/lib/rpki-client` for validated ROA payload files when using `rpki-client` output instead. Do not enable either until a validator is configured. When `rtr` is configured, Hextet LG's RTR Sessions page (`/rtr`) shows the session state reported by the same `bgplgd` API; a `descr` in the `rtr` block (`rtr 192.0.2.100 { descr "validator-a" }`) is what the page shows by default, since validator addresses are not published unless `features.rtr_session_addresses` is enabled. Choose a description that is safe to publish. See [SESSION_VISIBILITY.md](SESSION_VISIBILITY.md).
 
 ## Network access
 

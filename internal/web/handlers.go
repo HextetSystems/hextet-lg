@@ -178,6 +178,8 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 		"ptrTitle":      h.ptrTitle,
 		"asnEnabled":    func(s string) bool { return h.asn != nil && parseASN(s) != 0 },
 		"asnPath":       h.pathParts,
+		"featureBGP":    h.cfg.Features.BGPNeighborsEnabled,
+		"featureRTR":    h.cfg.Features.RTRSessionsEnabled,
 		"neighborURL":   neighborURL,
 		"neighborTitle": neighborTitle,
 		"searchURL":     searchURL,
@@ -275,8 +277,15 @@ func commas(n int) string {
 func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", h.index)
-	mux.HandleFunc("GET /neighbors", h.overview)
-	mux.HandleFunc("GET /summary", h.overview)
+	// Disabled session views are not registered at all: their URLs answer 404
+	// and no navigation links to them. The two flags are independent.
+	if h.cfg.Features.BGPNeighborsEnabled() {
+		mux.HandleFunc("GET /neighbors", h.overview)
+		mux.HandleFunc("GET /summary", h.overview)
+	}
+	if h.cfg.Features.RTRSessionsEnabled() {
+		mux.HandleFunc("GET /rtr", h.overview)
+	}
 	mux.HandleFunc("GET /communities", h.communityPage)
 	mux.HandleFunc("GET /asn-status", h.asnStatus)
 	mux.HandleFunc("GET /ptr-status", h.ptrStatus)
@@ -669,8 +678,14 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 	// allowance per backend until rendering completes, including slow writers.
 	overviewLease := h.budget.newLease()
 	defer overviewLease.release()
+	// /rtr answers are bounded at 1 MiB and are never kept raw, so they need
+	// far less than the neighbor documents.
+	reservation := int64(128 << 20)
+	if kind == "rtr" {
+		reservation = 4 << 20
+	}
 	for range targets {
-		if !overviewLease.reserve(128 << 20) {
+		if !overviewLease.reserve(reservation) {
 			w.Header().Set("Retry-After", "2")
 			requestError(w, r, http.StatusServiceUnavailable, "Server memory capacity is busy; please retry shortly.")
 			return
@@ -697,20 +712,27 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 			}
 			start := time.Now()
 			h.metrics.backendActive.WithLabelValues(b.ID).Inc()
-			data, err := b.client.Overview(r.Context(), kind)
+			var status bgp.Status
+			var reason bgp.Reason
+			var rtrState bgp.RTRState
+			if kind == "rtr" {
+				status, reason, rtrState = h.queryRTR(r.Context(), b, &res)
+			} else {
+				status, reason = h.queryOverview(r.Context(), b, kind, &res)
+			}
 			h.metrics.backendActive.WithLabelValues(b.ID).Dec()
 			elapsed := time.Since(start)
 			res.Duration = elapsed.Round(time.Millisecond).String()
-			res.Overview = data
-			status, reason := bgp.StatusComplete, overviewReason(err)
-			if err != nil {
-				res.Error = "Request failed or returned an invalid response."
-				status = bgp.StatusFailed
+			if status == bgp.StatusFailed && reason != bgp.ReasonNone {
 				lvl := slog.LevelWarn
 				if reason == bgp.ReasonCanceled {
 					lvl = slog.LevelInfo
 				}
-				h.log.LogAttrs(r.Context(), lvl, "backend query", slog.String("request_id", requestID(r.Context())), slog.String("backend", b.ID), slog.String("operation", kind), slog.String("status", string(status)), slog.String("reason", string(reason)), slog.Float64("backend_duration_ms", float64(elapsed.Microseconds())/1000))
+				attrs := []slog.Attr{slog.String("request_id", requestID(r.Context())), slog.String("backend", b.ID), slog.String("operation", kind), slog.String("status", string(status)), slog.String("reason", string(reason)), slog.Float64("backend_duration_ms", float64(elapsed.Microseconds())/1000)}
+				if rtrState != "" {
+					attrs = append(attrs, slog.String("rtr_state", string(rtrState)))
+				}
+				h.log.LogAttrs(r.Context(), lvl, "backend query", attrs...)
 			}
 			h.recordBackend(b, kind, status, reason, elapsed)
 			results <- res
@@ -724,9 +746,43 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(p.Results, func(i, j int) bool { return p.Results[i].Name < p.Results[j].Name })
 	h.scheduleASNs(&p)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := h.templates.ExecuteTemplate(w, "overview.html", p); err != nil {
+	page := "overview.html"
+	if kind == "rtr" {
+		page = "rtr.html"
+	}
+	if err := h.templates.ExecuteTemplate(w, page, p); err != nil {
 		h.renderFailed(w, r, err)
 	}
+}
+
+// queryOverview fetches /neighbors or /summary into res.
+func (h *Handler) queryOverview(ctx context.Context, b backendClient, kind string, res *BackendResult) (bgp.Status, bgp.Reason) {
+	data, err := b.client.Overview(ctx, kind)
+	res.Overview = data
+	if err != nil {
+		res.Error = "Request failed or returned an invalid response."
+		return bgp.StatusFailed, overviewReason(err)
+	}
+	res.Neighbors, res.ShowCounters = neighborRows(data.Neighbors)
+	return bgp.StatusComplete, bgp.ReasonNone
+}
+
+// queryRTR fetches /rtr into res. Metrics and logs see the outcome as a
+// bounded status and reason; the page sees the full five-way RTRState. An
+// unsupported backend is not a backend fault, so it is recorded as a failed
+// request without a failure reason and does not mark the backend unhealthy.
+func (h *Handler) queryRTR(ctx context.Context, b backendClient, res *BackendResult) (bgp.Status, bgp.Reason, bgp.RTRState) {
+	rtr := b.client.RTR(ctx)
+	res.RTR = rtr
+	res.RTRBadge, res.RTRBadgeClass = rtrBadge(rtr)
+	switch rtr.State {
+	case bgp.RTRSessions:
+		res.RTRRows, res.RTRAnyError = rtrRows(rtr.Sessions, h.cfg.Features.RTRSessionAddressesEnabled())
+		fallthrough
+	case bgp.RTRNoSessions:
+		return bgp.StatusComplete, bgp.ReasonNone, rtr.State
+	}
+	return bgp.StatusFailed, rtr.Reason, rtr.State
 }
 
 // maxExplorerRows bounds one Community Explorer page. Real definition sets run

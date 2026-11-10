@@ -12,11 +12,11 @@
 - `internal/config`: strict YAML decoding and startup validation.
 - `internal/bgp`: OpenBGPD HTTP transport types, native query construction, and client.
 - `internal/communities`: operator-supplied community definitions (legacy NLNOG text format): parser, matcher, loader. No web or BGP dependencies.
-- `internal/web`: handlers, embedded templates, and static assets.
+- `internal/web`: handlers, embedded templates, and static assets. `sessions.go` builds the BGP neighbor and RTR presentation rows.
 - `internal/theme`: strict `#RRGGBB` theme configuration, deterministic token derivation, contrast audit and the generated stylesheet. No web or BGP dependencies.
 - `internal/version`: build identity (link-time `Version`/`Commit`/`Date` with toolchain fallbacks).
 - `.goreleaser.yaml`, `.github/workflows`: release automation and CI. `scripts/deploy.sh`: upgrade/rollback wrapper. `docs/RELEASING.md`: release and deployment guide.
-- `configs`: example YAML configuration. `examples/communities`: example community definitions (data, not defaults). `docs/COMMUNITIES.md`: definitions guide.
+- `configs`: example YAML configuration. `examples/communities`: example community definitions (data, not defaults). `docs/COMMUNITIES.md`: definitions guide. `docs/SESSION_VISIBILITY.md`: BGP neighbor and RTR session guide.
 
 ## Frontend embedding
 
@@ -58,11 +58,11 @@
 
 ## Milestones
 
-- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) and M4.5.1 (configurable themes) are in scope by explicit request; M4.6 (next-hop PTR enrichment) is in scope by explicit request; do not begin M4.7 or later without an explicit request.
+- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) and M4.5.1 (configurable themes) are in scope by explicit request; M4.6 (next-hop PTR enrichment) and M4.7 (BGP neighbor and RPKI RTR session visibility) are in scope by explicit request; do not begin M4.8 or later without an explicit request.
 
 ## Public URLs
 
-- Preserve bookmarkable GET URLs: `/` uses `type`+`q` (single prefix, source-AS or Large Community search) or the named filters above, plus `backend`, `view` and `page`; `/neighbors` and `/summary` use `backend`; `/communities` uses `q` and `category`. Backend values are stable IDs or `all`, never addresses. Existing simple `type`/`q` URLs must keep working.
+- Preserve bookmarkable GET URLs: `/` uses `type`+`q` (single prefix, source-AS or Large Community search) or the named filters above, plus `backend`, `view` and `page`; `/neighbors`, `/summary` and `/rtr` use `backend`; `/communities` uses `q` and `category`. Backend values are stable IDs or `all`, never addresses. Existing simple `type`/`q` URLs must keep working.
 - Emit canonical URLs: single-filter simple searches in the `type`/`q` form, compound searches with filters in the fixed order of `bgp.StringFilterKeys` then `bgp.FlagFilterKeys`, then `backend`, `view`, `page` (omitted for page 1). Redirect form noise (empty fields) once; for HTMX set `HX-Push-Url`; serve a full page for `HX-History-Restore-Request`.
 - Neighbor links use the backend-supplied address and source backend ID, without an inferred `af` or unrelated filters. Keep descriptions escaped and supplementary to the visible address.
 - Route views are `table`, `text`, and `detail`; `output=plain` requests text/plain for text views and returns all routes unless `page` is given. Plain responses carry `X-Hextet-LG-Completeness`, `X-Hextet-LG-Routes` and `X-Hextet-LG-Backends`, and use HTTP 400/404/502/503/504 only for invalid, out-of-range or fully failed requests (partial = 200 plus headers and an in-body warning). Links are live queries, not snapshots. Keep ordinary navigation functional without JavaScript and preserve HTMX history.
@@ -73,6 +73,13 @@
 - The format is NLNOG-compatible: first-comma split, `#` comments, exact/range/`x` (one digit)/`nnn` (one or more digits) with `$N` substitutions for standard, large and extended communities. Never compile definition text as a regular expression; keep the bounded matcher. Precedence is exact, then smallest value space, then load order (well-known, ascending ASN, line); never depend on map iteration. Malformed, unsupported or duplicate definitions and any unreadable file fail startup with file and line; do not silently drop lines. See `docs/COMMUNITIES.md` before changing the grammar or its documented differences from upstream.
 - Definitions are presentation only. They must not change query construction, search, canonical URLs, the `features.*` flags, route visibility or caching, and must not be copied into retained `bgp.Route`, cache or flight data: look them up at render time from the immutable set. Tooltips are escaped native `title` attributes in the route-details HTML only; plaintext views and `output=plain` stay raw. Do not add description search.
 - Standard, extended and large communities stay separate kinds. The Community Explorer is generated from the loaded definitions plus the optional `metadata.yaml` (category, notes, status `implemented|documented|unresolved`, evidence), which never affects lookup. "Implemented" means present in the operator's configuration; do not invent meanings and do not claim live verification.
+
+## Session visibility
+
+- `features.bgp_neighbors` (`/neighbors`, `/summary`) and `features.rtr_sessions` (`/rtr`) default to true and are independent; a disabled view is not registered (404) and has no navigation link. The community flags still control search only. `features.rtr_session_addresses` defaults to false: never show RTR validator addresses, ports or local addresses, or raw RTR JSON, unless it is on.
+- Use only fields bgpctl really emits (`docs/SESSION_VISIBILITY.md` lists them with their source). RTR comes only from bgplgd `/rtr`; never add SSH, shell, control-socket access, CLI-text scraping or a substitute such as `/sets` or ROV results. `/summary` JSON has no counters; do not invent them.
+- Keep RTR outcomes distinct (`bgp.RTRState`: sessions, none, unsupported, unavailable, malformed). Never show "no sessions" unless the backend answered with a valid empty document. Absent values are dashes, never zero, and an established session without session ID and serial is not "good".
+- `rtr` is a fixed route and backend-operation label; an unsupported backend is a failed request with no failure reason. Do not add capability caches, per-session goroutines or polling. Sessions of different backends are never merged.
 
 ## Public deployment controls
 
@@ -92,7 +99,7 @@
 - Every UI color is a semantic CSS custom property defined by the generated `/static/theme.css`; `static/app.css` must contain no color literals, gradients or shadows, templates no inline styles (CSP `style-src 'self'`). Add a token to `internal/theme` rather than a literal.
 - Theme configuration accepts only strict `#RRGGBB`, never CSS text; generate CSS only from validated values, once at startup. Derived tokens are deterministic. Contrast shortfalls warn (below 3:1 for primary text fails startup); never silently replace operator colors. See `docs/THEMING.md`.
 - Status colors (route `valid`, RPKI `ovs`, ASPA `avs`, completeness, warnings) are fixed, distinct from the single accent, and always paired with a text label. Do not collapse them into the accent.
-- The visitor's choice lives only in `localStorage` key `theme` (`light`/`dark`); no cookies or server-side preference. `theme-init.js` stays a synchronous script in `<head>` after the stylesheets. Do not begin M4.7 without explicit authorization.
+- The visitor's choice lives only in `localStorage` key `theme` (`light`/`dark`); no cookies or server-side preference. `theme-init.js` stays a synchronous script in `<head>` after the stylesheets. Do not begin M4.8 without explicit authorization.
 
 ## Release engineering
 
@@ -105,7 +112,7 @@
 
 ## ASN enrichment
 
-- Optional Team Cymru DNS enrichment is descriptive only and separate from route results and shared flights. DNS work is asynchronous, bounded, and limited to visible ASNs. The cache-only status endpoint must never schedule lookups. Persistence is opt-in and requires a writable cache directory. Do not begin M4.7 without explicit authorization.
+- Optional Team Cymru DNS enrichment is descriptive only and separate from route results and shared flights. DNS work is asynchronous, bounded, and limited to visible ASNs. The cache-only status endpoint must never schedule lookups. Persistence is opt-in and requires a writable cache directory. Do not begin M4.8 without explicit authorization.
 
 ## PTR enrichment
 

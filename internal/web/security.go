@@ -185,14 +185,14 @@ func (h *Handler) guard(next http.Handler) http.Handler {
 		switch r.URL.Path {
 		case "/":
 			allowed = knownParams
-		case "/neighbors", "/summary":
+		case "/neighbors", "/summary", "/rtr":
 			allowed["backend"] = true
 		case "/communities":
 			allowed["backend"] = true
 			allowed["q"] = true
 			allowed["category"] = true
 		}
-		if allowed != nil && (r.URL.Path == "/" || r.URL.Path == "/neighbors" || r.URL.Path == "/summary" || r.URL.Path == "/communities") {
+		if allowed != nil && (r.URL.Path == "/" || r.URL.Path == "/neighbors" || r.URL.Path == "/summary" || r.URL.Path == "/rtr" || r.URL.Path == "/communities") {
 			for k, v := range vals {
 				if len(v) != 1 && r.URL.Path != "/" {
 					requestError(w, r, http.StatusBadRequest, "Repeated query parameter.")
@@ -205,7 +205,7 @@ func (h *Handler) guard(next http.Handler) http.Handler {
 			}
 		}
 		if r.URL.Path != "/healthz" && r.URL.Path != "/readyz" {
-			live := r.URL.Path == "/neighbors" || r.URL.Path == "/summary" || (r.URL.Path == "/" && len(vals) > 0)
+			live := r.URL.Path == "/neighbors" || r.URL.Path == "/summary" || r.URL.Path == "/rtr" || (r.URL.Path == "/" && len(vals) > 0)
 			if ok, retry := h.limiter.allow(clientPeer(r), live); !ok {
 				h.metrics.rateLimited.WithLabelValues(map[bool]string{true: "live", false: "page"}[live]).Inc()
 				hdr.Set("Retry-After", fmt.Sprint(retry))

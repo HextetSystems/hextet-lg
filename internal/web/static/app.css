@@ -158,3 +158,9 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font:11px ui-mono
   button{width:100%;justify-content:center}
   footer{gap:10px;flex-direction:column}
 }
+
+/* Session pages */
+.footnote{margin:18px 4px 0;color:var(--color-text-muted);font-size:12px}
+.details-row details.raw-neighbor{margin-top:10px}
+.details-row .details-grid{margin-bottom:6px}
+td small{color:var(--color-text-muted)}

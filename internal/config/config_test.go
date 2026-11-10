@@ -275,3 +275,70 @@ func TestPTRDefaultsAndValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionFeatureFlags(t *testing.T) {
+	with := func(features string) string {
+		return strings.Replace(validConfig, "\nbackends:", "\n"+features+"backends:", 1)
+	}
+	for name, tc := range map[string]struct {
+		yaml               string
+		bgp, rtr, rtrAddrs bool
+	}{
+		"features omitted entirely":  {validConfig, true, true, false},
+		"section without the flags":  {with("features:\n  communities: false\n"), true, true, false},
+		"both enabled":               {with("features:\n  bgp_neighbors: true\n  rtr_sessions: true\n"), true, true, false},
+		"both disabled":              {with("features:\n  bgp_neighbors: false\n  rtr_sessions: false\n"), false, false, false},
+		"only bgp enabled":           {with("features:\n  bgp_neighbors: true\n  rtr_sessions: false\n"), true, false, false},
+		"only rtr enabled":           {with("features:\n  bgp_neighbors: false\n  rtr_sessions: true\n"), false, true, false},
+		"rtr disabled, bgp omitted":  {with("features:\n  rtr_sessions: false\n"), true, false, false},
+		"bgp disabled, rtr omitted":  {with("features:\n  bgp_neighbors: false\n"), false, true, false},
+		"rtr addresses opted in":     {with("features:\n  rtr_session_addresses: true\n"), true, true, true},
+		"rtr addresses without rtr":  {with("features:\n  rtr_sessions: false\n  rtr_session_addresses: true\n"), true, false, true},
+		"community flags unaffected": {with("features:\n  communities: false\n  large_communities: false\n  extended_communities: true\n  bgp_neighbors: false\n"), false, true, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			c, err := Decode(strings.NewReader(tc.yaml))
+			if err != nil {
+				t.Fatal(err)
+			}
+			f := c.Features
+			if f.BGPNeighborsEnabled() != tc.bgp || f.RTRSessionsEnabled() != tc.rtr || f.RTRSessionAddressesEnabled() != tc.rtrAddrs {
+				t.Fatalf("bgp=%v rtr=%v addrs=%v", f.BGPNeighborsEnabled(), f.RTRSessionsEnabled(), f.RTRSessionAddressesEnabled())
+			}
+		})
+	}
+	// The community flags keep their own defaults.
+	c, _ := Decode(strings.NewReader(validConfig))
+	if !c.Features.CommunityEnabled() || !c.Features.LargeCommunityEnabled() || c.Features.ExtendedCommunityEnabled() {
+		t.Fatal("community defaults changed")
+	}
+}
+
+func TestSessionFeatureFlagsAreStrictlyTyped(t *testing.T) {
+	for name, yaml := range map[string]string{
+		"string value": "features:\n  rtr_sessions: maybe\n",
+		"typo":         "features:\n  rtr_session: true\n",
+		"list":         "features:\n  bgp_neighbors: [true]\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			raw := strings.Replace(validConfig, "\nbackends:", "\n"+yaml+"backends:", 1)
+			if _, err := Decode(strings.NewReader(raw)); err == nil {
+				t.Fatal("expected a decode error")
+			}
+		})
+	}
+}
+
+func TestExampleConfigDocumentsSessionFlags(t *testing.T) {
+	c, err := Load("../../configs/config.example.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := c.Features
+	if f.BGPNeighbors == nil || f.RTRSessions == nil || f.RTRSessionAddresses == nil {
+		t.Fatal("the example must show every session flag")
+	}
+	if !f.BGPNeighborsEnabled() || !f.RTRSessionsEnabled() || f.RTRSessionAddressesEnabled() {
+		t.Fatal("the example must show the defaults")
+	}
+}

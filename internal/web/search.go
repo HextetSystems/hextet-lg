@@ -25,10 +25,21 @@ type BackendResult struct {
 	Shared    bool
 	lease     *resultLease
 
-	// Overview pages (neighbors, summary) use these.
+	// Overview pages (neighbors, summary, rtr) use these.
 	Error    string
 	Duration string
 	Overview bgp.Overview
+	// Neighbors is Overview.Neighbors with presentation; ShowCounters says
+	// whether any neighbor carries stats (otherwise those columns are omitted).
+	Neighbors    []NeighborRow
+	ShowCounters bool
+	// RTR is the /rtr answer; RTRRows its presentation (empty unless the
+	// state is bgp.RTRSessions).
+	RTR         bgp.RTRResult
+	RTRRows     []RTRRow
+	RTRAnyError bool
+	// RTRBadge and RTRBadgeClass label the backend's RTR capability state.
+	RTRBadge, RTRBadgeClass string
 }
 
 // Age is how old a cached result is.

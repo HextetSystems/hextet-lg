@@ -42,19 +42,23 @@ theme:
 
 ## Views and shareable URLs
 
-The Route Explorer (`/`) runs native, server-side OpenBGPD queries. Neighbor Explorer (`/neighbors`) and BGP Summary (`/summary`) show live session data per backend. Community Explorer (`/communities`) is an embedded local reference and remains available if backends are down.
+The Route Explorer (`/`) runs native, server-side OpenBGPD queries. Neighbor Explorer (`/neighbors`) and BGP Summary (`/summary`) show live BGP session data per backend, and RTR Sessions (`/rtr`) shows the RPKI-to-Router sessions between each backend and its validators; each can be switched off independently (see [Session visibility](#session-visibility)). Community Explorer (`/communities`) is an embedded local reference and remains available if backends are down.
 
 Every view is a bookmarkable GET URL. Shared links are **live queries, not snapshots**: re-opening one runs the query again and the routes may have changed. If the short-lived result cache is enabled (see below), a result may be up to `cache_ttl` old and is labelled as cached. URLs never contain backend addresses; `backend` is a stable configured ID or `all`.
 
 | Page | Parameters |
 |---|---|
 | `/` | search filters (below), `backend`, `view=table\|text\|detail`, `page`, `output=plain` |
-| `/neighbors`, `/summary` | `backend` |
+| `/neighbors`, `/summary`, `/rtr` | `backend` |
 | `/communities` | `q`, `category` |
 
 Simple searches keep their original form: `/?type=prefix\|asn\|large-community&q=...&backend=...&view=...`. Prefix searches with a scope flag also use `type` and `q`. Other compound searches name each filter, for example `/?as=15169&large-community=395089%3A0%3A6&af=ipv6&best=1&backend=all&view=table&page=2`. The application emits parameters in a canonical order (filters in the order of the table below, then `backend`, `view`, `page`); both forms are accepted as input and mixed. A form submission that carries empty fields is redirected once to the canonical URL, and HTMX updates push the canonical URL into browser history. Back/forward and fresh-session opening work without any stored state, and ordinary navigation works without JavaScript.
 
 Unknown parameters, repeated parameters (there are no OR lists), invalid values and mutually exclusive combinations are rejected with an explanation; filters are never silently dropped. HTML and plaintext responses return HTTP 400; HTMX swaps the error fragment into the page.
+
+## Session visibility
+
+Two independent switches under `features` control the session views: `bgp_neighbors` (`/neighbors` and `/summary`) and `rtr_sessions` (`/rtr`). Both default to on, so existing configurations are unchanged; a disabled view has no navigation link and answers 404. The RTR page reads bgplgd's `/rtr` endpoint (present in OpenBGPD 8.2 to 9.3). It distinguishes sessions, no sessions, an unsupported backend, an unavailable backend and a malformed response, and does not publish validator addresses unless `features.rtr_session_addresses` is enabled. See [docs/SESSION_VISIBILITY.md](docs/SESSION_VISIBILITY.md) for the exact fields, endpoints, multi-backend behavior and privacy notes.
 
 ## Search filters (compound queries)
 
@@ -124,7 +128,7 @@ All are configurable in `looking_glass` (defaults shown):
 
 The default request-target limit is 8192 bytes, query-string limit 6144 bytes, parameter limit 64, and header limit 32768 bytes. The server has a 5s header read timeout, 15s request read timeout, 60s idle timeout, and 15s per-write deadline; there is no overall write deadline that cuts short a backend query. These limits permit IPv6 and compound searches. Header and URL limits and rates are configurable in `server` as shown in the example.
 
-Per-peer token buckets allow 10 inexpensive requests per second (burst 60), and 1 live request per second (burst 8). Live includes Route Explorer requests with parameters, neighbors and summary. Exhaustion returns 429 and `Retry-After`; liveness and readiness are exempt. The limiter holds at most 10,000 buckets and removes inactive entries after ten minutes using a periodic cleanup. It uses the direct TCP peer only and ignores all forwarded headers. Behind Cloudflare Tunnel or another proxy all users therefore share the proxy's allowance; configure rate limiting at the trusted ingress or size the limits for the aggregate. Do not expose an unauthenticated bypass around that ingress.
+Per-peer token buckets allow 10 inexpensive requests per second (burst 60), and 1 live request per second (burst 8). Live includes Route Explorer requests with parameters, neighbors, summary and RTR sessions. Exhaustion returns 429 and `Retry-After`; liveness and readiness are exempt. The limiter holds at most 10,000 buckets and removes inactive entries after ten minutes using a periodic cleanup. It uses the direct TCP peer only and ignores all forwarded headers. Behind Cloudflare Tunnel or another proxy all users therefore share the proxy's allowance; configure rate limiting at the trusted ingress or size the limits for the aggregate. Do not expose an unauthenticated bypass around that ingress.
 
 All route queries, including prefix searches, share `max_concurrent_queries` slots; `max_queued_queries` (16) bounds active and waiting work and `queue_wait` defaults to 2s. Identical queries share a flight and cached responses do not take a slot. A fully busy result returns 503 with `Retry-After`; retry later or increase capacity only after sizing memory. A partial response means one or more backends stopped early; check its reason and do not infer absence of routes. Limits are per process, not shared across replicas.
 
@@ -168,7 +172,7 @@ Both settings are optional. Example records:
 {"time":"2026-11-09T23:58:11Z","level":"WARN","msg":"backend query","request_id":"7c1f0e0a3d6b9a42","backend":"local","operation":"rib","status":"partial","backend_duration_ms":30001.4,"routes":42317,"bytes":61203344,"retained_bytes":104857600,"reason":"timeout"}
 ```
 
-- **One `request` record per HTTP request** (method, normalized `route`, status, `duration_ms`, bytes, and for route searches the overall `result`, backend count and cache hits/misses) and **one `backend query` record per upstream query** (backend ID, `operation` = `rib`, `rib_in`, `rib_out`, `neighbors`, `summary`, `status`, `reason`, backend duration). Routes are never logged individually.
+- **One `request` record per HTTP request** (method, normalized `route`, status, `duration_ms`, bytes, and for route searches the overall `result`, backend count and cache hits/misses) and **one `backend query` record per upstream query** (backend ID, `operation` = `rib`, `rib_in`, `rib_out`, `neighbors`, `summary`, `rtr`, `status`, `reason`, backend duration). Routes are never logged individually.
 - `request_id` is generated per request (never accepted from the client) and is returned in the `X-Request-Id` response header. A shared in-flight query is logged under the id of the request that started it; requests that joined it have `cache_hits` counted.
 - **Levels:** `info` for normal requests and complete queries; `warn` for 5xx responses (including 503 overload), partial or failed backend queries and clients that stopped reading (`client":"write_timeout"`); `error` for 500s, render failures and deliberately aborted responses; `debug` for health checks, static files, 429s and queries that were refused before reaching a backend. Client cancellations and disconnects are `info` with `"client":"canceled"` or `"disconnected"`.
 - **Never logged:** query strings, prefixes, ASNs, headers, credentials, client addresses, backend URLs or response bodies. Unrecognized paths are logged as `route":"other"`.
@@ -192,7 +196,7 @@ The public server has no `/metrics` route (it returns 404 whatever headers the c
 
 | Family | Type | Meaning |
 |---|---|---|
-| `hextet_lg_http_requests_total{method,route,status_class}` | counter | requests; `status_class` is `2xx`…`5xx` or `client_closed` (client left before the response completed; kept out of the error rate). `route` is one of `index`, `neighbors`, `summary`, `communities`, `healthz`, `readyz`, `static`, `other` |
+| `hextet_lg_http_requests_total{method,route,status_class}` | counter | requests; `status_class` is `2xx`…`5xx` or `client_closed` (client left before the response completed; kept out of the error rate). `route` is one of `index`, `neighbors`, `summary`, `rtr`, `communities`, `healthz`, `readyz`, `static`, `other` |
 | `hextet_lg_http_request_duration_seconds{method,route}` | histogram | request duration |
 | `hextet_lg_http_active_requests` | gauge | requests being served |
 | `hextet_lg_build_info{version,revision,go_version}` | gauge | always 1; one series identifying the running build (same values as `hextet-lg version`) |
@@ -404,6 +408,7 @@ Tests use `httptest` fixtures and do not require a live OpenBGPD process. Depend
 - Extended-community syntax is validated by OpenBGPD, not by this application.
 - Metrics and log records are in-process only: counters reset on restart, and logs are as durable as the container log driver. There is no tracing and no bundled dashboard or alert rules.
 - Cached results can be up to `cache_ttl` old; disable with `cache_ttl: 0s` for strictly live results.
+- RTR sessions: OpenBGPD reports no record counts or last-synchronization time over `/rtr`, so none are shown; a bgplgd without `/rtr` is shown as unsupported. The neighbor pages still offer the raw backend JSON, which contains fields not otherwise displayed (see [docs/SESSION_VISIBILITY.md](docs/SESSION_VISIBILITY.md)).
 - OpenBGPD versions may expose different optional fields. Summary session counts are derived only from returned neighbor records; other data remains available as raw JSON per route.
 - Community definitions and any "Implemented" status are operator-supplied; they are not live verification. The loader is stricter than the NLNOG implementation (duplicates, unsupported tokens and leading-zero literals are startup errors), so some upstream files need editing; see [docs/COMMUNITIES.md](docs/COMMUNITIES.md). Extended-community definitions cover the numeric `label A[:B]` forms only, and the OpenBGPD well-known standard community names are mapped from knowledge of its output format, not verified against a live backend.
 - The embedded HTMX runtime is pinned at version 2.0.4. No external browser assets are required.

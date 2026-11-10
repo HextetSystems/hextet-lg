@@ -171,12 +171,29 @@ backends:
     # distant or slower router:
     # query_timeout: 60s
 
-# Search availability only; route attributes and Community Explorer remain visible.
-# Omitted values default to true, true and false respectively.
+# The three community flags control search availability only; route attributes
+# and the Community Explorer remain visible. Omitted values default to true,
+# true and false respectively.
+#
+# bgp_neighbors and rtr_sessions switch whole views and are independent of each
+# other (disabling one never disables the other). A disabled view has no
+# navigation link and its URL answers 404.
+#   bgp_neighbors: the BGP session pages /neighbors and /summary (default true)
+#   rtr_sessions:  the RPKI-to-Router session page /rtr (default true). It needs
+#                  a bgplgd that provides /rtr (present in OpenBGPD 8.2 to 9.3); a backend
+#                  without it is reported as "unsupported", never as "no
+#                  sessions", and never prevents startup.
+#   rtr_session_addresses: show RTR validator addresses, ports and local
+#                  addresses on /rtr (default false). By default validators are
+#                  identified only by their bgpd.conf "descr" or an ordinal.
+#                  See docs/SESSION_VISIBILITY.md before enabling it.
 features:
   communities: true
   large_communities: true
   extended_communities: false
+  bgp_neighbors: true
+  rtr_sessions: true
+  rtr_session_addresses: false
 
 # Optional operator-supplied BGP community definitions (DISABLED by default).
 # Files use the legacy NLNOG looking glass text format, one asN.txt per ASN

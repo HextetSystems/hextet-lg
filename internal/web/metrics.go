@@ -15,7 +15,7 @@ import (
 )
 
 // Backend operations are a fixed set so they can label metrics.
-var backendOperations = []string{"rib", "rib_in", "rib_out", "neighbors", "summary"}
+var backendOperations = []string{"rib", "rib_in", "rib_out", "neighbors", "summary", "rtr"}
 
 var backendStatuses = []bgp.Status{bgp.StatusComplete, bgp.StatusPartial, bgp.StatusFailed}
 
