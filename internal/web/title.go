@@ -13,9 +13,9 @@ import (
 //
 // Every HTML page gets a title of the form "<subject> · <site>". The subject
 // describes what the page shows (the canonical search, or the page name); the
-// site name is the existing application title (server.title). siteName is the
-// only place that decides the suffix, so configurable branding (M4.9) replaces
-// it without touching any handler.
+// site name is the configured deployment name (site.name, else the legacy
+// server.title, else a generic default; see internal/site). siteName is the
+// only place that decides the suffix.
 //
 // Rules for route searches (routeTitleSubject):
 //
@@ -42,8 +42,11 @@ const (
 	titleInvalid     = "Invalid search"
 )
 
-// siteName is the title suffix: the configured application name.
-func (h *Handler) siteName() string { return h.cfg.Server.Title }
+// siteName is the title suffix: the resolved, validated site name.
+func (h *Handler) siteName() string { return h.site.Name }
+
+// SiteName is the resolved site name, for the startup log line.
+func (h *Handler) SiteName() string { return h.site.Name }
 
 // pageTitle composes the document title for a subject.
 func (h *Handler) pageTitle(subject string) string {

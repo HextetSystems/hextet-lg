@@ -187,8 +187,8 @@ func TestTimingOnEveryHTMLPageExactlyOnce(t *testing.T) {
 			if d < 0 || d > 5*time.Second {
 				t.Errorf("implausible duration %v", d)
 			}
-			if !strings.Contains(body, "Hextet Systems · AS395089") && !strings.Contains(body, `AS395089`) {
-				t.Errorf("existing footer content missing")
+			if !strings.Contains(body, "Read-only queries") || !strings.Contains(body, "Powered by Hextet LG") || strings.Contains(body, "AS395089") {
+				t.Errorf("generic footer content wrong or operator-specific text present")
 			}
 			if strings.Contains(body, `hx-swap-oob`) {
 				t.Errorf("a full page must not carry an out-of-band update")

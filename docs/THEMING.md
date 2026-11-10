@@ -112,3 +112,7 @@ No browser framework is part of the test suite. After changing the theme:
 6. Reload after editing the YAML and restarting: the new colors appear without a hard refresh.
 
 Headless Chromium screenshots of both themes were used for the M4.5.1 review; real-browser interaction tests (toggle clicks, history) are covered only by the Node unit tests of `theme-init.js` and the toggle in `app.js` and by the Go tests of the served HTML.
+
+## Branding
+
+The optional logo and favicon (`site.branding`, see [BRANDING.md](BRANDING.md)) use no separate palette. Logos are never recolored; the built-in favicon is drawn in `theme.accent`. Choose a logo that reads on both the light and the dark header, or use transparency.

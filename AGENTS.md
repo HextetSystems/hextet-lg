@@ -14,9 +14,10 @@
 - `internal/communities`: operator-supplied community definitions (legacy NLNOG text format): parser, matcher, loader. No web or BGP dependencies.
 - `internal/web`: handlers, embedded templates, and static assets. `sessions.go` builds the BGP neighbor and RTR presentation rows.
 - `internal/theme`: strict `#RRGGBB` theme configuration, deterministic token derivation, contrast audit and the generated stylesheet. No web or BGP dependencies.
+- `internal/site`: deployment identity (`site` section): validation, startup-loaded logo/favicon assets, footer items, built-in favicon. No web or BGP dependencies.
 - `internal/version`: build identity (link-time `Version`/`Commit`/`Date` with toolchain fallbacks).
 - `.goreleaser.yaml`, `.github/workflows`: release automation and CI. `scripts/deploy.sh`: upgrade/rollback wrapper. `docs/RELEASING.md`: release and deployment guide.
-- `configs`: example YAML configuration. `examples/communities`: example community definitions (data, not defaults). `docs/COMMUNITIES.md`: definitions guide. `docs/SESSION_VISIBILITY.md`: BGP neighbor and RTR session guide.
+- `configs`: example YAML configuration. `examples/communities`: example community definitions (data, not defaults). `docs/COMMUNITIES.md`: definitions guide. `docs/SESSION_VISIBILITY.md`: BGP neighbor and RTR session guide. `docs/BRANDING.md`: site identity, logo and favicon guide.
 
 ## Frontend embedding
 
@@ -58,7 +59,7 @@
 
 ## Milestones
 
-- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) and M4.5.1 (configurable themes) are in scope by explicit request; M4.6 (next-hop PTR enrichment) and M4.7 (BGP neighbor and RPKI RTR session visibility) and M4.8 (page generation timing) and M4.8.1 (compact Route Explorer layout and dynamic page titles) and M4.8.2 (mobile usability, route presentation and configurable columns) are in scope by explicit request; do not begin M4.9 or later without an explicit request.
+- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) and M4.5.1 (configurable themes) are in scope by explicit request; M4.6 (next-hop PTR enrichment) and M4.7 (BGP neighbor and RPKI RTR session visibility) and M4.8 (page generation timing) and M4.8.1 (compact Route Explorer layout and dynamic page titles) and M4.8.2 (mobile usability, route presentation and configurable columns) and M4.9 (generic operator branding and deployment identity) are in scope by explicit request; do not begin M5 or later without an explicit request.
 
 ## Public URLs
 
@@ -90,7 +91,7 @@
 
 - Order: compact search panel (one control row, a secondary row with Advanced filters, query context, Copy link, Clear search), one status line per backend directly above its table, the unchanged table, the footer. Do not reintroduce a query-summary panel, per-backend heading cards, repeated counts or long explanatory paragraphs; explanations belong in the help popover or Advanced filters.
 - Controls keep real labels (visually hidden is fine), the `role="search"` form, collapsed Advanced filters (opened only by validation errors) and the active-filter count. The query context (`context` template) is outside `#results`: fragments replace it with `hx-swap-oob`, singular and top-level, like `#page-timing`; it never repeats the search box value. Backend outcomes are text, never colour only; backends are never merged and a failed one never hides another. The pager exists only for more than one page.
-- Every HTML page has exactly one `<title>`, `<subject> · <site>`, built only in `internal/web/title.go` (`siteName` is the single suffix hook for M4.9). Subjects come from the normalized query, never raw input; rejected requests are "Invalid search"; no query strings beyond the bounded canonical primary filter, no backend addresses, advanced filters only counted, user-derived text stripped and bounded. A fragment starts with `<title>` (HTMX applies it); a full page (including history restore) has it only in `<head>`. Add no client-side title code.
+- Every HTML page has exactly one `<title>`, `<subject> · <site>`, built only in `internal/web/title.go` (`siteName`, the resolved `site.name`, is the single suffix). Subjects come from the normalized query, never raw input; rejected requests are "Invalid search"; no query strings beyond the bounded canonical primary filter, no backend addresses, advanced filters only counted, user-derived text stripped and bounded. A fragment starts with `<title>` (HTMX applies it); a full page (including history restore) has it only in `<head>`. Add no client-side title code.
 
 ## Mobile layout, display settings and history
 
@@ -118,7 +119,15 @@
 - Every UI color is a semantic CSS custom property defined by the generated `/static/theme.css`; `static/app.css` must contain no color literals, gradients or shadows, templates no inline styles (CSP `style-src 'self'`). Add a token to `internal/theme` rather than a literal.
 - Theme configuration accepts only strict `#RRGGBB`, never CSS text; generate CSS only from validated values, once at startup. Derived tokens are deterministic. Contrast shortfalls warn (below 3:1 for primary text fails startup); never silently replace operator colors. See `docs/THEMING.md`.
 - Status colors (route `valid`, RPKI `ovs`, ASPA `avs`, completeness, warnings) are fixed, distinct from the single accent, and always paired with a text label. Do not collapse them into the accent.
-- The visitor's choice lives only in `localStorage` key `theme` (`light`/`dark`); no cookies or server-side preference. `theme-init.js` stays a synchronous script in `<head>` after the stylesheets. Do not begin M4.9 without explicit authorization.
+- The visitor's choice lives only in `localStorage` key `theme` (`light`/`dark`); no cookies or server-side preference. `theme-init.js` stays a synchronous script in `<head>` after the stylesheets. Do not begin M5 without explicit authorization.
+
+## Site identity and branding
+
+- Hextet LG is the software identity (binary, module, repository, metrics, headers, default footer note); the deployment identity is the optional `site` section (`internal/site`, `docs/BRANDING.md`). Never hard-code an operator name, operator ASN or Hextet-specific text in templates, CSS or Go; defaults are generic ("BGP Looking Glass", no operator, no ASN, "Powered by Hextet LG").
+- `site.name` > legacy `server.title` (sanitized, never required) > default; there is one title path (`title.go`). A warning, not an error, when both differ.
+- Operator text is plain text: validated at startup, escaped by `html/template`, never HTML, Markdown or template syntax. `site.website` is an absolute http(s) URL, `site.contact` a plain email address, `site.asn` display metadata only: it must never reach a query, filter, backend identity, cache key or result processing.
+- Logo and favicon are local files named without a path inside `site.branding.directory`, opened through `os.Root`, validated by content and size at startup, held in memory and served only at `/branding/logo`, `/branding/favicon` and `/favicon.ico`. No upload endpoint, no external asset, no path parameter, no inline SVG. SVG is validated and served with a sandboxing CSP. The built-in favicon takes the theme accent; add no second palette.
+- Header and footer stay compact: the footer items come from `site.Footer` (no empty labels or stray separators), the page-timing element stays last, and desktop header height must not grow. Do not add a branding banner, framework or per-request file access.
 
 ## Release engineering
 
@@ -131,7 +140,7 @@
 
 ## ASN enrichment
 
-- Optional Team Cymru DNS enrichment is descriptive only and separate from route results and shared flights. DNS work is asynchronous, bounded, and limited to visible ASNs. The cache-only status endpoint must never schedule lookups. Persistence is opt-in and requires a writable cache directory. Do not begin M4.9 without explicit authorization.
+- Optional Team Cymru DNS enrichment is descriptive only and separate from route results and shared flights. DNS work is asynchronous, bounded, and limited to visible ASNs. The cache-only status endpoint must never schedule lookups. Persistence is opt-in and requires a writable cache directory. Do not begin M5 without explicit authorization.
 
 ## PTR enrichment
 

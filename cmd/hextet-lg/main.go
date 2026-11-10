@@ -81,7 +81,7 @@ func main() {
 	done := make(chan error, 1)
 	go func() { done <- srv.ListenAndServe() }()
 	vi := version.Get()
-	logger.Info("listening", "version", vi.Version, "commit", vi.Commit, "title", cfg.Server.Title, "listen", cfg.Server.Listen, "backends", len(cfg.Backends), "log_level", cfg.Logging.Level, "log_format", cfg.Logging.Format, "metrics", cfg.Metrics.Enabled)
+	logger.Info("listening", "version", vi.Version, "commit", vi.Commit, "site", h.SiteName(), "listen", cfg.Server.Listen, "backends", len(cfg.Backends), "log_level", cfg.Logging.Level, "log_format", cfg.Logging.Format, "metrics", cfg.Metrics.Enabled)
 	code := 0
 	select {
 	case err := <-done:

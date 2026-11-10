@@ -3,18 +3,19 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
+  {{template "icons"}}
   <link rel="stylesheet" href="{{assetURL "app.css"}}"><link rel="stylesheet" href="{{assetURL "theme.css"}}"><script src="{{assetURL "theme-init.js"}}"></script>
   <meta name="htmx-config" content='{"includeIndicatorStyles":false,"historyCacheSize":0,"allowEval":false,"allowScriptTags":false}'><script src="/static/htmx.min.js"></script>
 </head>
 <body>
-<header class="topbar"><a class="brand" href="/" aria-label="Hextet Looking Glass home"><span class="mark">H</span><span>HEX<span class="accent">TET</span><small>NETWORK OPERATIONS</small></span></a>{{template "nav" .}}</header>
+<header class="topbar">{{template "brand"}}{{template "nav" .}}</header>
 <main>
-  <div class="page-head"><h1>Route Explorer</h1><p class="lead">Inspect routes announced across Hextet's OpenBGPD backends.</p></div>
+  <div class="page-head"><h1>Route Explorer</h1><p class="lead">Inspect routes across this network's OpenBGPD backends.</p></div>
   <form id="search-form" class="panel search-panel" method="get" action="/" role="search" aria-label="Route search" hx-get="/" hx-target="#results" hx-swap="innerHTML" hx-push-url="true">
     <div class="controls">
       <label class="c-backend"><span class="sr-only">Backend</span><select name="backend" title="Backend"><option value="all" {{if eq .SelectedBackend "all"}}selected{{end}}>All enabled backends</option>{{range .Backends}}<option value="{{.ID}}" {{if eq $.SelectedBackend .ID}}selected{{end}}>{{.Name}}{{if .Location}} · {{.Location}}{{end}}</option>{{end}}</select></label>
       <label class="c-type"><span class="sr-only">Search by</span><select name="type" title="Search by"><option value="prefix" {{if eq .SearchType "prefix"}}selected{{end}}>IP address or prefix</option><option value="asn" {{if eq .SearchType "asn"}}selected{{end}}>Source ASN</option>{{if .LargeCommunityEnabled}}<option value="large-community" {{if eq .SearchType "large-community"}}selected{{end}}>Large community</option>{{end}}</select></label>
-      <label class="c-query"><span class="sr-only">Search value</span><input name="q" type="search" value="{{.Form.Q}}" placeholder="8.8.8.8, 2001:4860::/32, AS15169, or 395089:0:6"></label>
+      <label class="c-query"><span class="sr-only">Search value</span><input name="q" type="search" value="{{.Form.Q}}" placeholder="8.8.8.8, 2001:4860::/32, AS15169, or 64500:0:6"></label>
       <label class="c-view"><span class="sr-only">View</span><select name="view" title="View"><option value="table" {{if eq .View "table"}}selected{{end}}>HTML table</option><option value="text" {{if eq .View "text"}}selected{{end}}>Plain text summary</option><option value="detail" {{if eq .View "detail"}}selected{{end}}>Plain text detail</option></select></label>
       <button type="submit" aria-label="Search routes"><span class="button-text">Search</span><span class="spinner" aria-hidden="true"></span></button>
     </div>
@@ -31,7 +32,7 @@
     </details>
   </form>
   <section id="results" aria-live="polite" aria-label="Route results">{{template "results.html" .}}</section>
-  <footer><span>Powered by OpenBGPD <span class="dot">·</span> Read-only queries</span><span>Hextet Systems <span class="dot">·</span> AS395089{{template "timing" .}}</span></footer>
+  {{template "footerbar" .}}
 </main>
 {{template "theme" .}}
 

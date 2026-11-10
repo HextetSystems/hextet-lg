@@ -69,6 +69,9 @@ func routeName(path string) string {
 	if strings.HasPrefix(path, "/static/") {
 		return "static"
 	}
+	if strings.HasPrefix(path, "/branding/") || path == "/favicon.ico" {
+		return "branding"
+	}
 	return "other"
 }
 
@@ -156,7 +159,7 @@ func (h *Handler) finishRequest(r *http.Request, rw *respWriter, info *reqInfo, 
 		level = slog.LevelWarn
 	case status == http.StatusTooManyRequests:
 		level = slog.LevelDebug // counted in hextet_lg_http_rate_limited_total; a flood must not flood the log
-	case status < 400 && (route == "healthz" || route == "readyz" || route == "static"):
+	case status < 400 && (route == "healthz" || route == "readyz" || route == "static" || route == "branding"):
 		level = slog.LevelDebug
 	}
 	if !h.log.Enabled(r.Context(), level) {

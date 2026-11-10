@@ -17,6 +17,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/HextetSystems/hextet-lg/internal/site"
 	"github.com/HextetSystems/hextet-lg/internal/theme"
 	"github.com/HextetSystems/hextet-lg/internal/visibility"
 )
@@ -173,6 +174,9 @@ type Config struct {
 	// Theme is the optional color configuration; the zero value selects the
 	// built-in light and dark themes.
 	Theme theme.Config `yaml:"theme"`
+	// Site is the optional deployment identity (name, operator, logo, ...).
+	// The zero value is the generic, operator-neutral default.
+	Site site.Config `yaml:"site"`
 	// Display holds optional presentation settings (route table columns and
 	// raw JSON disclosures).
 	Display        Display `yaml:"display"`
@@ -209,7 +213,9 @@ const (
 )
 
 type Server struct {
-	Listen            string        `yaml:"listen"`
+	Listen string `yaml:"listen"`
+	// Title is the legacy site name. It still works, but site.name wins when
+	// both are set; neither is required (the default is a generic name).
 	Title             string        `yaml:"title"`
 	MaxURLBytes       int           `yaml:"max_url_bytes"`
 	MaxQueryBytes     int           `yaml:"max_query_bytes"`
@@ -422,8 +428,8 @@ func (c *Config) Validate() error {
 	if c.CommunityDefinitions.Enabled && strings.TrimSpace(c.CommunityDefinitions.Directory) == "" {
 		return errors.New("community_definitions.directory is required when community_definitions.enabled is true")
 	}
-	if strings.TrimSpace(c.Server.Title) == "" {
-		return errors.New("server.title is required")
+	if err := site.Validate(c.Site); err != nil {
+		return err
 	}
 	if c.LookingGlass.QueryTimeout <= 0 {
 		return errors.New("looking_glass.query_timeout must be positive")

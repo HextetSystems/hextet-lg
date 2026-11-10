@@ -2,6 +2,8 @@
 
 Hextet LG is a read-only web looking glass for one or more OpenBGPD `bgplgd` HTTP APIs. It is a Go application with Go HTML templates, HTMX form updates, and embedded frontend assets. It has no database or other persistent service.
 
+The software is **Hextet LG**; the looking glass you deploy is yours. Site name, subtitle, operator, AS number, website, contact, logo, favicon and footer note are configurable (see [Site identity and branding](#site-identity-and-branding)); without configuration the site is operator-neutral.
+
 ## Search options
 
 The optional `features.communities` and `features.large_communities` settings default to `true`; `features.extended_communities` defaults to `false`. Set any to `false` to disable that search type. These flags affect searches only: route community attributes remain visible and Community Explorer remains available. Disabled searches are rejected even through direct URLs.
@@ -28,6 +30,33 @@ route_visibility:
 `exact` hides only the specified destination prefix; `or-longer` also hides contained more-specific destinations. Rules combine with OR. Startup rejects invalid CIDRs, host bits, wrong families, IPv4-mapped IPv6 prefixes, missing fields and unsupported match modes. Duplicate rules are harmless. With any rules configured, unparseable or IPv4-mapped route destinations are also withheld because their visibility cannot be established safely. Changes require an application restart. Filtering happens before retention, shared queries and cache admission, so counts and pages contain visible routes only; incomplete backend responses remain incomplete.
 
 This is an application-level disclosure control and does not change BGP routing policy or what the backend receives. For highly sensitive routes, prevent them from reaching the public looking-glass backend at all. This feature does not make the underlying OpenBGPD API safe for public exposure. Other backend information, such as neighbor and summary data, is not route-filtered.
+
+## Site identity and branding
+
+Hextet LG is the software; the deployment's identity is operator data in the optional `site` section. Every field is optional and the defaults are generic: name `BGP Looking Glass`, subtitle `Network Routing Information`, no operator, no AS number, no logo, a built-in favicon drawn in the theme accent, and the footer note `Powered by Hextet LG`.
+
+```yaml
+site:
+  name: "Example Networks LG"
+  subtitle: "Network Routing Information"
+  operator: "Example Networks"
+  asn: 64500                      # documentation ASN; display only
+  website: "https://example.net"
+  contact: "noc@example.net"
+  branding:
+    directory: /etc/hextet-lg/branding   # read once at startup
+    logo: logo.svg
+    favicon: favicon.png
+    footer: "Powered by Hextet LG"
+```
+
+- `server.title` still works: `site.name` wins when both are set (a warning is logged); neither is required.
+- Text is plain text, validated and escaped, never HTML. `website` must be an absolute `http(s)` URL; `contact` a plain email address.
+- The operator AS number is shown in the footer only. It never reaches a backend query, filter or result.
+- The logo (png, jpg, gif, svg) and favicon (those and ico) are local files from `branding.directory`, named without a path, validated and size-limited at startup, and served at fixed URLs. There is no upload endpoint, no external asset and no arbitrary file access. In Docker mount the directory read-only (`./branding:/etc/hextet-lg/branding:ro`) and restart; no image rebuild is needed.
+- Colors come from the existing [theme](docs/THEMING.md); logos are not recolored.
+
+Details, security decisions and the Docker recipe: [docs/BRANDING.md](docs/BRANDING.md).
 
 ## Themes
 
@@ -71,7 +100,7 @@ Copy link confirms in its label ("Copied") and in a polite live region, then res
 
 ### Browser titles
 
-Every HTML page has a title of the form `<subject> · <site name>`; the site name is the configured `server.title` (default `Hextet Looking Glass`) and is produced by a single function (`Handler.siteName`), so it is the only thing that changes when the application name becomes configurable branding.
+Every HTML page has a title of the form `<subject> · <site name>`; the site name is the configured `site.name` (falling back to the legacy `server.title`, then `BGP Looking Glass`) and is produced by a single function (`Handler.siteName`).
 
 | Page | Subject |
 |---|---|
@@ -411,7 +440,7 @@ Then set each backend's `url` to the OpenBGPD `bgplgd` HTTP API address reachabl
 
 For a minimal OpenBGPD collector and `bgplgd` backend deployment, see [docs/OPENBGPD.md](docs/OPENBGPD.md).
 
-Compose runs only Hextet LG on port 8080. It mounts `./configs/config.docker.yaml` read-only at `/etc/hextet-lg/config.yaml`, runs as an unprivileged user, drops Linux capabilities, enables a read-only root filesystem, and provides a health check. Create the Docker file from the completed development configuration only if it does not already exist, then set its `server.listen` port to 8080 while preserving backend and resource settings. Ensure the non-root container can read it. Do not overwrite either existing file.
+Compose runs only Hextet LG on port 8080. It mounts `./configs/config.docker.yaml` read-only at `/etc/hextet-lg/config.yaml`, runs as an unprivileged user, drops Linux capabilities, enables a read-only root filesystem, and provides a health check. Create the Docker file from the completed development configuration only if it does not already exist, then set its `server.listen` port to 8080 while preserving backend and resource settings. Ensure the non-root container can read it. Do not overwrite either existing file. To show an operator logo or favicon, mount a branding directory read-only (for example `./branding:/etc/hextet-lg/branding:ro` in a local `compose.override.yaml`) and set `site.branding.directory`; see [docs/BRANDING.md](docs/BRANDING.md).
 
 ```sh
 docker compose config -q

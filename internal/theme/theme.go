@@ -73,6 +73,9 @@ const (
 type Theme struct {
 	// Default is auto, light or dark.
 	Default string
+	// Accent is the validated accent color (#RRGGBB), used by the built-in
+	// favicon so it follows the configured theme.
+	Accent string
 	// CSS is the complete stylesheet, generated once.
 	CSS []byte
 	// ETag is a strong validator derived from the CSS bytes.
@@ -113,7 +116,7 @@ func Compile(c Config) (*Theme, error) {
 	}
 	css := render(mode, light, dark)
 	sum := sha256.Sum256(css)
-	return &Theme{Default: mode, CSS: css, ETag: `"` + hex.EncodeToString(sum[:8]) + `"`, Warnings: warnings}, nil
+	return &Theme{Default: mode, Accent: accent.String(), CSS: css, ETag: `"` + hex.EncodeToString(sum[:8]) + `"`, Warnings: warnings}, nil
 }
 
 // quote shows an operator value in an error without letting a very long value

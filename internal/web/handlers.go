@@ -21,6 +21,7 @@ import (
 	"github.com/HextetSystems/hextet-lg/internal/communities"
 	"github.com/HextetSystems/hextet-lg/internal/config"
 	"github.com/HextetSystems/hextet-lg/internal/ptr"
+	"github.com/HextetSystems/hextet-lg/internal/site"
 	"github.com/HextetSystems/hextet-lg/internal/theme"
 )
 
@@ -51,7 +52,10 @@ type Handler struct {
 	stopCh    chan struct{}
 	stopOnce  sync.Once
 
-	theme      *theme.Theme
+	theme *theme.Theme
+	// site is the validated deployment identity (name, operator, logo,
+	// favicon), compiled once at startup and immutable afterwards.
+	site       *site.Site
 	assetVer   map[string]string
 	log        *slog.Logger
 	metrics    *metrics
@@ -144,6 +148,15 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 	for _, w := range h.theme.Warnings {
 		h.log.Warn("theme contrast below target; colors are used as configured", "detail", w)
 	}
+	// The deployment identity (and its optional assets) is read once; a bad
+	// setting or unreadable asset fails startup. The built-in favicon takes the
+	// theme's accent color.
+	if h.site, err = site.Compile(cfg.Site, cfg.Server.Title, h.theme.Accent); err != nil {
+		return nil, err
+	}
+	for _, w := range h.site.Warnings {
+		h.log.Warn(w)
+	}
 	h.assetVer = assetVersions()
 	// Definitions are read once, before anything else is started, so a bad
 	// configuration fails startup cleanly.
@@ -188,6 +201,9 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 	h.templates, err = template.New("root").Funcs(template.FuncMap{
 		"themeDefault":  func() string { return h.theme.Default },
 		"assetURL":      h.assetURL,
+		"site":          func() *site.Site { return h.site },
+		"siteAsset":     siteAssetURL,
+		"hasFooter":     func() bool { return len(h.site.Footer) > 0 },
 		"asnTitle":      h.asnTitle,
 		"ptrKey":        h.ptrKey,
 		"ptrTitle":      h.ptrTitle,
@@ -313,6 +329,13 @@ func (h *Handler) Routes() http.Handler {
 		_, _ = w.Write([]byte("ok\n"))
 	})
 	mux.HandleFunc("GET /static/theme.css", h.themeCSS)
+	// Operator branding: fixed URLs backed by assets validated and loaded at
+	// startup. There is no path parameter, so nothing else can be served.
+	mux.HandleFunc("GET /branding/favicon", h.brandingAsset(h.site.Favicon))
+	mux.HandleFunc("GET /favicon.ico", h.brandingAsset(h.site.Favicon))
+	if h.site.Logo != nil {
+		mux.HandleFunc("GET /branding/logo", h.brandingAsset(h.site.Logo))
+	}
 	mux.Handle("GET /static/", http.FileServer(http.FS(assets)))
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) {
 		if h.stopping.Load() {

@@ -12,14 +12,17 @@ body{margin:0;background:var(--color-background);color:var(--color-text);font:15
 
 /* Top bar and navigation */
 .topbar{height:56px;border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;padding:0 max(calc((100vw - 1240px)/2),28px);background:var(--color-surface)}
-.brand{color:var(--color-text);text-decoration:none;display:flex;gap:12px;align-items:center;font-size:15px;font-weight:700;letter-spacing:.12em}
-.brand small{display:block;color:var(--color-text-muted);font-size:9px;letter-spacing:.18em;margin-top:3px}
-.mark{display:grid;place-items:center;width:30px;height:30px;border:1px solid var(--color-accent-text);border-radius:8px;color:var(--color-accent-text);font-weight:700;font-size:18px}
+.brand{color:var(--color-text);text-decoration:none;display:flex;gap:12px;align-items:center;font-size:15px;font-weight:700;letter-spacing:.02em;min-width:0;flex:0 1 auto}
+.brand-text{display:flex;flex-direction:column;min-width:0}
+.brand-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.2}
+.brand small{display:block;color:var(--color-text-muted);font-size:10px;font-weight:600;letter-spacing:.06em;margin-top:2px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mark{display:grid;place-items:center;flex:none;width:30px;height:30px;border:1px solid var(--color-accent-text);border-radius:8px;color:var(--color-accent-text);font-weight:700;font-size:18px}
+.logo{display:block;flex:none;height:30px;width:auto;max-width:180px;object-fit:contain}
 .accent{color:var(--color-accent-text)}
 .status,.eyebrow{font:10px ui-monospace,monospace;letter-spacing:.14em;color:var(--color-text-muted)}
 .status{display:flex;align-items:center;gap:9px}
 .status i{width:7px;height:7px;border-radius:50%;background:var(--color-accent-text)}
-nav{display:flex;align-items:center;gap:18px}
+nav{display:flex;align-items:center;gap:18px;flex:none}
 nav a{text-decoration:none;font-size:13px}
 nav a[aria-current=page]{border-bottom:2px solid var(--color-accent-text);padding-bottom:6px;font-weight:600}
 
@@ -41,7 +44,8 @@ nav a,.brand,a.btn{text-decoration:none}
 .result-group{margin-top:10px;overflow:hidden}
 .group-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--color-border)}
 .hint{font-size:11px;color:var(--color-text-muted);margin:8px 0 0}
-footer{display:flex;justify-content:space-between;color:var(--color-text-muted);font:10px ui-monospace,monospace;padding:16px 2px 0}
+footer{display:flex;justify-content:space-between;gap:4px 16px;flex-wrap:wrap;overflow-wrap:anywhere;color:var(--color-text-muted);font:10px ui-monospace,monospace;padding:16px 2px 0}
+.site-id{text-align:right;min-width:0}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 
 /* Forms and controls */
@@ -188,7 +192,8 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font:11px ui-mono
   .status{font-size:8px}
   .details-grid{grid-template-columns:repeat(2,1fr)}
   .topbar{height:auto;min-height:56px;flex-wrap:wrap;gap:8px;padding-top:8px;padding-bottom:8px}
-  nav{flex-wrap:wrap;gap:12px}
+  nav{flex-wrap:wrap;gap:12px;flex:0 1 auto}
+  .brand{max-width:100%}
   nav a{font-size:12px}
 }
 @media(max-width:520px){
@@ -202,10 +207,15 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font:11px ui-mono
   select{padding:0 8px}
   .controls button{width:100%;justify-content:center}
   footer{gap:10px;flex-direction:column}
+  .site-id{text-align:left}
 }
 
 /* Mobile route cards (up to 700px wide). The route table's own markup is restyled: each route is a <tbody> laid out as a card, so there is one DOM, one set of enrichment targets and no second query. Wider screens keep the dense table (tablet widths scroll it inside .table-wrap). */
 @media(max-width:700px){
+  /* The subtitle is visually reduced to keep the header compact; it stays in the accessible name. */
+  .logo{max-width:110px}
+  .brand-name{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+  .brand small{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
   .result-group .table-wrap{overflow-x:visible}
   .routes table,.routes.routes table{display:block;min-width:0}
   .routes thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}

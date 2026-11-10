@@ -11,7 +11,11 @@
 # configurations written for earlier versions keep working.
 server:
   listen: "0.0.0.0:8080"
-  title: "Hextet Looking Glass"
+  # Legacy site name. Still honoured when site.name (below) is not set, so
+  # configurations written for earlier versions keep working; new
+  # installations should set site.name instead. If both are set, site.name
+  # wins and a warning is logged at startup.
+  # title: "Example Networks LG"
   # Request-target, query string, parameter count and HTTP header limits.
   max_url_bytes: 8192
   max_query_bytes: 6144
@@ -26,6 +30,41 @@ server:
   # connections. Keep it below the container stop grace period (Compose
   # stop_grace_period: 45s) or Docker will SIGKILL the process mid-shutdown.
   shutdown_grace: 40s
+
+# Deployment identity: who runs this looking glass. The software remains
+# "Hextet LG"; everything here is operator data. Every field is optional, and
+# an installation without this section shows the generic defaults noted below
+# (no operator, no AS number, no logo). Nothing here influences a backend
+# query, a filter, or any route result: it is presentation only.
+# See docs/BRANDING.md.
+site:
+  # Site name: the header and every browser tab title ("<page> · <name>").
+  # Default: the legacy server.title if set, else "BGP Looking Glass".
+  name: "Example Networks LG"
+  # Secondary header text (hidden visually on phones). Default: "Network
+  # Routing Information". Use "" for none.
+  subtitle: "Network Routing Information"
+  # Shown in the footer, linked to the website when one is set.
+  operator: "Example Networks"
+  # The operator's AS number (64500 or "AS64500"); shown in the footer only.
+  # It is not a backend, neighbor or search ASN. 64500 is a documentation ASN.
+  asn: 64500
+  # Absolute http(s) URL (https recommended) and a plain email address.
+  website: "https://example.net"
+  contact: "noc@example.net"
+  branding:
+    # Optional logo and favicon, read once at startup from this directory.
+    # Give plain file names only (no paths). Logo: png, jpg, gif or svg, up to
+    # 512 KiB. Favicon: those or ico, up to 128 KiB. Without a favicon a
+    # built-in generic icon (in the theme accent color) is used. In Docker,
+    # mount the directory read-only, for example
+    #   ./branding:/etc/hextet-lg/branding:ro
+    # directory: "/etc/hextet-lg/branding"
+    # logo: "logo.svg"
+    # favicon: "favicon.png"
+    # Plain-text footer note (never HTML). Default: "Powered by Hextet LG".
+    # Use "" for none.
+    footer: "Powered by Hextet LG"
 
 # Structured logging to stderr (optional; the values shown are the defaults).
 # level:  debug | info | warn | error
