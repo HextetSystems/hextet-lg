@@ -1,0 +1,34 @@
+services:
+  hextet-lg:
+    build: .
+    # HEXTET_LG_IMAGE selects the image: a release tag or, for production, an
+    # immutable digest (ghcr.io/hextetsystems/hextet-lg@sha256:...). The default
+    # keeps the local development workflow (`docker compose build` / `up`).
+    # `hextet-lg:local` is a mutable tag and is never a rollback reference; see
+    # README, "Upgrade and rollback". Set the variable in the shell or in an
+    # untracked .env file next to this file (see .env.example).
+    image: ${HEXTET_LG_IMAGE:-hextet-lg:local}
+    container_name: hextet-lg
+    restart: unless-stopped
+    ports:
+      # Only the public listener is published. The optional Prometheus listener
+      # (metrics.enabled) is a management port: do not publish it here; let a
+      # collector on a shared Docker network scrape it (see README, Metrics).
+      - "8080:8080"
+    volumes:
+      - ./configs/config.docker.yaml:/etc/hextet-lg/config.yaml:ro
+    stop_grace_period: 45s
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3

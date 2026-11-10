@@ -1,0 +1,46 @@
+# Private runtime configuration (operator backend addresses). Only
+# configs/config.example.yaml is committed.
+/configs/config.yaml
+/configs/config.docker.yaml
+
+# Local Compose selection and overrides (image pin, local mounts).
+/.env
+/.env.*
+!/.env.example
+/compose.override.yaml
+/compose.override.yml
+
+# Deployment history written by scripts/deploy.sh.
+/.deploy-state/
+
+# Credentials and key material.
+*.pem
+*.key
+*.p12
+*.token
+/.netrc
+
+# Build output and generated binaries.
+/hextet-lg
+/build/
+/dist/
+*.test
+*.exe
+
+# Test and profiling artifacts.
+/coverage.out
+*.out
+*.prof
+
+# Local caches, scratch space and editor state.
+__pycache__/
+*.pyc
+/.cache/
+/.gocache/
+/tmp/
+/scratch/
+/.claude/
+.idea/
+.vscode/
+*.swp
+.DS_Store

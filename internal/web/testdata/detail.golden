@@ -1,0 +1,80 @@
+Backend: Alpha (West)
+Status: COMPLETE — 3 routes decoded in 1.2s
+Prefix: 192.0.2.0/24
+  Address family: IPv4
+  AS path: 64500 15169
+  Origin ASN: 15169
+  Next hop: 192.0.2.1
+  Exit next hop: —
+  True next hop: 192.0.2.1
+  Neighbor: —
+  Source: —
+  Origin: —
+  Local preference: 100
+  MED: —
+  Weight: —
+  DMetric: —
+  RPKI OVS: valid
+  ASPA AVS: unknown
+  Last update: —
+  Selected: best
+  Large communities: 395089:0:6
+
+Prefix: 192.0.2.0/24
+  Address family: IPv4
+  AS path: 64501 15169
+  Origin ASN: —
+  Next hop: —
+  Exit next hop: —
+  True next hop: —
+  Neighbor: —
+  Source: —
+  Origin: —
+  Local preference: —
+  MED: —
+  Weight: —
+  DMetric: —
+  RPKI OVS: —
+  ASPA AVS: —
+  Last update: —
+
+Prefix: 2001:db8::/32
+  Address family: IPv6
+  AS path: 64500 64501 64502 15169
+  Origin ASN: —
+  Next hop: 2001:db8::1
+  Exit next hop: 2001:db8::1
+  True next hop: —
+  Neighbor: —
+  Source: —
+  Origin: —
+  Local preference: —
+  MED: —
+  Weight: —
+  DMetric: —
+  RPKI OVS: —
+  ASPA AVS: —
+  Last update: —
+
+
+Backend: Beta
+Status: COMPLETE — 1 route decoded in 0.3s
+Prefix: 2001:db8::/32
+  Address family: IPv6
+  AS path: 15169
+  Origin ASN: —
+  Next hop: —
+  Exit next hop: —
+  True next hop: —
+  Neighbor: —
+  Source: —
+  Origin: —
+  Local preference: —
+  MED: —
+  Weight: —
+  DMetric: —
+  RPKI OVS: —
+  ASPA AVS: —
+  Last update: —
+
+

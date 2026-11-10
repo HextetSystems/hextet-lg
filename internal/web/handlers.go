@@ -1,0 +1,749 @@
+package web
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"html/template"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/HextetSystems/hextet-lg/internal/bgp"
+	"github.com/HextetSystems/hextet-lg/internal/config"
+)
+
+type backendClient struct {
+	config.Backend
+	client *bgp.Client
+}
+
+type Handler struct {
+	cfg         config.Config
+	backends    []backendClient
+	templates   *template.Template
+	communities []Community
+	cache       *resultCache
+	budget      *resultBudget
+	work        *workGate
+	// expensive holds the instance-wide slots for large upstream queries.
+	expensive chan struct{}
+	queue     chan struct{}
+	limiter   *rateLimiter
+	stopping  atomic.Bool
+	stopCh    chan struct{}
+	stopOnce  sync.Once
+
+	log        *slog.Logger
+	metrics    *metrics
+	health     map[string]*backendHealth // fixed at construction: one per enabled backend
+	activeHTTP atomic.Int64
+}
+
+// Option customizes NewHandler.
+type Option func(*Handler)
+
+// WithLogger sets the logger. Without it the handler logs to stderr using the
+// configured logging.level and logging.format.
+func WithLogger(l *slog.Logger) Option { return func(h *Handler) { h.log = l } }
+
+// Form is the search form state: the simple box plus the advanced filters.
+type Form struct {
+	Type, Q      string
+	Endpoint     string
+	Values       map[string]string
+	Flags        map[string]bool
+	AdvancedOpen bool
+}
+
+// Page is the template model for every page.
+type Page struct {
+	Title, Query, SearchType, SelectedBackend string
+	Backends                                  []config.Backend
+	Results                                   []BackendResult
+	Error                                     string
+	Problems                                  []string
+	IsHTMX                                    bool
+	Active, Category, View                    string
+	Communities                               []Community
+	Categories                                []string
+
+	Form     Form
+	Searched bool
+	Filters  []bgp.Filter
+	Endpoint bgp.Endpoint
+	Upstream string // bgplgd path and query (never the backend address)
+	Summary  Summary
+	Sections []Section
+	Pager    Pager
+	Text     string
+	PlainURL string
+	CacheTTL time.Duration
+	Groups   []FormGroup
+	Options  []struct{ Value, Label string }
+}
+
+func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
+	cfg.LookingGlass.FillZero()
+	h := &Handler{cfg: cfg, stopCh: make(chan struct{}), health: map[string]*backendHealth{}}
+	for _, o := range opts {
+		o(h)
+	}
+	if h.log == nil {
+		h.log = h.defaultLogger()
+	}
+	for _, b := range cfg.Backends {
+		if !b.Enabled {
+			continue
+		}
+		c, err := bgp.NewClient(b.URL, cfg.TimeoutFor(b), cfg.LookingGlass.MaxResponseBytes)
+		if err != nil {
+			return nil, fmt.Errorf("backend %s: %w", b.ID, err)
+		}
+		c.MaxRetainedBytes = cfg.LookingGlass.MaxRetainedBytes
+		h.backends = append(h.backends, backendClient{Backend: b, client: c})
+		h.health[b.ID] = &backendHealth{}
+	}
+	ids := make([]string, len(h.backends))
+	for i, b := range h.backends {
+		ids[i] = b.ID
+	}
+	h.metrics = newMetrics(ids)
+	h.budget = &resultBudget{limit: cfg.LookingGlass.MaxTotalRetainedBytes}
+	h.work = &workGate{active: make(chan struct{}, cfg.LookingGlass.MaxConcurrentWork), queue: make(chan struct{}, cfg.LookingGlass.MaxQueuedWork), wait: cfg.LookingGlass.QueueWait, stop: h.stopCh}
+	h.cache = newResultCache(cfg.LookingGlass.CacheTTL, cfg.LookingGlass.CacheMaxBytes)
+	h.expensive = make(chan struct{}, cfg.LookingGlass.MaxConcurrentQueries)
+	h.queue = make(chan struct{}, cfg.LookingGlass.MaxQueuedQueries)
+	h.limiter = newRateLimiter(cfg.Server)
+	data, err := assets.ReadFile("communities.yaml")
+	if err != nil {
+		return nil, err
+	}
+	if h.communities, err = loadCommunities(data); err != nil {
+		return nil, err
+	}
+	h.templates, err = template.New("root").Funcs(template.FuncMap{
+		"searchURL": func(kind, value, backend string) string {
+			// Canonical legacy form: type, q, backend (view is left to the target page).
+			return "/?type=" + url.QueryEscape(kind) + "&q=" + url.QueryEscape(value) + "&backend=" + url.QueryEscape(backend)
+		},
+		"age":          FormatAge,
+		"formatRoutes": formatRoutes,
+		"human": func(s string) string {
+			if s == "" {
+				return "—"
+			}
+			return s
+		},
+		"number": func(n *int64) string {
+			if n == nil {
+				return "—"
+			}
+			return fmt.Sprint(*n)
+		},
+		"validity": func(v *bool) string {
+			if v == nil {
+				return "Unknown"
+			}
+			if *v {
+				return "Valid"
+			}
+			return "Invalid"
+		},
+		"selected": selected,
+		"checked":  checked,
+		"accepts":  func(f Field, e string) bool { return f.accepts(e) },
+		"epAttr":   endpointsAttr,
+		"commas":   commas,
+		"bytes":    bgp.FormatBytes,
+		"seconds":  seconds,
+		"round":    func(d time.Duration) string { return d.Round(time.Second).String() },
+		"join":     strings.Join,
+		"rawJSON": func(s string) string {
+			var b bytes.Buffer
+			if err := json.Indent(&b, []byte(s), "", "  "); err != nil {
+				return s
+			}
+			return b.String()
+		},
+		"statusClass": func(s bgp.Status) string {
+			switch s {
+			case bgp.StatusComplete:
+				return "good"
+			case bgp.StatusPartial:
+				return "warn"
+			}
+			return "bad"
+		},
+		"statusClassName": func(s string) string {
+			switch s {
+			case StatusImplemented:
+				return "good"
+			case StatusDocumented:
+				return "warn"
+			}
+			return "muted"
+		},
+	}).ParseFS(assets, "templates/*.html")
+	if err != nil {
+		return nil, fmt.Errorf("parse embedded templates: %w", err)
+	}
+	// Registered last: the collector describes itself by collecting once, which
+	// needs the budget, work gate and cache to exist.
+	h.metrics.reg.MustRegister(resourceCollector{h})
+	go h.limiter.cleanupLoop(h.stopCh)
+	return h, nil
+}
+
+func commas(n int) string {
+	s := strconv.Itoa(n)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return s
+}
+
+func (h *Handler) Routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{$}", h.index)
+	mux.HandleFunc("GET /neighbors", h.overview)
+	mux.HandleFunc("GET /summary", h.overview)
+	mux.HandleFunc("GET /communities", h.communityPage)
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte("ok\n"))
+	})
+	mux.Handle("GET /static/", http.FileServer(http.FS(assets)))
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) {
+		if h.stopping.Load() {
+			http.Error(w, "shutting down", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprintln(w, "ok")
+	})
+	return h.protect(mux)
+}
+
+func (h *Handler) backendList() []config.Backend {
+	var out []config.Backend
+	for _, b := range h.backends {
+		out = append(out, b.Backend)
+	}
+	return out
+}
+
+// formFor builds the form state for a parsed query.
+func formFor(q bgp.Query, raw url.Values) Form {
+	f := Form{Endpoint: string(q.Endpoint), Values: map[string]string{}, Flags: map[string]bool{}}
+	if f.Endpoint == "" {
+		f.Endpoint = string(bgp.EndpointRIB)
+	}
+	if t, v, ok := q.Simple(); ok {
+		f.Type, f.Q = string(t), v
+	} else {
+		f.Type = string(bgp.SearchPrefix)
+		for _, k := range bgp.StringFilterKeys {
+			f.Values[k] = q.Get(k)
+		}
+		for _, k := range bgp.FlagFilterKeys {
+			f.Flags[k] = q.Get(k) != ""
+		}
+		f.AdvancedOpen = !q.IsEmpty()
+	}
+	if f.Type == "" {
+		f.Type = string(bgp.SearchPrefix)
+	}
+	return f
+}
+
+// knownParams are the query parameters the Route Explorer understands. Anything
+// else is rejected: an unrecognized name is most likely a typo for a filter,
+// and silently ignoring it would run a broader query than intended.
+var knownParams = func() map[string]bool {
+	m := map[string]bool{"type": true, "q": true, "backend": true, "view": true, "page": true, "output": true, bgp.KeyEndpoint: true}
+	for _, k := range bgp.StringFilterKeys {
+		m[k] = true
+	}
+	for _, k := range bgp.FlagFilterKeys {
+		m[k] = true
+	}
+	return m
+}()
+
+func unknownParams(v url.Values) []string {
+	var out []string
+	for k := range v {
+		if !knownParams[k] {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func hasEmptyParam(v url.Values) bool {
+	for _, vals := range v {
+		for _, s := range vals {
+			if strings.TrimSpace(s) == "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func wantsPlain(r *http.Request, view string) bool {
+	return view != "table" && (r.URL.Query().Get("output") == "plain" || strings.Contains(r.Header.Get("Accept"), "text/plain"))
+}
+
+func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
+	vals := r.URL.Query()
+	if len(vals) > 0 {
+		if !h.admitWork(w, r) {
+			return
+		}
+		defer h.work.release()
+	}
+	hx := r.Header.Get("HX-Request") == "true"
+	p := Page{Active: "routes", Title: h.cfg.Server.Title, SelectedBackend: vals.Get("backend"), IsHTMX: hx, View: vals.Get("view"), Groups: formGroups, Options: endpointOptions, Backends: h.backendList(), CacheTTL: h.cfg.LookingGlass.CacheTTL}
+	if p.View == "" {
+		p.View = "table"
+	}
+	if p.SelectedBackend == "" {
+		p.SelectedBackend = h.cfg.LookingGlass.DefaultBackend
+	}
+	w.Header().Add("Vary", "HX-Request")
+
+	q, perr := bgp.ParseQuery(vals)
+	p.Form = formFor(q, vals)
+	p.SearchType, p.Query = p.Form.Type, p.Form.Q
+	p.Endpoint = q.Endpoint
+	if p.Endpoint == "" {
+		p.Endpoint = bgp.EndpointRIB
+	}
+	plain := wantsPlain(r, p.View)
+
+	var problems []string
+	if p.View != "table" && p.View != "text" && p.View != "detail" {
+		problems = append(problems, "Unsupported view format.")
+	}
+	page, pageErr := parsePage(vals)
+	if pageErr != nil {
+		problems = append(problems, pageErr.Error())
+	}
+	for _, k := range unknownParams(vals) {
+		problems = append(problems, fmt.Sprintf("Unknown parameter: %s is not supported; check the spelling of the filter name.", k))
+	}
+	searching := perr != nil || !q.IsEmpty() || len(problems) > 0
+	if perr != nil {
+		problems = append(problems, problemList(perr)...)
+	} else if searching {
+		nq, err := q.Normalize()
+		if err != nil {
+			problems = append(problems, problemList(err)...)
+		} else {
+			q = nq
+			p.Form = formFor(q, vals)
+			p.SearchType, p.Query = p.Form.Type, p.Form.Q
+			p.Endpoint = q.Endpoint
+		}
+	}
+	p.Problems = problems
+	p.Searched = searching
+
+	if searching && len(problems) == 0 {
+		// Canonicalize form noise (empty fields) with one redirect; HTMX
+		// requests instead tell the browser which URL to record in history.
+		canonical := publicURL(q, p.SelectedBackend, p.View, page, plain && !hx)
+		if !hx && hasEmptyParam(vals) {
+			http.Redirect(w, r, canonical, http.StatusSeeOther)
+			return
+		}
+		if hx {
+			w.Header().Set("HX-Push-Url", publicURL(q, p.SelectedBackend, p.View, page, false))
+		}
+		results, err := h.search(r.Context(), p.SelectedBackend, q)
+		defer func() {
+			for i := range results {
+				results[i].lease.release()
+			}
+		}()
+		if err != nil {
+			p.Problems = append(p.Problems, err.Error())
+		} else {
+			h.fillResults(&p, q, results, page)
+			noteSearch(r, p.Summary, results)
+		}
+	}
+	if len(p.Problems) > 0 {
+		p.Error = strings.Join(p.Problems, " ")
+	}
+
+	if plain || (len(p.Problems) > 0 && (vals.Get("output") == "plain" || strings.Contains(r.Header.Get("Accept"), "text/plain"))) {
+		h.servePlain(w, r, &p, q, page, vals)
+		return
+	}
+	name := "index.html"
+	if hx && r.Header.Get("HX-History-Restore-Request") != "true" {
+		name = "results.html"
+	}
+	setCompletionHeaders(w, p.Results, p.Summary)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if len(p.Problems) > 0 {
+		w.WriteHeader(http.StatusBadRequest)
+	} else if len(p.Results) > 0 && plainStatus(p.Summary, p.Results) == http.StatusServiceUnavailable {
+		w.Header().Set("Retry-After", "2")
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+	if err := h.templates.ExecuteTemplate(w, name, p); err != nil {
+		h.renderFailed(w, r, err)
+	}
+}
+
+// noteSearch records the query outcome for the access-log line.
+func noteSearch(r *http.Request, s Summary, results []BackendResult) {
+	i := infoFrom(r.Context())
+	if i == nil {
+		return
+	}
+	i.searched, i.result, i.backends = true, s.Status, s.Backends
+	for _, res := range results {
+		if res.Cached || res.Shared {
+			i.cacheHits++
+		} else {
+			i.cacheMiss++
+		}
+	}
+}
+
+func problemList(err error) []string {
+	if ve, ok := err.(*bgp.ValidationError); ok {
+		out := make([]string, len(ve.Problems))
+		for i, s := range ve.Problems {
+			out[i] = capitalize(s) + "."
+		}
+		return out
+	}
+	return []string{err.Error()}
+}
+
+func capitalize(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// fillResults paginates results and prepares everything the templates need.
+func (h *Handler) fillResults(p *Page, q bgp.Query, results []BackendResult, page int) {
+	p.Results = results
+	p.Summary = summarize(results)
+	p.Filters = q.Filters()
+	if params, err := q.Params(); err == nil {
+		p.Upstream = q.Endpoint.Path() + "?" + params.Encode()
+	}
+	p.Sections, p.Pager = paginate(results, page, h.cfg.LookingGlass.PageSize)
+	p.Pager.setLinks(q, p.SelectedBackend, p.View)
+	p.PlainURL = publicURL(q, p.SelectedBackend, p.View, 1, true)
+	if p.View != "table" {
+		p.Text = sectionsText(p.Sections, p.View)
+	}
+}
+
+// setCompletionHeaders exposes completion metadata to machine clients.
+//
+//	X-Hextet-LG-Completeness: complete | partial | failed (overall)
+//	X-Hextet-LG-Routes:       total decoded routes across backends
+//	X-Hextet-LG-Backends:     id=status[;reason=..];routes=N;elapsed=Ns, ...
+func setCompletionHeaders(w http.ResponseWriter, results []BackendResult, s Summary) {
+	if len(results) == 0 {
+		return
+	}
+	var parts []string
+	for _, r := range results {
+		part := r.ID + "=" + string(r.Status)
+		if r.Reason != "" {
+			part += ";reason=" + string(r.Reason)
+		}
+		part += fmt.Sprintf(";routes=%d;elapsed=%.1fs", len(r.Routes), r.Elapsed.Seconds())
+		if r.Cached {
+			part += ";cached=1"
+		}
+		parts = append(parts, part)
+	}
+	w.Header().Set("X-Hextet-LG-Completeness", string(s.Status))
+	w.Header().Set("X-Hextet-LG-Routes", strconv.Itoa(s.Routes))
+	w.Header().Set("X-Hextet-LG-Backends", strings.Join(parts, ", "))
+}
+
+// plainStatus maps the overall outcome to an HTTP status. Complete and partial
+// results are 200 (the completeness headers and the in-body warning carry the
+// distinction); only a query that produced nothing usable is an error.
+func plainStatus(s Summary, results []BackendResult) int {
+	if s.Status != bgp.StatusFailed {
+		return http.StatusOK
+	}
+	allReason := func(reason bgp.Reason) bool {
+		for _, r := range results {
+			if r.Reason != reason {
+				return false
+			}
+		}
+		return len(results) > 0
+	}
+	switch {
+	case allReason(bgp.ReasonTimeout):
+		return http.StatusGatewayTimeout
+	case allReason(bgp.ReasonBusy), allReason(bgp.ReasonCanceled), allReason(bgp.ReasonCapacity), allReason(bgp.ReasonMemoryLimit):
+		return http.StatusServiceUnavailable
+	}
+	return http.StatusBadGateway
+}
+
+func (h *Handler) servePlain(w http.ResponseWriter, r *http.Request, p *Page, q bgp.Query, page int, vals url.Values) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	if len(p.Problems) > 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "ERROR: INVALID REQUEST\n%s\n", strings.Join(p.Problems, "\n"))
+		return
+	}
+	if !p.Searched {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, "ERROR: INVALID REQUEST\nSpecify at least one filter.\n")
+		return
+	}
+	setCompletionHeaders(w, p.Results, p.Summary)
+	sections := allSections(p.Results)
+	paged := len(vals["page"]) > 0 && strings.TrimSpace(vals.Get("page")) != ""
+	if paged {
+		sections = p.Sections
+		w.Header().Set("X-Hextet-LG-Page", fmt.Sprintf("%d/%d", p.Pager.Page, p.Pager.Pages))
+		if p.Pager.OutOfRange {
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "ERROR: PAGE OUT OF RANGE\nPage %d does not exist; the last page is %d.\n", p.Pager.Page, p.Pager.Pages)
+			return
+		}
+	}
+	if plainStatus(p.Summary, p.Results) == http.StatusServiceUnavailable {
+		w.Header().Set("Retry-After", "2")
+	}
+	w.WriteHeader(plainStatus(p.Summary, p.Results))
+	if p.Summary.Incomplete() {
+		fmt.Fprintf(w, "WARNING: THIS RESULT IS INCOMPLETE (%d of %d backends did not complete)\nOnly routes that were fully received are shown. Absence of a route here is\nnot evidence that it is absent from the routing table.\n\n", p.Summary.Backends-p.Summary.Complete, p.Summary.Backends)
+	}
+	if paged {
+		fmt.Fprintf(w, "Page %d of %d (routes %d–%d of %d decoded)\n\n", p.Pager.Page, p.Pager.Pages, p.Pager.From, p.Pager.To, p.Pager.Total)
+	}
+	// Errors here mean the client went away; there is nobody left to tell.
+	_ = writeText(r.Context(), w, sections, p.View)
+}
+
+func FormatAge(sec *int64) string {
+	if sec == nil {
+		return "—"
+	}
+	d := time.Duration(*sec) * time.Second
+	if d < time.Minute {
+		return d.Round(time.Second).String()
+	}
+	return d.Round(time.Minute).String()
+}
+
+func (h *Handler) basePage(r *http.Request, active string) Page {
+	p := Page{Title: h.cfg.Server.Title, Active: active, SelectedBackend: r.URL.Query().Get("backend"), Query: r.URL.Query().Get("q"), Category: r.URL.Query().Get("category"), Backends: h.backendList()}
+	if p.SelectedBackend == "" {
+		p.SelectedBackend = h.cfg.LookingGlass.DefaultBackend
+	}
+	return p
+}
+
+func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
+	if !h.admitWork(w, r) {
+		return
+	}
+	defer h.work.release()
+	kind := strings.TrimPrefix(r.URL.Path, "/")
+	p := h.basePage(r, kind)
+	targets := h.selectBackends(p.SelectedBackend)
+	// Overview decoding retains both raw and decoded forms. Reserve a generous
+	// allowance per backend until rendering completes, including slow writers.
+	overviewLease := h.budget.newLease()
+	defer overviewLease.release()
+	for range targets {
+		if !overviewLease.reserve(128 << 20) {
+			w.Header().Set("Retry-After", "2")
+			requestError(w, r, http.StatusServiceUnavailable, "Server memory capacity is busy; please retry shortly.")
+			return
+		}
+	}
+	if len(targets) == 0 {
+		p.Error = "Select an enabled backend."
+	}
+	sem := make(chan struct{}, h.cfg.LookingGlass.MaxConcurrentBackends)
+	results := make(chan BackendResult, len(targets))
+	var wg sync.WaitGroup
+	for _, b := range targets {
+		wg.Add(1)
+		go func(b backendClient) {
+			defer wg.Done()
+			res := BackendResult{ID: b.ID, Name: b.Name, Location: b.Location}
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-r.Context().Done():
+				res.Error = "Request cancelled."
+				results <- res
+				return
+			}
+			start := time.Now()
+			h.metrics.backendActive.WithLabelValues(b.ID).Inc()
+			data, err := b.client.Overview(r.Context(), kind)
+			h.metrics.backendActive.WithLabelValues(b.ID).Dec()
+			elapsed := time.Since(start)
+			res.Duration = elapsed.Round(time.Millisecond).String()
+			res.Overview = data
+			status, reason := bgp.StatusComplete, overviewReason(err)
+			if err != nil {
+				res.Error = "Request failed or returned an invalid response."
+				status = bgp.StatusFailed
+				lvl := slog.LevelWarn
+				if reason == bgp.ReasonCanceled {
+					lvl = slog.LevelInfo
+				}
+				h.log.LogAttrs(r.Context(), lvl, "backend query", slog.String("request_id", requestID(r.Context())), slog.String("backend", b.ID), slog.String("operation", kind), slog.String("status", string(status)), slog.String("reason", string(reason)), slog.Float64("backend_duration_ms", float64(elapsed.Microseconds())/1000))
+			}
+			h.recordBackend(b, kind, status, reason, elapsed)
+			results <- res
+		}(b)
+	}
+	wg.Wait()
+	close(results)
+	for result := range results {
+		p.Results = append(p.Results, result)
+	}
+	sort.Slice(p.Results, func(i, j int) bool { return p.Results[i].Name < p.Results[j].Name })
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := h.templates.ExecuteTemplate(w, "overview.html", p); err != nil {
+		h.renderFailed(w, r, err)
+	}
+}
+
+func (h *Handler) communityPage(w http.ResponseWriter, r *http.Request) {
+	p := h.basePage(r, "communities")
+	cats := map[string]bool{}
+	query := strings.ToLower(strings.TrimSpace(p.Query))
+	for _, c := range h.communities {
+		cats[c.Category] = true
+		hay := strings.ToLower(c.Value + " " + c.Name + " " + c.Description + " " + c.Status)
+		if (p.Category == "" || p.Category == c.Category) && (query == "" || strings.Contains(hay, query)) {
+			p.Communities = append(p.Communities, c)
+		}
+	}
+	for c := range cats {
+		p.Categories = append(p.Categories, c)
+	}
+	sort.Strings(p.Categories)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := h.templates.ExecuteTemplate(w, "communities.html", p); err != nil {
+		h.renderFailed(w, r, err)
+	}
+}
+
+// StopAdmission marks the instance unready and rejects new route work.
+func (h *Handler) StopAdmission() { h.stopping.Store(true); h.stopOnce.Do(func() { close(h.stopCh) }) }
+
+// Close cancels shared work and releases cached results.
+func (h *Handler) Close() { h.StopAdmission(); h.cache.Close() }
+
+// Shutdown is the process shutdown sequence: stop admitting new work, let
+// in-flight requests (including slow writers) finish for at most grace, then
+// close the remaining connections, which cancels their request contexts and
+// with them every shared backend query nobody is waiting for any more, and
+// finally release cached results. It returns the graceful-shutdown error
+// (context.DeadlineExceeded when requests were still active at the deadline).
+// Each phase is logged with the outstanding-work counters.
+func (h *Handler) Shutdown(srv *http.Server, grace time.Duration) error {
+	start := time.Now()
+	h.log.Info("shutdown initiated", "grace", grace.String())
+	h.StopAdmission()
+	h.log.Info("admission disabled", append([]any{"readyz", "unavailable"}, h.outstanding()...)...)
+	ctx, cancel := context.WithTimeout(context.Background(), grace)
+	defer cancel()
+	err := srv.Shutdown(ctx)
+	if err != nil {
+		h.log.Warn("shutdown grace expired; closing remaining connections", append([]any{"error", err.Error()}, h.outstanding()...)...)
+		_ = srv.Close()
+	}
+	h.Close()
+	// Closed connections cancel their handlers, which unwind asynchronously;
+	// give them a moment so the final counts are final. Bounded, well inside
+	// the margin between shutdown_grace and the container stop grace period.
+	settled := h.settle(500 * time.Millisecond)
+	attrs := append([]any{"graceful", err == nil, "settled", settled, "duration_ms", time.Since(start).Milliseconds()}, h.outstanding()...)
+	if err != nil {
+		h.log.Warn("shutdown finished after deadline", attrs...)
+	} else {
+		h.log.Info("shutdown complete", attrs...)
+	}
+	return err
+}
+
+// settle waits up to max for in-flight handlers and admitted work to finish.
+func (h *Handler) settle(max time.Duration) bool {
+	deadline := time.Now().Add(max)
+	for {
+		if h.activeHTTP.Load() == 0 && len(h.work.active) == 0 && len(h.expensive) == 0 {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// outstanding reports the live work counters for shutdown logs.
+func (h *Handler) outstanding() []any {
+	used, _ := h.budget.usage()
+	_, _, flights := h.cache.snapshot()
+	return []any{
+		"active_http", h.activeHTTP.Load(),
+		"active_work", len(h.work.active),
+		"admission_waiters", len(h.work.queue),
+		"active_decodes", len(h.expensive),
+		"active_flights", flights,
+		"retained_bytes", used,
+	}
+}
+
+// admitWork bounds backend-driven decoding and rendering, including cache hits.
+func (h *Handler) admitWork(w http.ResponseWriter, r *http.Request) bool {
+	if h.stopping.Load() {
+		h.work.reject(gateShutdown)
+		w.Header().Set("Retry-After", "2")
+		requestError(w, r, http.StatusServiceUnavailable, "Server shutting down.")
+		return false
+	}
+	if !h.work.acquire(r.Context()) {
+		w.Header().Set("Retry-After", "2")
+		requestError(w, r, http.StatusServiceUnavailable, "Server busy; please retry shortly.")
+		return false
+	}
+	if h.stopping.Load() {
+		h.work.release()
+		h.work.reject(gateShutdown)
+		w.Header().Set("Retry-After", "2")
+		requestError(w, r, http.StatusServiceUnavailable, "Server shutting down.")
+		return false
+	}
+	return true
+}

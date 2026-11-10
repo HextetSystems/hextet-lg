@@ -1,0 +1,14 @@
+.git
+.github
+*.md
+*.out
+hextet-lg
+build
+dist
+scripts
+.env
+.env.*
+.deploy-state
+compose*.yaml
+configs/config.yaml
+configs/config.docker.yaml

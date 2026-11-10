@@ -1,0 +1,91 @@
+# GoReleaser (Community Edition) is the single source of truth for releases:
+# binaries, archives, checksums, the GitHub Release and the GHCR images.
+# Versions come from Git tags only (vMAJOR.MINOR.PATCH[-prerelease]).
+#
+#   goreleaser check                                  validate this file
+#   goreleaser release --snapshot --clean             local build, publishes nothing
+#   (CI) goreleaser release --clean                   only from .github/workflows/release.yaml
+version: 2
+
+project_name: hextet-lg
+
+before:
+  hooks:
+    - go mod verify
+
+builds:
+  - id: hextet-lg
+    main: ./cmd/hextet-lg
+    binary: hextet-lg
+    env:
+      - CGO_ENABLED=0
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w
+      - -X github.com/HextetSystems/hextet-lg/internal/version.Version={{ .Version }}
+      - -X github.com/HextetSystems/hextet-lg/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/HextetSystems/hextet-lg/internal/version.Date={{ .Date }}
+
+archives:
+  - id: hextet-lg
+    ids: [hextet-lg]
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    # An explicit allow-list: runtime configuration is never packaged. Only the
+    # committed example is included.
+    files:
+      - src: README.md
+      - src: ARCHITECTURE.md
+      - src: docs/RELEASING.md
+      - src: configs/config.example.yaml
+      - src: LICENSE*
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+# Multi-architecture image. GoReleaser builds the binaries once (above), then
+# `docker buildx` assembles one manifest list per tag from those exact binaries
+# (see BINARY_SOURCE in the Dockerfile) and pushes it. Snapshots build locally
+# and push nothing.
+dockers_v2:
+  - id: hextet-lg
+    ids: [hextet-lg]
+    dockerfile: Dockerfile
+    images:
+      - ghcr.io/hextetsystems/hextet-lg
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    tags:
+      # Exact release: v0.1.0 (snapshots use their snapshot version instead).
+      - '{{ if .IsSnapshot }}{{ .Version }}{{ else }}{{ .Tag }}{{ end }}'
+      # Exact build: sha-<commit>.
+      - "sha-{{ .ShortCommit }}"
+      # Stable releases only. Empty tags are skipped, so prereleases and
+      # snapshots never move "latest".
+      - '{{ if and (not .Prerelease) (not .IsSnapshot) }}latest{{ end }}'
+    build_args:
+      BINARY_SOURCE: prebuilt
+      VERSION: "v{{ .Version }}"
+      REVISION: "{{ .FullCommit }}"
+      CREATED: "{{ .Date }}"
+
+release:
+  github:
+    owner: HextetSystems
+    name: hextet-lg
+  # vX.Y.Z-rc.1 and similar are published as GitHub prereleases.
+  prerelease: auto
+  draft: false
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
