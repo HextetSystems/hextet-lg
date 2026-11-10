@@ -35,17 +35,26 @@ func (f Features) CommunityEnabled() bool         { return enabled(f.Communities
 func (f Features) LargeCommunityEnabled() bool    { return enabled(f.LargeCommunities, true) }
 func (f Features) ExtendedCommunityEnabled() bool { return enabled(f.ExtendedCommunities, false) }
 
+// CommunityDefinitions configures the optional, operator-supplied BGP
+// community definitions (legacy NLNOG text format). They are disabled by
+// default; when enabled the directory is required and is read once at startup.
+type CommunityDefinitions struct {
+	Enabled   bool   `yaml:"enabled"`
+	Directory string `yaml:"directory"`
+}
+
 type Config struct {
-	Features        Features          `yaml:"features"`
-	RouteVisibility visibility.Config `yaml:"route_visibility"`
-	policy          visibility.Policy
-	policyCompiled  bool
-	policySource    visibility.Config
-	Server          Server       `yaml:"server"`
-	LookingGlass    LookingGlass `yaml:"looking_glass"`
-	Backends        []Backend    `yaml:"backends"`
-	Logging         Logging      `yaml:"logging"`
-	Metrics         Metrics      `yaml:"metrics"`
+	Features             Features             `yaml:"features"`
+	CommunityDefinitions CommunityDefinitions `yaml:"community_definitions"`
+	RouteVisibility      visibility.Config    `yaml:"route_visibility"`
+	policy               visibility.Policy
+	policyCompiled       bool
+	policySource         visibility.Config
+	Server               Server       `yaml:"server"`
+	LookingGlass         LookingGlass `yaml:"looking_glass"`
+	Backends             []Backend    `yaml:"backends"`
+	Logging              Logging      `yaml:"logging"`
+	Metrics              Metrics      `yaml:"metrics"`
 }
 
 // Logging configures structured logging. Both settings are optional.
@@ -266,6 +275,9 @@ func (c *Config) Validate() error {
 	}
 	if err := c.validateObservability(); err != nil {
 		return err
+	}
+	if c.CommunityDefinitions.Enabled && strings.TrimSpace(c.CommunityDefinitions.Directory) == "" {
+		return errors.New("community_definitions.directory is required when community_definitions.enabled is true")
 	}
 	if strings.TrimSpace(c.Server.Title) == "" {
 		return errors.New("server.title is required")

@@ -1,0 +1,30 @@
+395089:0:1	Self routes	Self routes	Route classification		Implemented	community list	
+395089:0:2	Downstream routes	Downstream routes	Route classification	The RouterOS routing filters treat this as the customer classification.	Implemented	routing filter	Customer classification
+395089:0:3	Unspecified route classification	Unspecified route classification	Route classification		Implemented	community list	
+395089:0:4	Unspecified route classification	Unspecified route classification	Route classification		Implemented	community list	
+395089:0:6	Transit routes	Transit routes	Route classification		Implemented	routing filter	Transit classification
+395089:0:8	Peering routes	Peering routes	Route classification		Implemented	routing filter	Peering classification
+395089:5:1	Accepted with valid IRR entry	Accepted with valid IRR entry	Validation and filtering		Implemented	community list	
+395089:5:2	Accepted with valid ROA	Accepted with valid ROA	Validation and filtering		Implemented	routing filter	RPKI valid
+395089:5:3	Not described in the README	Present in the RouterOS community list, but the README does not document its meaning.	Undocumented in README	Meaning unknown; not inferred.	Implemented	community list	
+395089:5:4	RPKI invalid accepted by whitelist	RPKI invalid accepted by whitelist	Validation and filtering		Implemented	community list	
+395089:6:10	Received from Les.net	Received from Les.net	Geographic or exchange information		Implemented	routing filter	Les.net
+395089:6:11	Not described in the README	Present in the RouterOS community list, but the README does not document its meaning.	Undocumented in README	Meaning unknown; not inferred.	Implemented	community list	
+395089:8:703	Received via MBIX (PeeringDB ID 703)	Received via MBIX (PeeringDB ID 703)	Geographic or exchange information	The last field can contain another IXP PeeringDB ID.	Implemented	routing filter	MBIX
+395089:7:1	Rejection reason: More specific covering AS395089 space	Rejection reason: More specific covering AS395089 space	Validation and filtering		Implemented	routing filter	Own-space rejection
+395089:7:2	Rejection reason: AS path contains a bogon ASN	Rejection reason: AS path contains a bogon ASN	Validation and filtering		Implemented	configured pattern	395089:[05678]:.*
+395089:7:3	Rejection reason: Bogon prefix	Rejection reason: Bogon prefix	Validation and filtering		Implemented	routing filter	Bogon-prefix rejection
+395089:7:4	Rejection reason: RPKI invalid prefix	Rejection reason: RPKI invalid prefix	Validation and filtering		Implemented	routing filter	RPKI-invalid rejection
+395089:7:5	Rejection reason: Unacceptable prefix length	Rejection reason: Unacceptable prefix length	Validation and filtering		Implemented	routing filter	Default-route or disallowed-prefix-length rejection
+395089:7:6	Rejection reason: No covering IRR object	Rejection reason: No covering IRR object	Validation and filtering		Implemented	configured pattern	395089:[05678]:.*
+395089:7:7	Rejection reason: Member not authorized to announce route	Rejection reason: Member not authorized to announce route	Validation and filtering		Implemented	configured pattern	395089:[05678]:.*
+395089:1:50	Set local preference to 50	Set local preference to 50	Local preference		Implemented	routing filter	Local preference action
+395089:1:150	Set local preference to 150	Set local preference to 150	Local preference		Implemented	community list	
+395089:1:450	Set member local preference to 450	Set member local preference to 450	Local preference		Implemented	routing filter	Local preference action
+395089:1:550	Set member local preference to 550	Set member local preference to 550	Local preference		Implemented	routing filter	Local preference action
+395089:2:0	Prepend AS395089 once to all eBGP peers	Prepend AS395089 once to all eBGP peers	AS-path prepending	The last field may instead specify a peer ASN.	Implemented	routing filter	AS-path prepend once
+395089:3:0	Prepend AS395089 twice to all eBGP peers	Prepend AS395089 twice to all eBGP peers	AS-path prepending	The last field may instead specify a peer ASN.	Implemented	routing filter	AS-path prepend twice
+395089:4:0	Do not export to any eBGP peers	Do not export to any eBGP peers	Export policy	The last field may instead specify a peer ASN.	Implemented	routing filter	No export
+395089:301:0	Do not export to other members	Do not export to other members	Export policy		Implemented	routing filter	Export restriction (member routes)
+395089:302:0	Do not export to transit providers	Do not export to transit providers	Export policy		Implemented	routing filter	Export restriction (transit routes)
+395089:303:0	Do not export to direct peers	Do not export to direct peers	Export policy		Implemented	routing filter	Export restriction (peer routes)

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/HextetSystems/hextet-lg/internal/bgp"
+	"github.com/HextetSystems/hextet-lg/internal/communities"
 	"github.com/HextetSystems/hextet-lg/internal/config"
 )
 
@@ -26,13 +27,15 @@ type backendClient struct {
 }
 
 type Handler struct {
-	cfg         config.Config
-	backends    []backendClient
-	templates   *template.Template
-	communities []Community
-	cache       *resultCache
-	budget      *resultBudget
-	work        *workGate
+	cfg       config.Config
+	backends  []backendClient
+	templates *template.Template
+	// defs holds the operator-supplied community definitions, compiled once at
+	// startup and immutable afterwards. It is nil when they are disabled.
+	defs   *communities.Set
+	cache  *resultCache
+	budget *resultBudget
+	work   *workGate
 	// expensive holds the instance-wide slots for large upstream queries.
 	expensive chan struct{}
 	queue     chan struct{}
@@ -72,8 +75,15 @@ type Page struct {
 	Problems                                  []string
 	IsHTMX                                    bool
 	Active, Category, View                    string
-	Communities                               []Community
+	Communities                               []CommunityRow
 	Categories                                []string
+	// CommunityDefs reports whether definitions are enabled; CommunitySource
+	// is the operator's note on where optional status metadata comes from.
+	CommunityDefs   bool
+	CommunitySource string
+	// CommunityMatched is the number of definitions matching the Explorer
+	// filters; Communities is capped at maxExplorerRows.
+	CommunityMatched int
 
 	Form                  Form
 	Searched              bool
@@ -101,6 +111,11 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 	if h.log == nil {
 		h.log = h.defaultLogger()
 	}
+	// Definitions are read once, before anything else is started, so a bad
+	// configuration fails startup cleanly.
+	if err := h.loadCommunityDefinitions(); err != nil {
+		return nil, err
+	}
 	for _, b := range cfg.Backends {
 		if !b.Enabled {
 			continue
@@ -125,22 +140,13 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 	h.expensive = make(chan struct{}, cfg.LookingGlass.MaxConcurrentQueries)
 	h.queue = make(chan struct{}, cfg.LookingGlass.MaxQueuedQueries)
 	h.limiter = newRateLimiter(cfg.Server)
-	data, err := assets.ReadFile("communities.yaml")
-	if err != nil {
-		return nil, err
-	}
-	if h.communities, err = loadCommunities(data); err != nil {
-		return nil, err
-	}
+	var err error
 	h.templates, err = template.New("root").Funcs(template.FuncMap{
 		"neighborURL":   neighborURL,
 		"neighborTitle": neighborTitle,
-		"searchURL": func(kind, value, backend string) string {
-			// Canonical legacy form: type, q, backend (view is left to the target page).
-			return "/?type=" + url.QueryEscape(kind) + "&q=" + url.QueryEscape(value) + "&backend=" + url.QueryEscape(backend)
-		},
-		"age":          FormatAge,
-		"formatRoutes": formatRoutes,
+		"searchURL":     searchURL,
+		"age":           FormatAge,
+		"formatRoutes":  formatRoutes,
 		"human": func(s string) string {
 			if s == "" {
 				return "—"
@@ -187,12 +193,23 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 		},
 		"statusClassName": func(s string) string {
 			switch s {
-			case StatusImplemented:
+			case communities.StatusImplemented:
 				return "good"
-			case StatusDocumented:
+			case communities.StatusDocumented:
 				return "warn"
 			}
 			return "muted"
+		},
+		// communityTitle is the tooltip text for a displayed community, or "".
+		// It is looked up at render time from the immutable definition set so
+		// retained route data never carries descriptions.
+		"communityTitle": func(kind, value string) string {
+			k, ok := communities.ParseKind(kind)
+			if !ok {
+				return ""
+			}
+			d, _ := h.defs.Lookup(k, value)
+			return d
 		},
 	}).ParseFS(assets, "templates/*.html")
 	if err != nil {
@@ -203,6 +220,12 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 	h.metrics.reg.MustRegister(resourceCollector{h})
 	go h.limiter.cleanupLoop(h.stopCh)
 	return h, nil
+}
+
+// searchURL is the canonical legacy form: type, q, backend (view is left to
+// the target page).
+func searchURL(kind, value, backend string) string {
+	return "/?type=" + url.QueryEscape(kind) + "&q=" + url.QueryEscape(value) + "&backend=" + url.QueryEscape(backend)
 }
 
 func commas(n int) string {
@@ -664,15 +687,40 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// maxExplorerRows bounds one Community Explorer page. Real definition sets run
+// to thousands of entries; the text and category filters narrow them.
+const maxExplorerRows = 1000
+
+// CommunityRow is one Community Explorer row: a definition plus a search link.
+type CommunityRow struct {
+	communities.Definition
+	// Link is a one-click search for an exact definition whose search type is
+	// enabled; empty for patterns and disabled search types.
+	Link string
+}
+
 func (h *Handler) communityPage(w http.ResponseWriter, r *http.Request) {
 	p := h.basePage(r, "communities")
+	p.CommunityDefs = h.cfg.CommunityDefinitions.Enabled
+	if h.defs != nil {
+		p.CommunitySource = h.defs.MetadataSource
+	}
 	cats := map[string]bool{}
 	query := strings.ToLower(strings.TrimSpace(p.Query))
-	for _, c := range h.communities {
-		cats[c.Category] = true
-		hay := strings.ToLower(c.Value + " " + c.Name + " " + c.Description + " " + c.Status)
-		if (p.Category == "" || p.Category == c.Category) && (query == "" || strings.Contains(hay, query)) {
-			p.Communities = append(p.Communities, c)
+	for _, d := range h.defs.Definitions() {
+		if d.Category == "" {
+			d.Category = d.Source
+		}
+		cats[d.Category] = true
+		if p.Category != "" && p.Category != d.Category {
+			continue
+		}
+		if query != "" && !strings.Contains(strings.ToLower(d.Key+" "+d.Description+" "+d.Status), query) {
+			continue
+		}
+		p.CommunityMatched++
+		if len(p.Communities) < maxExplorerRows {
+			p.Communities = append(p.Communities, CommunityRow{Definition: d, Link: h.communityLink(d, p.SelectedBackend)})
 		}
 	}
 	for c := range cats {
@@ -683,6 +731,55 @@ func (h *Handler) communityPage(w http.ResponseWriter, r *http.Request) {
 	if err := h.templates.ExecuteTemplate(w, "communities.html", p); err != nil {
 		h.renderFailed(w, r, err)
 	}
+}
+
+// communityLink builds the search link for an exact definition. Patterns have
+// no single value to search for. Links follow the M4.2 search flags, so a
+// disabled search type never produces a link that would be rejected.
+func (h *Handler) communityLink(d communities.Definition, backend string) string {
+	if !d.Exact {
+		return ""
+	}
+	switch d.Kind {
+	case communities.Large:
+		if h.cfg.Features.LargeCommunityEnabled() {
+			return searchURL("large-community", d.Key, backend)
+		}
+	case communities.Standard:
+		if h.cfg.Features.CommunityEnabled() {
+			return publicURL(bgp.Query{Community: d.Key}, backend, "table", 1, false)
+		}
+	case communities.Extended:
+		if h.cfg.Features.ExtendedCommunityEnabled() {
+			return publicURL(bgp.Query{ExtCommunity: d.Key}, backend, "table", 1, false)
+		}
+	}
+	return ""
+}
+
+// loadCommunityDefinitions compiles the configured definitions once. An enabled
+// but unloadable configuration fails startup; nothing is loaded when disabled.
+func (h *Handler) loadCommunityDefinitions() error {
+	cd := h.cfg.CommunityDefinitions
+	if !cd.Enabled {
+		h.log.Debug("community definitions disabled")
+		return nil
+	}
+	set, err := communities.Load(cd.Directory)
+	if err != nil {
+		return err
+	}
+	h.defs = set
+	st := set.Stats()
+	h.log.Info("community definitions loaded", "directory", cd.Directory, "files", st.Files, "definitions", st.Definitions, "exact", st.Exact, "patterns", st.Patterns,
+		"standard", st.Standard, "large", st.Large, "extended", st.Extended, "metadata_entries", st.MetadataEntries)
+	if st.Files == 0 {
+		h.log.Warn("community definitions enabled but the directory contains no asN.txt or well-known.txt files", "directory", cd.Directory)
+	}
+	if len(st.Ignored) > 0 {
+		h.log.Warn("community definition directory contains .txt files that are not asN.txt or well-known.txt and were not loaded", "ignored", st.Ignored)
+	}
+	return nil
 }
 
 // StopAdmission marks the instance unready and rejects new route work.

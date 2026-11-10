@@ -286,17 +286,15 @@ Completion metadata for machine clients is sent as headers on route responses (h
 
 Plain-text status codes: `200` for complete **and** partial results (check the headers or the in-body warning), `400` for invalid requests, `404` for a page beyond the last, `504` if every backend timed out, `503` if busy or cancelled, `502` for other all-backend failures. A partial result is never an empty result.
 
-## Community Explorer and implementation status
+## Community definitions, route tooltips and Community Explorer
 
-`internal/web/communities.yaml` is the human-editable AS395089 reference. Entries carry `value`, `name`, `description`, `category` and optional `notes` (taken from the [AS395089 README](https://github.com/HextetSystems/as395089)); each value links to a one-click Large Community search. Implementation **status is derived, not typed per entry**, from the `routeros:` evidence block in the same file (explicit community lists, communities that routing filters act on, and configured matcher patterns):
+BGP community descriptions are **operator-supplied data**, not built into the application. Enable them with the optional `community_definitions` section (`enabled: false` by default; `directory` is required when enabled) pointing at a directory of `asN.txt` files in the legacy [NLNOG looking glass format](https://github.com/NLNOG/lg.ring.nlnog.net/tree/main/communities) (`64500:100,Learned from customer`; ranges `400-499`, one-digit `x` and any-number `nnn` wildcards, and `$0` substitutions; standard, large and extended communities). Files are validated and compiled **once at startup**; a configuration that cannot be loaded reliably fails startup with file and line, and changes need a restart. There is no download, watcher or runtime reload. Grammar, precedence, limits and differences from the upstream implementation are in [docs/COMMUNITIES.md](docs/COMMUNITIES.md).
 
-| Status | Meaning |
-|---|---|
-| **Implemented** | present in the RouterOS routing configuration: an explicit community list, a routing filter, or a configured pattern (`395089:[05678]:.*`, `395089:[1234]:.*`, matched against the whole value). The *evidence* kind and filter behaviour are shown next to it. |
-| **Documented/planned** | described in the README but absent from the configuration evidence |
-| **Unresolved** | evidence insufficient; set `status: unresolved` on an entry to record that |
+With definitions loaded, communities in a route's expanded **Route details** show a native `title` tooltip, escaped as text, while the visible value stays unchanged; unknown communities simply render their raw value. Text views and `output=plain` are never annotated. Definitions are presentation metadata only: searches, canonical URLs, the `features.*` flags, route visibility and caching are unaffected, a community stays searchable by its raw value whether or not it has a description, and descriptions are not searchable.
 
-"Implemented" means *present in the configuration*. It does not claim that the intended routing behaviour was independently verified, and some listed communities have no demonstrated action handler. Communities that only match a configured pattern (for example `395089:7:2`, `7:6`, `7:7`) say so. Communities present in the RouterOS lists but not described in the README (`395089:5:3`, `395089:6:11`) are listed as such with no invented meaning. To change a classification, edit the `routeros:` evidence block.
+Community Explorer (`/communities`) lists the loaded definitions of any number of ASNs, with the existing text and category filters (a page shows at most 1,000 matches) and a one-click search link for each exact definition whose search type is enabled. The legacy format cannot express the former *category*, *notes* and *implementation status/evidence* columns, so those come from an optional `metadata.yaml` in the same directory (documented in the guide). **Implemented** there means the operator recorded the community as present in its own configuration (for example a RouterOS community list, routing filter or configured pattern); it is not independent verification that the intended routing behaviour occurs, and neither are the descriptions authoritative.
+
+The former built-in AS395089 reference has been moved out of the code into [`examples/communities/`](examples/communities) (`as395089.txt`, 30 definitions, and `metadata.yaml`). Nothing loads it unless you configure the directory: a clean installation is operator-neutral. In Docker, mount the directory read-only at `/etc/hextet-lg/communities` (see [Docker deployment](#docker-deployment)).
 
 ## Isolated container load exercise
 
@@ -314,7 +312,7 @@ A 305-second run with 10,000 mock routes per dataset and 24 client workers compl
 cp configs/config.example.yaml configs/config.yaml
 ```
 
-Then set each backend's `url` to the OpenBGPD `bgplgd` HTTP API address reachable from the application. Backend URLs are configured exclusively through YAML; requests cannot supply or override them. `default_backend` can be `all` or an enabled backend ID. Startup validates the listen address, backend IDs, URLs and every limit. Every `looking_glass` setting is optional and falls back to the defaults above, so configurations written for earlier versions keep working; note that explicit older values (for example `query_timeout: 10s` and `max_response_bytes: 16777216`) are honoured and will turn large searches into partial results; remove those lines to adopt the new defaults. Use `--config /path/to/config.yaml`; the default is `/etc/hextet-lg/config.yaml`.
+Then set each backend's `url` to the OpenBGPD `bgplgd` HTTP API address reachable from the application. Backend URLs are configured exclusively through YAML; requests cannot supply or override them. `default_backend` can be `all` or an enabled backend ID. Startup validates the listen address, backend IDs, URLs and every limit. Every `looking_glass` setting is optional and falls back to the defaults above, so configurations written for earlier versions keep working; note that explicit older values (for example `query_timeout: 10s` and `max_response_bytes: 16777216`) are honoured and will turn large searches into partial results; remove those lines to adopt the new defaults. The optional `community_definitions` section (disabled by default) is described under Community definitions above. Use `--config /path/to/config.yaml`; the default is `/etc/hextet-lg/config.yaml`.
 
 ## Docker deployment
 
@@ -339,6 +337,16 @@ HEXTET_LG_IMAGE=ghcr.io/hextetsystems/hextet-lg@sha256:<digest> docker compose u
 `hextet-lg:local` is a mutable tag and is **not** a rollback reference. Upgrades and rollbacks, which preserve the exact previously running image, are described in [docs/RELEASING.md](docs/RELEASING.md) and automated by `scripts/deploy.sh` (`status`, `upgrade <image>`, `rollback`, with `--dry-run`).
 
 For the suggested host layout, keep Compose files in `/srv/docker/compose/hextet-lg/` and place the Docker runtime file at `configs/config.docker.yaml` relative to that Compose project, or adjust the Compose bind mount to your chosen local config path.
+
+To use community definitions, add `community_definitions: {enabled: true, directory: /etc/hextet-lg/communities}` to `configs/config.docker.yaml` and mount the directory read-only next to the configuration (the files must be readable by UID 10001; no write access, port or other restriction changes):
+
+```yaml
+    volumes:
+      - ./configs/config.docker.yaml:/etc/hextet-lg/config.yaml:ro
+      - /srv/docker/data/hextet-lg/communities:/etc/hextet-lg/communities:ro
+```
+
+`compose.yaml` carries this as a commented example, because a bind mount of a missing host directory would be created empty by Docker. If the directory is configured but absent, the container exits at startup. Restart the container after editing definition files.
 
 Size the container using the measurements and limitations above; set a deployment-specific hard memory limit only with sufficient headroom, and lower `max_retained_bytes`/`max_concurrent_queries` on small hosts. To validate a different configuration without touching `configs/config.yaml`, use a Compose override file that replaces the config bind mount.
 
@@ -386,7 +394,7 @@ Tests use `httptest` fixtures and do not require a live OpenBGPD process. Depend
 - Metrics and log records are in-process only: counters reset on restart, and logs are as durable as the container log driver. There is no tracing and no bundled dashboard or alert rules.
 - Cached results can be up to `cache_ttl` old; disable with `cache_ttl: 0s` for strictly live results.
 - OpenBGPD versions may expose different optional fields. Summary session counts are derived only from returned neighbor records; other data remains available as raw JSON per route.
-- Community "Implemented" status reflects the supplied RouterOS configuration evidence, not live verification. No additional RouterOS configuration was found in the workspace beyond that evidence.
+- Community definitions and any "Implemented" status are operator-supplied; they are not live verification. The loader is stricter than the NLNOG implementation (duplicates, unsupported tokens and leading-zero literals are startup errors), so some upstream files need editing; see [docs/COMMUNITIES.md](docs/COMMUNITIES.md). Extended-community definitions cover the numeric `label A[:B]` forms only, and the OpenBGPD well-known standard community names are mapped from knowledge of its output format, not verified against a live backend.
 - The embedded HTMX runtime is pinned at version 2.0.4. No external browser assets are required.
 - Absent route fields display as unknown or an em dash. RPKI OVS, ASPA AVS, and route validity remain separate values.
 - Live route results depend on the separately managed OpenBGPD API.

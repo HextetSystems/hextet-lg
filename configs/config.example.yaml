@@ -136,3 +136,17 @@ features:
   communities: true
   large_communities: true
   extended_communities: false
+
+# Optional operator-supplied BGP community definitions (DISABLED by default).
+# Files use the legacy NLNOG looking glass text format, one asN.txt per ASN
+# ("64500:100,Learned from customer"; wildcards x, nnn, ranges 400-499 and $0
+# substitutions), plus an optional metadata.yaml for the Community Explorer.
+# See docs/COMMUNITIES.md and examples/communities/. They only enrich how routes
+# and the Community Explorer are displayed: searches, URLs and visibility are
+# unaffected. They are read once at startup, so restart after editing them.
+# When enabled, the directory is required and must be readable; a missing
+# directory or a malformed definition stops startup. Nothing is downloaded.
+# In Docker, mount the directory read-only at the path below (see compose.yaml).
+community_definitions:
+  enabled: false
+  directory: /etc/hextet-lg/communities

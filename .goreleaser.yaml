@@ -40,7 +40,9 @@ archives:
       - src: README.md
       - src: ARCHITECTURE.md
       - src: docs/RELEASING.md
+      - src: docs/COMMUNITIES.md
       - src: configs/config.example.yaml
+      - src: examples/communities/*
       - src: LICENSE*
 
 checksum:

@@ -11,10 +11,11 @@
 - `cmd/hextet-lg`: CLI and process lifecycle.
 - `internal/config`: strict YAML decoding and startup validation.
 - `internal/bgp`: OpenBGPD HTTP transport types, native query construction, and client.
+- `internal/communities`: operator-supplied community definitions (legacy NLNOG text format): parser, matcher, loader. No web or BGP dependencies.
 - `internal/web`: handlers, embedded templates, and static assets.
 - `internal/version`: build identity (link-time `Version`/`Commit`/`Date` with toolchain fallbacks).
 - `.goreleaser.yaml`, `.github/workflows`: release automation and CI. `scripts/deploy.sh`: upgrade/rollback wrapper. `docs/RELEASING.md`: release and deployment guide.
-- `configs`: example YAML configuration.
+- `configs`: example YAML configuration. `examples/communities`: example community definitions (data, not defaults). `docs/COMMUNITIES.md`: definitions guide.
 
 ## Frontend embedding
 
@@ -44,6 +45,7 @@
 - Keep `configs/config.yaml` and `configs/config.docker.yaml` local and ignored by Git; do not commit runtime backend addresses.
 - Operators create runtime configuration with `cp configs/config.example.yaml configs/config.yaml` and then set backend URLs.
 - Backend URLs are configured exclusively through validated YAML, never public request parameters.
+- `community_definitions` is optional and disabled by default (`enabled`, `directory`); keep it generic and document it in the example file. Docker mounts the directory read-only at `/etc/hextet-lg/communities`; no write access.
 - Every `looking_glass` setting is optional with a documented default (30s timeout, 128 MiB response, 256 MiB retained, 100 per page, 2 concurrent large queries, 20s cache); keep existing configurations working and document new settings in the example file. Backends may override `query_timeout`.
 - Standalone development uses `configs/config.yaml` on port 7000. Docker Compose uses the separate local `./configs/config.docker.yaml` on port 8080 and mounts it read-only at `/etc/hextet-lg/config.yaml`; the application loads that path in the container.
 
@@ -55,7 +57,7 @@
 
 ## Milestones
 
-- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) are in scope by explicit request; do not begin other M4 work without an explicit request.
+- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) are in scope by explicit request; do not begin other M4 work (M4.5 and later) without an explicit request.
 
 ## Public URLs
 
@@ -66,7 +68,10 @@
 
 ## Communities
 
-- `internal/web/communities.yaml` stays the human-editable reference. Status is derived from its `routeros:` evidence block (Implemented = in a community list, routing filter or configured pattern; Documented/planned = README only; Unresolved = declared insufficient evidence). Do not invent meanings, and do not claim live verification.
+- Community descriptions are operator data in the legacy NLNOG text format (`asN.txt`, `well-known.txt`, optional `metadata.yaml`), loaded once at startup from `community_definitions.directory` when `community_definitions.enabled` (default false). Never embed, default or fall back to any operator's definitions (the AS395089 set lives only in `examples/communities`), never download or refresh definitions, and never log definition contents.
+- The format is NLNOG-compatible: first-comma split, `#` comments, exact/range/`x` (one digit)/`nnn` (one or more digits) with `$N` substitutions for standard, large and extended communities. Never compile definition text as a regular expression; keep the bounded matcher. Precedence is exact, then smallest value space, then load order (well-known, ascending ASN, line); never depend on map iteration. Malformed, unsupported or duplicate definitions and any unreadable file fail startup with file and line; do not silently drop lines. See `docs/COMMUNITIES.md` before changing the grammar or its documented differences from upstream.
+- Definitions are presentation only. They must not change query construction, search, canonical URLs, the `features.*` flags, route visibility or caching, and must not be copied into retained `bgp.Route`, cache or flight data: look them up at render time from the immutable set. Tooltips are escaped native `title` attributes in the route-details HTML only; plaintext views and `output=plain` stay raw. Do not add description search.
+- Standard, extended and large communities stay separate kinds. The Community Explorer is generated from the loaded definitions plus the optional `metadata.yaml` (category, notes, status `implemented|documented|unresolved`, evidence), which never affects lookup. "Implemented" means present in the operator's configuration; do not invent meanings and do not claim live verification.
 
 ## Public deployment controls
 

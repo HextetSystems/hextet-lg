@@ -1,0 +1,166 @@
+# Optional Community Explorer metadata for the AS395089 definitions in
+# as395089.txt. The legacy NLNOG format carries only community and description,
+# so the operator's classification lives here. It is presentation only: it never
+# affects route search or description lookup. Restart the application to reload.
+#
+# status (all values here were derived from the operator's RouterOS configuration):
+#   implemented   the community appears in the RouterOS routing configuration: an
+#                 explicit community list, a routing filter, or a configured
+#                 matching pattern (named in `evidence`).
+#   documented    described in the README but absent from the configuration.
+#   unresolved    insufficient evidence to classify.
+# "implemented" means present in the configuration. It does not claim that the
+# intended routing behaviour has been independently verified.
+#
+# Keys are the canonical definition text from as395089.txt.
+source: "RouterOS routing configuration supplied by the operator (community lists, matchers, routing filters)"
+communities:
+  "395089:0:1":
+    category: "Route classification"
+    status: implemented
+    evidence: "community list"
+  "395089:0:2":
+    category: "Route classification"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "Customer classification"
+    notes: "The RouterOS routing filters treat this as the customer classification."
+  "395089:0:3":
+    category: "Route classification"
+    status: implemented
+    evidence: "community list"
+  "395089:0:4":
+    category: "Route classification"
+    status: implemented
+    evidence: "community list"
+  "395089:0:6":
+    category: "Route classification"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "Transit classification"
+  "395089:0:8":
+    category: "Route classification"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "Peering classification"
+  "395089:5:1":
+    category: "Validation and filtering"
+    status: implemented
+    evidence: "community list"
+  "395089:5:2":
+    category: "Validation and filtering"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "RPKI valid"
+  "395089:5:3":
+    category: "Undocumented in README"
+    status: implemented
+    evidence: "community list"
+    notes: "Present in the RouterOS community list, but the README does not document its meaning. Meaning unknown; not inferred."
+  "395089:5:4":
+    category: "Validation and filtering"
+    status: implemented
+    evidence: "community list"
+  "395089:6:10":
+    category: "Geographic or exchange information"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "Les.net"
+  "395089:6:11":
+    category: "Undocumented in README"
+    status: implemented
+    evidence: "community list"
+    notes: "Present in the RouterOS community list, but the README does not document its meaning. Meaning unknown; not inferred."
+  "395089:8:703":
+    category: "Geographic or exchange information"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "MBIX"
+    notes: "The last field can contain another IXP PeeringDB ID."
+  "395089:7:1":
+    category: "Validation and filtering"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "Own-space rejection"
+  "395089:7:2":
+    category: "Validation and filtering"
+    status: implemented
+    evidence: "configured pattern"
+    evidence_note: "395089:[05678]:.*"
+  "395089:7:3":
+    category: "Validation and filtering"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "Bogon-prefix rejection"
+  "395089:7:4":
+    category: "Validation and filtering"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "RPKI-invalid rejection"
+  "395089:7:5":
+    category: "Validation and filtering"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "Default-route or disallowed-prefix-length rejection"
+  "395089:7:6":
+    category: "Validation and filtering"
+    status: implemented
+    evidence: "configured pattern"
+    evidence_note: "395089:[05678]:.*"
+  "395089:7:7":
+    category: "Validation and filtering"
+    status: implemented
+    evidence: "configured pattern"
+    evidence_note: "395089:[05678]:.*"
+  "395089:1:50":
+    category: "Local preference"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "Local preference action"
+  "395089:1:150":
+    category: "Local preference"
+    status: implemented
+    evidence: "community list"
+  "395089:1:450":
+    category: "Local preference"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "Local preference action"
+  "395089:1:550":
+    category: "Local preference"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "Local preference action"
+  "395089:2:0":
+    category: "AS-path prepending"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "AS-path prepend once"
+    notes: "The last field may instead specify a peer ASN."
+  "395089:3:0":
+    category: "AS-path prepending"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "AS-path prepend twice"
+    notes: "The last field may instead specify a peer ASN."
+  "395089:4:0":
+    category: "Export policy"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "No export"
+    notes: "The last field may instead specify a peer ASN."
+  "395089:301:0":
+    category: "Export policy"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "Export restriction (member routes)"
+  "395089:302:0":
+    category: "Export policy"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "Export restriction (transit routes)"
+  "395089:303:0":
+    category: "Export policy"
+    status: implemented
+    evidence: "routing filter"
+    evidence_note: "Export restriction (peer routes)"
