@@ -12,6 +12,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/HextetSystems/hextet-lg/internal/visibility"
 )
 
 // Route is the normalized, presentation-facing form of one bgplgd rib entry.
@@ -80,8 +82,9 @@ const maxOverviewBytes = 1 << 20
 
 // Client queries one configured bgplgd backend.
 type Client struct {
-	BaseURL *url.URL
-	HTTP    *http.Client
+	Visibility visibility.Policy
+	BaseURL    *url.URL
+	HTTP       *http.Client
 	// Timeout bounds a whole query including reading the body.
 	Timeout time.Duration
 	// MaxResponseBytes bounds the upstream response body.
@@ -128,6 +131,7 @@ func (c *Client) SearchWithReservation(ctx context.Context, q Query, reserve fun
 
 	start := time.Now()
 	var res Result
+	decoded := false
 	finish := func() Result {
 		res.Elapsed = time.Since(start)
 		res.RouteCount = len(res.Routes)
@@ -136,7 +140,7 @@ func (c *Client) SearchWithReservation(ctx context.Context, q Query, reserve fun
 	fail := func(reason Reason, err error) Result {
 		res.Reason = reason
 		res.Detail = c.describe(reason, err)
-		if len(res.Routes) > 0 {
+		if decoded {
 			res.Status = StatusPartial
 		} else {
 			res.Status = StatusFailed
@@ -172,6 +176,10 @@ func (c *Client) SearchWithReservation(ctx context.Context, q Query, reserve fun
 		maxRetained = DefaultMaxRetainedBytes
 	}
 	sink := func(r Route) error {
+		if c.Visibility.Excludes(r.Prefix) {
+			decoded = true
+			return nil
+		}
 		size := r.MemSize()
 		if res.MemBytes+size > maxRetained {
 			return errMemoryLimit
@@ -179,6 +187,7 @@ func (c *Client) SearchWithReservation(ctx context.Context, q Query, reserve fun
 		if reserve != nil && !reserve(size) {
 			return errCapacity
 		}
+		decoded = true
 		res.MemBytes += size
 		if len(res.Routes) == 0 {
 			res.FirstRoute = time.Since(start)

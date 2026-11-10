@@ -107,6 +107,18 @@ looking_glass:
   # Global memory budget (estimated) for cached results.
   cache_max_bytes: 268435456
 
+# Optional application-wide disclosure policy; no routes are excluded by default.
+# Uncomment and adapt these examples. Use canonical network CIDRs; match must
+# be exactly "exact" or "or-longer". Restart after changing the policy.
+# route_visibility:
+#   exclude:
+#     ipv4:
+#       - {prefix: 10.0.0.0/8, match: or-longer}
+#       - {prefix: 192.0.2.0/24, match: exact}
+#     ipv6:
+#       - {prefix: "fd00::/8", match: or-longer}
+#       - {prefix: "2001:db8:1234::/48", match: exact}
+
 # Backend URLs are configured here exclusively; never pass them in requests.
 backends:
   - id: local

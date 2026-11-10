@@ -34,6 +34,7 @@
 - bgplgd answers a query bgpctl rejected with HTTP 200 and an empty body; treat that as a failure, not as an empty result.
 - Enforce the response-size limit while reading, bound retained decoded memory separately, and bound expensive (non-prefix) upstream queries across the whole instance. Never retry large interrupted queries.
 - The only cache is the short-lived, memory-bounded in-process result cache (validated complete/partial results only, never failures); do not add Redis, a database, a queue or other persistent storage, and never describe cached results as snapshots.
+- Apply the immutable startup-compiled route visibility policy before retaining or caching decoded routes; counts describe visible routes, while interruptions preserve their underlying completion status.
 - Keep route `valid`, RPKI `ovs`, and ASPA `avs` distinct.
 - Backend URLs come only from validated YAML configuration, never public request parameters.
 
@@ -54,7 +55,7 @@
 
 ## Milestones
 
-- M3.1 and M3.2 are accepted and M3.3 (release engineering) is in scope by explicit request; do not begin M4 without an explicit request.
+- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) are in scope by explicit request; do not begin other M4 work without an explicit request.
 
 ## Public URLs
 

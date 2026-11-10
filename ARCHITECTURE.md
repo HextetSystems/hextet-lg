@@ -17,7 +17,7 @@ public GET URL ──► bgp.ParseQuery ──► Query.Normalize (validate, can
                   ▼
         boundedReader (response limit) ─► json.Decoder, one route object at a time
                   ▼
-        parseRoute ─► retained-memory check ─► []Route  (+ Completion: status, reason, counts, timings)
+        parseRoute ─► visibility policy ─► retained-memory check ─► []Route  (+ Completion: status, reason, counts, timings)
                   ▼
         paginate / writeText ─► HTML templates, or streamed text/plain with completion headers
 ```
@@ -27,6 +27,8 @@ public GET URL ──► bgp.ParseQuery ──► Query.Normalize (validate, can
 ## Streaming decode and completion
 
 `internal/bgp/stream.go` decodes the bgpctl document (`{"rib":[...]}`; an empty result has no `rib` key) with `encoding/json.Decoder` while the HTTP body is still arriving. Only complete route objects reach the sink; an unfinished object is discarded. The enclosing document must close and nothing may follow it before the result is `complete`; anything else is `partial` (at least one complete route) or `failed`, with a reason: `timeout`, `response_limit`, `memory_limit` (the per-query retention limit), `capacity` (the instance-wide budget was exhausted by other work), `connection_closed`, `invalid_json`, `backend_error`, `canceled` or `busy`. `Reason.Transient()` (`capacity`, `busy`, `canceled`) marks conditions that describe this instance's momentary state rather than the query. The size limit is enforced by a reader wrapper while reading; retained memory is estimated per route and bounded separately because decoded routes need more RAM than their JSON. Raw route JSON is kept compacted (one copy) for the diagnostic view. Route address family is derived from the prefix only. bgplgd answers rejected queries with an empty 200 body, which is classified as a failure, not as "no routes".
+
+The startup-compiled, immutable route visibility policy checks the destination before reservation and retention; excluded routes never enter a flight or cache. Counts reflect visible routes. When a complete upstream route was decoded but excluded, an interrupted document is still partial, even with zero visible routes; an entirely empty HTTP body remains a failure. If configured, the policy fails closed for unparseable or IPv4-mapped route destinations. Restart to change rules. This is a presentation disclosure control, not BGP policy or protection for direct access to the backend API. Neighbor and summary information is outside its scope.
 
 Each backend carries its own `Completion`; statuses are summarized but never merged. Failures do not discard other backends' results.
 
@@ -47,7 +49,7 @@ Compose builds a static Go executable in a multistage build (the same Dockerfile
 
 ## Current scope
 
-M2 includes route, neighbor, summary and locally embedded community views, compound server-side route queries, dual-stack IPv4/IPv6 parity, and the large-response, partial-result and pagination remediation. Public GET URLs capture the requested view and are live queries rather than snapshots. Session counts are derived per backend from the returned summary neighbor records; raw JSON preserves version-specific fields. M3.1 adds HTTP, rate, admission, and lifecycle controls. M3.2 adds structured logging, Prometheus metrics, backend health visibility, the cache admission fix and clean disconnect handling (below); M3.3 adds release engineering (below).
+M2 includes route, neighbor, summary and locally embedded community views, compound server-side route queries, dual-stack IPv4/IPv6 parity, and the large-response, partial-result and pagination remediation. Public GET URLs capture the requested view and are live queries rather than snapshots. Session counts are derived per backend from the returned summary neighbor records; raw JSON preserves version-specific fields. M3.1 adds HTTP, rate, admission, and lifecycle controls. M3.2 adds structured logging, Prometheus metrics, backend health visibility, the cache admission fix and clean disconnect handling (below); M3.3 adds release engineering (below); M4.1 adds configurable route visibility exclusions.
 
 ## Public request lifecycle
 

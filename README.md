@@ -2,6 +2,25 @@
 
 Hextet LG is a read-only web looking glass for one or more OpenBGPD `bgplgd` HTTP APIs. It is a Go application with Go HTML templates, HTMX form updates, and embedded frontend assets. It has no database or other persistent service.
 
+## Route visibility exclusions
+
+Optionally configure `route_visibility.exclude.ipv4` and `ipv6` to hide destination routes across all backends and route outputs. No prefixes are excluded by default. For example:
+
+```yaml
+route_visibility:
+  exclude:
+    ipv4:
+      - {prefix: 10.0.0.0/8, match: or-longer}
+      - {prefix: 192.0.2.0/24, match: exact}
+    ipv6:
+      - {prefix: "fd00::/8", match: or-longer}
+      - {prefix: "2001:db8:1234::/48", match: exact}
+```
+
+`exact` hides only the specified destination prefix; `or-longer` also hides contained more-specific destinations. Rules combine with OR. Startup rejects invalid CIDRs, host bits, wrong families, IPv4-mapped IPv6 prefixes, missing fields and unsupported match modes. Duplicate rules are harmless. With any rules configured, unparseable or IPv4-mapped route destinations are also withheld because their visibility cannot be established safely. Changes require an application restart. Filtering happens before retention, shared queries and cache admission, so counts and pages contain visible routes only; incomplete backend responses remain incomplete.
+
+This is an application-level disclosure control and does not change BGP routing policy or what the backend receives. For highly sensitive routes, prevent them from reaching the public looking-glass backend at all. This feature does not make the underlying OpenBGPD API safe for public exposure. Other backend information, such as neighbor and summary data, is not route-filtered.
+
 ## Views and shareable URLs
 
 The Route Explorer (`/`) runs native, server-side OpenBGPD queries. Neighbor Explorer (`/neighbors`) and BGP Summary (`/summary`) show live session data per backend. Community Explorer (`/communities`) is an embedded local reference and remains available if backends are down.

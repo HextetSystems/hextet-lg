@@ -8,19 +8,27 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/HextetSystems/hextet-lg/internal/visibility"
 )
 
 type Config struct {
-	Server       Server       `yaml:"server"`
-	LookingGlass LookingGlass `yaml:"looking_glass"`
-	Backends     []Backend    `yaml:"backends"`
-	Logging      Logging      `yaml:"logging"`
-	Metrics      Metrics      `yaml:"metrics"`
+	RouteVisibility visibility.Config `yaml:"route_visibility"`
+	policy          visibility.Policy
+	policyCompiled  bool
+	policySource    visibility.Config
+	Server          Server       `yaml:"server"`
+	LookingGlass    LookingGlass `yaml:"looking_glass"`
+	Backends        []Backend    `yaml:"backends"`
+	Logging         Logging      `yaml:"logging"`
+	Metrics         Metrics      `yaml:"metrics"`
 }
 
 // Logging configures structured logging. Both settings are optional.
@@ -224,7 +232,10 @@ func Decode(r io.Reader) (Config, error) {
 	return c, nil
 }
 
-func (c Config) Validate() error {
+func (c *Config) Validate() error {
+	if err := c.CompileVisibility(); err != nil {
+		return err
+	}
 	if math.IsNaN(c.Server.RatePerSecond) || math.IsInf(c.Server.RatePerSecond, 0) || math.IsNaN(c.Server.LiveRatePerSecond) || math.IsInf(c.Server.LiveRatePerSecond, 0) || c.Server.MaxURLBytes <= 0 || c.Server.MaxQueryBytes <= 0 || c.Server.MaxQueryParams <= 0 || c.Server.MaxHeaderBytes <= 0 || c.Server.RatePerSecond <= 0 || c.Server.RateBurst <= 0 || c.Server.LiveRatePerSecond <= 0 || c.Server.LiveRateBurst <= 0 || c.Server.ShutdownGrace <= 0 || c.LookingGlass.QueueWait <= 0 || c.LookingGlass.MaxQueuedQueries <= 0 {
 		return errors.New("server and queue limits must be positive")
 	}
@@ -315,6 +326,25 @@ func (c Config) Validate() error {
 	}
 	return nil
 }
+
+// CompileVisibility validates and freezes the policy for this configuration.
+func (c *Config) CompileVisibility() error {
+	if c.policyCompiled && reflect.DeepEqual(c.policySource, c.RouteVisibility) {
+		return nil
+	}
+	policy, err := visibility.Compile(c.RouteVisibility)
+	if err != nil {
+		return err
+	}
+	c.policy, c.policyCompiled = policy, true
+	c.policySource = c.RouteVisibility
+	c.policySource.Exclude.IPv4 = slices.Clone(c.RouteVisibility.Exclude.IPv4)
+	c.policySource.Exclude.IPv6 = slices.Clone(c.RouteVisibility.Exclude.IPv6)
+	return nil
+}
+
+// VisibilityPolicy returns the immutable compiled policy.
+func (c Config) VisibilityPolicy() visibility.Policy { return c.policy }
 
 func (c Config) validateObservability() error {
 	switch strings.ToLower(c.Logging.Level) {

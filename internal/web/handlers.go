@@ -92,6 +92,9 @@ type Page struct {
 
 func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 	cfg.LookingGlass.FillZero()
+	if err := cfg.CompileVisibility(); err != nil {
+		return nil, err
+	}
 	h := &Handler{cfg: cfg, stopCh: make(chan struct{}), health: map[string]*backendHealth{}}
 	for _, o := range opts {
 		o(h)
@@ -107,6 +110,7 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 		if err != nil {
 			return nil, fmt.Errorf("backend %s: %w", b.ID, err)
 		}
+		c.Visibility = cfg.VisibilityPolicy()
 		c.MaxRetainedBytes = cfg.LookingGlass.MaxRetainedBytes
 		h.backends = append(h.backends, backendClient{Backend: b, client: c})
 		h.health[b.ID] = &backendHealth{}
