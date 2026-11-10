@@ -36,6 +36,10 @@ type Features struct {
 	// infrastructure, so sessions are identified by the operator's description
 	// (or an ordinal) unless this is enabled.
 	RTRSessionAddresses *bool `yaml:"rtr_session_addresses"`
+	// PageTiming shows the server-side page generation time in the footer of
+	// HTML pages. It only affects that display: HTTP metrics and the access
+	// log measure requests regardless. Enabled by default.
+	PageTiming *bool `yaml:"page_timing"`
 }
 
 func enabled(v *bool, fallback bool) bool {
@@ -52,6 +56,7 @@ func (f Features) RTRSessionsEnabled() bool       { return enabled(f.RTRSessions
 func (f Features) RTRSessionAddressesEnabled() bool {
 	return enabled(f.RTRSessionAddresses, false)
 }
+func (f Features) PageTimingEnabled() bool { return enabled(f.PageTiming, true) }
 
 // CommunityDefinitions configures the optional, operator-supplied BGP
 // community definitions (legacy NLNOG text format). They are disabled by

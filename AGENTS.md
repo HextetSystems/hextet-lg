@@ -58,7 +58,7 @@
 
 ## Milestones
 
-- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) and M4.5.1 (configurable themes) are in scope by explicit request; M4.6 (next-hop PTR enrichment) and M4.7 (BGP neighbor and RPKI RTR session visibility) are in scope by explicit request; do not begin M4.8 or later without an explicit request.
+- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) and M4.5.1 (configurable themes) are in scope by explicit request; M4.6 (next-hop PTR enrichment) and M4.7 (BGP neighbor and RPKI RTR session visibility) and M4.8 (page generation timing) are in scope by explicit request; do not begin M4.8.1 or later without an explicit request.
 
 ## Public URLs
 
@@ -81,6 +81,11 @@
 - Keep RTR outcomes distinct (`bgp.RTRState`: sessions, none, unsupported, unavailable, malformed). Never show "no sessions" unless the backend answered with a valid empty document. Absent values are dashes, never zero, and an established session without session ID and serial is not "good".
 - `rtr` is a fixed route and backend-operation label; an unsupported backend is a failed request with no failure reason. Do not add capability caches, per-session goroutines or polling. Sessions of different backends are never merged.
 
+## Page generation timing
+
+- `features.page_timing` (default true) only controls the footer display; HTTP metrics and the access log are never conditional on it. The start is `reqInfo.start` set by `protect`; the single read happens in the `pageTiming` template function at footer execution. Do not add a second clock, buffer HTML responses to obtain the figure, or put timing into JSON, CSV, `output=plain`, metrics or headers.
+- HTMX fragments carry the figure as a trailing `hx-swap-oob` element so it is replaced together with the results; keep it top-level, singular and absent from full pages. Omit the indicator (full page) or hide it (fragment) instead of showing an unmeasured value. History restoration may show the original request's figure.
+
 ## Public deployment controls
 
 - Preserve bounded request parsing, direct-peer rate limiting, security headers, bounded route-query admission, liveness/readiness, and graceful shutdown. Never trust forwarded identity headers without explicitly configured trusted proxies.
@@ -99,7 +104,7 @@
 - Every UI color is a semantic CSS custom property defined by the generated `/static/theme.css`; `static/app.css` must contain no color literals, gradients or shadows, templates no inline styles (CSP `style-src 'self'`). Add a token to `internal/theme` rather than a literal.
 - Theme configuration accepts only strict `#RRGGBB`, never CSS text; generate CSS only from validated values, once at startup. Derived tokens are deterministic. Contrast shortfalls warn (below 3:1 for primary text fails startup); never silently replace operator colors. See `docs/THEMING.md`.
 - Status colors (route `valid`, RPKI `ovs`, ASPA `avs`, completeness, warnings) are fixed, distinct from the single accent, and always paired with a text label. Do not collapse them into the accent.
-- The visitor's choice lives only in `localStorage` key `theme` (`light`/`dark`); no cookies or server-side preference. `theme-init.js` stays a synchronous script in `<head>` after the stylesheets. Do not begin M4.8 without explicit authorization.
+- The visitor's choice lives only in `localStorage` key `theme` (`light`/`dark`); no cookies or server-side preference. `theme-init.js` stays a synchronous script in `<head>` after the stylesheets. Do not begin M4.8.1 without explicit authorization.
 
 ## Release engineering
 
@@ -112,7 +117,7 @@
 
 ## ASN enrichment
 
-- Optional Team Cymru DNS enrichment is descriptive only and separate from route results and shared flights. DNS work is asynchronous, bounded, and limited to visible ASNs. The cache-only status endpoint must never schedule lookups. Persistence is opt-in and requires a writable cache directory. Do not begin M4.8 without explicit authorization.
+- Optional Team Cymru DNS enrichment is descriptive only and separate from route results and shared flights. DNS work is asynchronous, bounded, and limited to visible ASNs. The cache-only status endpoint must never schedule lookups. Persistence is opt-in and requires a writable cache directory. Do not begin M4.8.1 without explicit authorization.
 
 ## PTR enrichment
 

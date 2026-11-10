@@ -170,7 +170,7 @@ func TestM44EnrichmentIsPurelyPresentational(t *testing.T) {
 	on := newDefsHandler(t, m44Files, nil, routeBackend(doc))
 	off := newDefsHandler(t, nil, nil, routeBackend(doc))
 	strip := regexp.MustCompile(` class="known" title="[^"]*"`)
-	elapsed := regexp.MustCompile(`\d+\.\ds`)
+	elapsed := regexp.MustCompile(`\d+\.\ds|Generated in [^<]+`) // per-request timings legitimately vary
 	for _, target := range []string{"/?type=asn&q=64500&backend=a", "/?as=64500&backend=a&view=detail", "/?type=prefix&q=2001%3Adb8%3A%3A%2F32&backend=a", "/?community=64500%3A100&backend=a"} {
 		a, b := get(on, target), get(off, target)
 		if a.Code != b.Code || a.Header().Get("Location") != b.Header().Get("Location") {

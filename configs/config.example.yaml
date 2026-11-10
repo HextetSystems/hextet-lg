@@ -187,6 +187,13 @@ backends:
 #                  addresses on /rtr (default false). By default validators are
 #                  identified only by their bgpd.conf "descr" or an ordinal.
 #                  See docs/SESSION_VISIBILITY.md before enabling it.
+#   page_timing:   show "Generated in 42.7 ms" in the footer of HTML pages
+#                  (default true). It is the server-side time from the start of
+#                  request handling until the footer is rendered: it includes
+#                  backend queries (or cache/shared-flight waits) and template
+#                  generation, and excludes network, browser rendering and the
+#                  background ASN/PTR lookups. Disabling it only removes the
+#                  display; HTTP metrics and the access log are unaffected.
 features:
   communities: true
   large_communities: true
@@ -194,6 +201,7 @@ features:
   bgp_neighbors: true
   rtr_sessions: true
   rtr_session_addresses: false
+  page_timing: true
 
 # Optional operator-supplied BGP community definitions (DISABLED by default).
 # Files use the legacy NLNOG looking glass text format, one asN.txt per ASN

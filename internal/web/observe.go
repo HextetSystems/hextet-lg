@@ -21,7 +21,11 @@ import (
 // access-log line can say what the request did. It is touched only by the
 // goroutine serving the request.
 type reqInfo struct {
-	id                   string
+	id string
+	// start is the monotonic reading taken when protect began handling the
+	// request. The access log, the HTTP duration metric and the footer's page
+	// generation time all measure from this one instant.
+	start                time.Time
 	result               bgp.Status // overall route-query outcome, if the request ran one
 	backends             int
 	cacheHits, cacheMiss int
@@ -90,7 +94,7 @@ func (h *Handler) protect(next http.Handler) http.Handler {
 	inner := h.guard(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		info := &reqInfo{id: newRequestID()}
+		info := &reqInfo{id: newRequestID(), start: start}
 		r = r.WithContext(context.WithValue(r.Context(), reqInfoKey{}, info))
 		rw := &respWriter{ResponseWriter: w}
 		rw.Header().Set("X-Request-Id", info.id)

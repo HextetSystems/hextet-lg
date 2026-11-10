@@ -28,7 +28,7 @@
     <a href="/">Clear search</a><p class="hint">CIDR searches match the exact prefix by default; choose a prefix mode in Advanced filters to include more specifics or covering prefixes. Bare IPv4 and IPv6 addresses use longest-prefix match; without an address-family filter both families are returned. ASN searches use OpenBGPD's source-AS filter. Results are live queries; the same URL may return different routes later.</p>
   </form></section>
   <section id="results" aria-live="polite">{{template "results.html" .}}</section>
-  <footer><span>Powered by OpenBGPD <span class="dot">·</span> Read-only queries</span><span>Hextet Systems <span class="dot">·</span> AS395089</span></footer>
+  <footer><span>Powered by OpenBGPD <span class="dot">·</span> Read-only queries</span><span>Hextet Systems <span class="dot">·</span> AS395089{{template "timing" .}}</span></footer>
 </main>
 {{template "theme" .}}
 

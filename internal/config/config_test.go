@@ -329,6 +329,50 @@ func TestSessionFeatureFlagsAreStrictlyTyped(t *testing.T) {
 	}
 }
 
+func TestPageTimingFlag(t *testing.T) {
+	with := func(features string) string {
+		return strings.Replace(validConfig, "\nbackends:", "\n"+features+"backends:", 1)
+	}
+	for name, tc := range map[string]struct {
+		yaml string
+		want bool
+	}{
+		"features omitted":  {validConfig, true},
+		"flag omitted":      {with("features:\n  communities: false\n"), true},
+		"explicitly on":     {with("features:\n  page_timing: true\n"), true},
+		"explicitly off":    {with("features:\n  page_timing: false\n"), false},
+		"independent flags": {with("features:\n  page_timing: false\n  bgp_neighbors: true\n  rtr_sessions: true\n"), false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			c, err := Decode(strings.NewReader(tc.yaml))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := c.Features.PageTimingEnabled(); got != tc.want {
+				t.Fatalf("PageTimingEnabled = %v, want %v", got, tc.want)
+			}
+		})
+	}
+	for name, yaml := range map[string]string{
+		"string value": "features:\n  page_timing: maybe\n",
+		"typo":         "features:\n  page_timings: true\n",
+		"list":         "features:\n  page_timing: [true]\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Decode(strings.NewReader(strings.Replace(validConfig, "\nbackends:", "\n"+yaml+"backends:", 1))); err == nil {
+				t.Fatal("expected a decode error")
+			}
+		})
+	}
+	c, err := Load("../../configs/config.example.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Features.PageTiming == nil || !c.Features.PageTimingEnabled() {
+		t.Fatal("the example must show page_timing at its default (true)")
+	}
+}
+
 func TestExampleConfigDocumentsSessionFlags(t *testing.T) {
 	c, err := Load("../../configs/config.example.yaml")
 	if err != nil {

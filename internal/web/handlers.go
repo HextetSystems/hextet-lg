@@ -110,6 +110,13 @@ type Page struct {
 	CacheTTL              time.Duration
 	LargeCommunityEnabled bool
 	Groups                []FormGroup
+
+	// Started is when request handling began (zero when unknown); the footer
+	// computes the page generation time from it when it is rendered.
+	Started time.Time
+	// Fragment marks an HTMX results fragment: the footer is outside it, so
+	// the fragment carries an out-of-band footer timing update instead.
+	Fragment bool
 }
 
 func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
@@ -180,6 +187,8 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 		"asnPath":       h.pathParts,
 		"featureBGP":    h.cfg.Features.BGPNeighborsEnabled,
 		"featureRTR":    h.cfg.Features.RTRSessionsEnabled,
+		"timingEnabled": h.cfg.Features.PageTimingEnabled,
+		"pageTiming":    pageTiming,
 		"neighborURL":   neighborURL,
 		"neighborTitle": neighborTitle,
 		"searchURL":     searchURL,
@@ -405,7 +414,7 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 		defer h.work.release()
 	}
 	hx := r.Header.Get("HX-Request") == "true"
-	p := Page{Active: "routes", Title: h.cfg.Server.Title, SelectedBackend: vals.Get("backend"), IsHTMX: hx, View: vals.Get("view"), Groups: h.formGroups(), Backends: h.backendList(), CacheTTL: h.cfg.LookingGlass.CacheTTL, LargeCommunityEnabled: h.cfg.Features.LargeCommunityEnabled()}
+	p := Page{Active: "routes", Started: requestStart(r), Title: h.cfg.Server.Title, SelectedBackend: vals.Get("backend"), IsHTMX: hx, View: vals.Get("view"), Groups: h.formGroups(), Backends: h.backendList(), CacheTTL: h.cfg.LookingGlass.CacheTTL, LargeCommunityEnabled: h.cfg.Features.LargeCommunityEnabled()}
 	if p.View == "" {
 		p.View = "table"
 	}
@@ -494,6 +503,7 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 	name := "index.html"
 	if hx && r.Header.Get("HX-History-Restore-Request") != "true" {
 		name = "results.html"
+		p.Fragment = true
 	}
 	setCompletionHeaders(w, p.Results, p.Summary)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -659,7 +669,7 @@ func FormatAge(sec *int64) string {
 }
 
 func (h *Handler) basePage(r *http.Request, active string) Page {
-	p := Page{Title: h.cfg.Server.Title, Active: active, SelectedBackend: r.URL.Query().Get("backend"), Query: r.URL.Query().Get("q"), Category: r.URL.Query().Get("category"), Backends: h.backendList()}
+	p := Page{Started: requestStart(r), Title: h.cfg.Server.Title, Active: active, SelectedBackend: r.URL.Query().Get("backend"), Query: r.URL.Query().Get("q"), Category: r.URL.Query().Get("category"), Backends: h.backendList()}
 	if p.SelectedBackend == "" {
 		p.SelectedBackend = h.cfg.LookingGlass.DefaultBackend
 	}
