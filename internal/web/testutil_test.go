@@ -45,6 +45,8 @@ type backendSpec struct {
 func testConfig(lg config.LookingGlass, specs ...backendSpec) (config.Config, func()) {
 	lg.DefaultBackend = "all"
 	cfg := config.Config{Server: config.Server{Title: "Test LG", Listen: "127.0.0.1:0", RatePerSecond: 10000, RateBurst: 10000, LiveRatePerSecond: 10000, LiveRateBurst: 10000}, LookingGlass: lg}
+	enabled := true
+	cfg.Features.ExtendedCommunities = &enabled
 	var servers []*httptest.Server
 	for _, s := range specs {
 		srv := httptest.NewServer(s.h)

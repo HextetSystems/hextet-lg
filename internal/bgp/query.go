@@ -15,41 +15,10 @@ type SearchType string
 const (
 	SearchPrefix         SearchType = "prefix"
 	SearchASN            SearchType = "asn"
+	SearchCommunity      SearchType = "community"
+	SearchExtCommunity   SearchType = "ext-community"
 	SearchLargeCommunity SearchType = "large-community"
 )
-
-// Endpoint selects the bgplgd RIB endpoint.
-type Endpoint string
-
-const (
-	EndpointRIB    Endpoint = "rib"
-	EndpointRIBIn  Endpoint = "rib-in"
-	EndpointRIBOut Endpoint = "rib-out"
-)
-
-// Path returns the bgplgd path for the endpoint.
-func (e Endpoint) Path() string {
-	switch e {
-	case EndpointRIBIn:
-		return "/rib/in"
-	case EndpointRIBOut:
-		return "/rib/out"
-	default:
-		return "/rib"
-	}
-}
-
-// Label is the human-readable endpoint name.
-func (e Endpoint) Label() string {
-	switch e {
-	case EndpointRIBIn:
-		return "Adj-RIB-In"
-	case EndpointRIBOut:
-		return "Adj-RIB-Out"
-	default:
-		return "Loc-RIB"
-	}
-}
 
 // Filter keys. They are deliberately identical to bgplgd's /rib parameters so
 // that public application URLs and upstream requests share one vocabulary.
@@ -72,7 +41,7 @@ const (
 	KeyLeaked         = "leaked"
 	KeyAll            = "all"
 	KeyOrShorter      = "or-shorter"
-	KeyEndpoint       = "endpoint" // application-level, selects the bgplgd path
+	KeyEndpoint       = "endpoint" // accepted only as a legacy Loc-RIB alias
 )
 
 // StringFilterKeys and FlagFilterKeys list the supported filters in canonical
@@ -88,8 +57,6 @@ var (
 // zero Query selects nothing. Each filter has at most one value: bgplgd rejects
 // repeated parameters and has no OR semantics.
 type Query struct {
-	Endpoint Endpoint
-
 	Prefix         string
 	AS             string
 	Community      string
@@ -113,6 +80,10 @@ func SimpleQuery(t SearchType, value string) Query {
 		q.Prefix = value
 	case SearchASN:
 		q.AS = value
+	case SearchCommunity:
+		q.Community = value
+	case SearchExtCommunity:
+		q.ExtCommunity = value
 	case SearchLargeCommunity:
 		q.LargeCommunity = value
 	}
@@ -123,13 +94,6 @@ func SimpleQuery(t SearchType, value string) Query {
 type ValidationError struct{ Problems []string }
 
 func (e *ValidationError) Error() string { return strings.Join(e.Problems, "; ") }
-
-func (q Query) endpoint() Endpoint {
-	if q.Endpoint == "" {
-		return EndpointRIB
-	}
-	return q.Endpoint
-}
 
 func (q *Query) stringField(key string) *string {
 	switch key {
@@ -217,11 +181,8 @@ func (q Query) IsEmpty() bool { return len(q.Filters()) == 0 }
 func (q Query) Expensive() bool { return q.Prefix == "" }
 
 // Simple reports whether the query is exactly one of the legacy single
-// filters (prefix, source AS or Large Community) on the default endpoint.
+// filters (prefix, source AS or Large Community).
 func (q Query) Simple() (SearchType, string, bool) {
-	if q.endpoint() != EndpointRIB {
-		return "", "", false
-	}
 	f := q.Filters()
 	if len(f) != 1 {
 		return "", "", false
@@ -242,15 +203,6 @@ func (q Query) Simple() (SearchType, string, bool) {
 func (q Query) Normalize() (Query, error) {
 	var problems []string
 	bad := func(format string, args ...any) { problems = append(problems, fmt.Sprintf(format, args...)) }
-
-	switch q.Endpoint {
-	case "", EndpointRIB:
-		q.Endpoint = EndpointRIB
-	case EndpointRIBIn, EndpointRIBOut:
-	default:
-		bad("unsupported endpoint %q (use rib, rib-in or rib-out)", string(q.Endpoint))
-		q.Endpoint = EndpointRIB
-	}
 
 	for _, key := range StringFilterKeys {
 		p := q.stringField(key)
@@ -288,8 +240,11 @@ func (q Query) Normalize() (Query, error) {
 		}
 		bad("%s requires a prefix", which)
 	}
-	if q.RIB != "" && q.Endpoint != EndpointRIB {
-		bad("rib (routing table name) is only supported on the Loc-RIB endpoint, not %s", q.Endpoint.Label())
+	if q.RIB == "in" || q.RIB == "out" || q.RIB == "local" {
+		bad("selectable RIB endpoints are no longer supported; use Loc-RIB")
+	}
+	if (q.All || q.OrShorter) && q.Prefix != "" && !strings.Contains(q.Prefix, "/") {
+		bad("prefix scope requires a CIDR prefix; bare addresses use longest-prefix match")
 	}
 	if len(problems) > 0 {
 		return q, &ValidationError{Problems: problems}
@@ -317,7 +272,7 @@ func (q Query) Params() (url.Values, error) {
 	return v, nil
 }
 
-// Key identifies the query (endpoint plus filters) for caching.
+// Key identifies the Loc-RIB query and filters for caching.
 func (q Query) Key() string {
 	n, err := q.Normalize()
 	if err != nil {
@@ -327,7 +282,7 @@ func (q Query) Key() string {
 	for _, f := range n.Filters() {
 		v.Set(f.Key, f.Value) // values are canonical; some (descriptions) are case-sensitive
 	}
-	return string(n.Endpoint) + "?" + v.Encode()
+	return "rib?" + v.Encode()
 }
 
 // ParseQuery builds a Query from public URL values. It accepts the legacy
@@ -348,7 +303,10 @@ func ParseQuery(v url.Values) (Query, error) {
 		return strings.TrimSpace(vals[0])
 	}
 
-	q.Endpoint = Endpoint(single(KeyEndpoint))
+	ep := single(KeyEndpoint)
+	if ep != "" && ep != "rib" {
+		problems = append(problems, "selectable RIB endpoints are no longer supported; use Loc-RIB")
+	}
 	for _, key := range StringFilterKeys {
 		*q.stringField(key) = single(key)
 	}
@@ -371,6 +329,10 @@ func ParseQuery(v url.Values) (Query, error) {
 			key = KeyPrefix
 		case SearchASN:
 			key = KeyAS
+		case SearchCommunity:
+			key = KeyCommunity
+		case SearchExtCommunity:
+			key = KeyExtCommunity
 		case SearchLargeCommunity:
 			key = KeyLargeCommunity
 		default:
@@ -385,7 +347,7 @@ func ParseQuery(v url.Values) (Query, error) {
 		}
 	} else if typ != "" {
 		switch SearchType(typ) {
-		case SearchPrefix, SearchASN, SearchLargeCommunity:
+		case SearchPrefix, SearchASN, SearchCommunity, SearchExtCommunity, SearchLargeCommunity:
 		default:
 			problems = append(problems, "unsupported search type")
 		}
@@ -402,13 +364,17 @@ func ParseQuery(v url.Values) (Query, error) {
 // search (so existing bookmarks stay canonical), otherwise named filters in
 // canonical order. Unvalidated queries are emitted as given.
 func (q Query) PublicPairs() [][2]string {
+	if q.Prefix != "" && len(q.Filters()) == 2 && (q.All || q.OrShorter) {
+		flag := KeyAll
+		if q.OrShorter {
+			flag = KeyOrShorter
+		}
+		return [][2]string{{"type", "prefix"}, {"q", q.Prefix}, {flag, "1"}}
+	}
 	if t, val, ok := q.Simple(); ok {
 		return [][2]string{{"type", string(t)}, {"q", val}}
 	}
 	var pairs [][2]string
-	if q.endpoint() != EndpointRIB {
-		pairs = append(pairs, [2]string{KeyEndpoint, string(q.Endpoint)})
-	}
 	for _, f := range q.Filters() {
 		pairs = append(pairs, [2]string{f.Key, f.Value})
 	}

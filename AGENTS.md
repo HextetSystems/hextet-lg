@@ -24,8 +24,8 @@
 
 ## Backend API conventions
 
-- Use `GET /rib` (and `/rib/in`, `/rib/out`) with bgplgd's native filters, combined in one request built with `net/url`: `prefix`, `as` (source-AS lookup), `community`, `ext-community`, `large-community`, `neighbor`, `group`, `af`, `rib`, `ovs`, `avs`, `best`, `error`, `filtered`, `invalid`, `leaked`, `all`, `or-shorter`. `internal/bgp/query.go` is the single place that defines, validates and canonicalizes them.
-- Each filter takes one value; never send repeated parameters or treat them as OR. Reject (never silently drop) invalid values, unknown parameters and combinations bgplgd would silently resolve: `neighbor`/`group`, the route-state flags, and `all`/`or-shorter` are exclusive; `all`/`or-shorter` need `prefix`; `rib` is Loc-RIB only. Keep standard, extended and large communities distinct.
+- Use `GET /rib` with bgplgd's native filters, combined in one request built with `net/url`: `prefix`, `as` (source-AS lookup), `community`, `ext-community`, `large-community`, `neighbor`, `group`, `af`, `rib`, `ovs`, `avs`, `best`, `error`, `filtered`, `invalid`, `leaked`, `all`, `or-shorter`. `internal/bgp/query.go` is the single place that defines, validates and canonicalizes them.
+- Each filter takes one value; never send repeated parameters or treat them as OR. Reject (never silently drop) invalid values, unknown parameters and combinations bgplgd would silently resolve: `neighbor`/`group`, the route-state flags, and `all`/`or-shorter` are exclusive; `all`/`or-shorter` need `prefix`; reserved legacy `rib=in|out|local` values are rejected. Keep standard, extended and large communities distinct.
 - Do not implement generic AS-path matching, customer cones, or download a whole RIB for local filtering.
 - Support IPv4 and IPv6 identically: validate with `net/netip`, never restrict a query to IPv4 implicitly (send `af` only when requested), derive a route's family from its prefix (never from next hop or neighbor), and avoid fixed-width or IPv4-only assumptions.
 - Respect request contexts, configured timeouts, concurrency bounds, and response byte limits.
@@ -55,11 +55,11 @@
 
 ## Milestones
 
-- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) are in scope by explicit request; do not begin other M4 work without an explicit request.
+- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) are in scope by explicit request; do not begin other M4 work without an explicit request.
 
 ## Public URLs
 
-- Preserve bookmarkable GET URLs: `/` uses `type`+`q` (single prefix, source-AS or Large Community search) or the named filters above, plus `endpoint`, `backend`, `view` and `page`; `/neighbors` and `/summary` use `backend`; `/communities` uses `q` and `category`. Backend values are stable IDs or `all`, never addresses. Existing simple `type`/`q` URLs must keep working.
+- Preserve bookmarkable GET URLs: `/` uses `type`+`q` (single prefix, source-AS or Large Community search) or the named filters above, plus `backend`, `view` and `page`; `/neighbors` and `/summary` use `backend`; `/communities` uses `q` and `category`. Backend values are stable IDs or `all`, never addresses. Existing simple `type`/`q` URLs must keep working.
 - Emit canonical URLs: single-filter simple searches in the `type`/`q` form, compound searches with filters in the fixed order of `bgp.StringFilterKeys` then `bgp.FlagFilterKeys`, then `backend`, `view`, `page` (omitted for page 1). Redirect form noise (empty fields) once; for HTMX set `HX-Push-Url`; serve a full page for `HX-History-Restore-Request`.
 - Route views are `table`, `text`, and `detail`; `output=plain` requests text/plain for text views and returns all routes unless `page` is given. Plain responses carry `X-Hextet-LG-Completeness`, `X-Hextet-LG-Routes` and `X-Hextet-LG-Backends`, and use HTTP 400/404/502/503/504 only for invalid, out-of-range or fully failed requests (partial = 200 plus headers and an in-body warning). Links are live queries, not snapshots. Keep ordinary navigation functional without JavaScript and preserve HTMX history.
 
@@ -86,3 +86,5 @@
 - One Dockerfile defines the runtime image; `BINARY_SOURCE` selects `compiled` (source) or `prebuilt` (GoReleaser). Keep it non-root (UID 10001), read-only-root compatible, with the `HEALTHCHECK` and no RUN step that would need emulation to build arm64.
 - `latest` exists only for stable (non-prerelease, non-snapshot) releases. Production and rollback use image digests or preserved immutable local tags, never `hextet-lg:local`. `scripts/deploy.sh` must keep validating before replacing, never touch `configs/`, never prune or delete images, and never act without an explicit subcommand and image.
 - Archives use an explicit file allow-list; runtime configuration (`configs/config.yaml`, `configs/config.docker.yaml`) is never packaged, committed or baked into an image. Pin third-party GitHub Actions to commit SHAs, keep workflow permissions least-privilege, and let only `release.yaml` publish (after `ci.yaml` passes).
+
+- Community feature flags control search only; never strip route attributes or hide the Community Explorer. Searches always use Loc-RIB; reject removed endpoint choices.

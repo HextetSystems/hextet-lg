@@ -42,8 +42,6 @@ func TestClientBuildsCompoundUpstreamRequest(t *testing.T) {
 		"simple large":  {SimpleQuery(SearchLargeCommunity, "395089:0:6"), "/rib", url.Values{"large-community": {"395089:0:6"}}},
 		"compound": {Query{AS: "15169", LargeCommunity: "395089:0:6", Community: "65000:1", ExtCommunity: "rt 65000:1", AF: "ipv6", OVS: "valid", AVS: "unknown", Best: true, RIB: "Loc-RIB", Neighbor: "peer a"}, "/rib",
 			url.Values{"as": {"15169"}, "large-community": {"395089:0:6"}, "community": {"65000:1"}, "ext-community": {"rt 65000:1"}, "af": {"ipv6"}, "ovs": {"valid"}, "avs": {"unknown"}, "best": {"1"}, "rib": {"Loc-RIB"}, "neighbor": {"peer a"}}},
-		"adj-rib-in":  {Query{Endpoint: EndpointRIBIn, Group: "g", Prefix: "10.0.0.0/8", OrShorter: true}, "/rib/in", url.Values{"group": {"g"}, "prefix": {"10.0.0.0/8"}, "or-shorter": {"1"}}},
-		"adj-rib-out": {Query{Endpoint: EndpointRIBOut, Neighbor: "192.0.2.1", Leaked: true}, "/rib/out", url.Values{"neighbor": {"192.0.2.1"}, "leaked": {"1"}}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			var gotPath, gotRaw string
@@ -299,19 +297,6 @@ func TestSearchEmptyBodyMeansRejectedQuery(t *testing.T) {
 	// ...whereas bgpctl's real empty answer is a complete, empty result.
 	c = newTestClient(t, func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "{\n  }\n") }, time.Second, 1<<20)
 	if res, _ = c.Search(context.Background(), Query{AS: "1"}); !res.IsComplete() || len(res.Routes) != 0 {
-		t.Fatalf("%+v", res.Completion)
-	}
-}
-
-func TestSearchAdjRIBNotFoundIsExplained(t *testing.T) {
-	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/rib/in" {
-			t.Errorf("path %s", r.URL.Path)
-		}
-		http.NotFound(w, r)
-	}, time.Second, 1<<20)
-	res, _ := c.Search(context.Background(), Query{Endpoint: EndpointRIBIn, Neighbor: "x"})
-	if res.Status != StatusFailed || !strings.Contains(res.Detail, "/rib/in") || !strings.Contains(res.Detail, "may not support") {
 		t.Fatalf("%+v", res.Completion)
 	}
 }

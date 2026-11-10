@@ -19,7 +19,24 @@ import (
 	"github.com/HextetSystems/hextet-lg/internal/visibility"
 )
 
+type Features struct {
+	Communities         *bool `yaml:"communities"`
+	LargeCommunities    *bool `yaml:"large_communities"`
+	ExtendedCommunities *bool `yaml:"extended_communities"`
+}
+
+func enabled(v *bool, fallback bool) bool {
+	if v == nil {
+		return fallback
+	}
+	return *v
+}
+func (f Features) CommunityEnabled() bool         { return enabled(f.Communities, true) }
+func (f Features) LargeCommunityEnabled() bool    { return enabled(f.LargeCommunities, true) }
+func (f Features) ExtendedCommunityEnabled() bool { return enabled(f.ExtendedCommunities, false) }
+
 type Config struct {
+	Features        Features          `yaml:"features"`
 	RouteVisibility visibility.Config `yaml:"route_visibility"`
 	policy          visibility.Policy
 	policyCompiled  bool

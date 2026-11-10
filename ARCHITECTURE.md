@@ -22,7 +22,7 @@ public GET URL ──► bgp.ParseQuery ──► Query.Normalize (validate, can
         paginate / writeText ─► HTML templates, or streamed text/plain with completion headers
 ```
 
-`internal/bgp/query.go` is the single definition of the supported filters (the same names as bgplgd's `/rib` parameters), their value grammars (standard, extended and large communities stay distinct; IPv4 and IPv6 addresses are validated and canonicalized with `net/netip`) and the rules bgplgd would otherwise resolve silently: exclusive groups, flags that need a prefix, and the Loc-RIB-only `rib` parameter. It also defines the canonical public URL pairs, so parsing and URL generation round-trip.
+`internal/bgp/query.go` is the single definition of the supported filters (the same names as bgplgd's `/rib` parameters), their value grammars (standard, extended and large communities stay distinct; IPv4 and IPv6 addresses are validated and canonicalized with `net/netip`) and the rules bgplgd would otherwise resolve silently: exclusive groups, flags that need a prefix, and reserved legacy RIB endpoint choices. It also defines the canonical public URL pairs, so parsing and URL generation round-trip.
 
 ## Streaming decode and completion
 
@@ -49,7 +49,7 @@ Compose builds a static Go executable in a multistage build (the same Dockerfile
 
 ## Current scope
 
-M2 includes route, neighbor, summary and locally embedded community views, compound server-side route queries, dual-stack IPv4/IPv6 parity, and the large-response, partial-result and pagination remediation. Public GET URLs capture the requested view and are live queries rather than snapshots. Session counts are derived per backend from the returned summary neighbor records; raw JSON preserves version-specific fields. M3.1 adds HTTP, rate, admission, and lifecycle controls. M3.2 adds structured logging, Prometheus metrics, backend health visibility, the cache admission fix and clean disconnect handling (below); M3.3 adds release engineering (below); M4.1 adds configurable route visibility exclusions.
+M2 includes route, neighbor, summary and locally embedded community views, compound server-side route queries, dual-stack IPv4/IPv6 parity, and the large-response, partial-result and pagination remediation. Public GET URLs capture the requested view and are live queries rather than snapshots. Session counts are derived per backend from the returned summary neighbor records; raw JSON preserves version-specific fields. M3.1 adds HTTP, rate, admission, and lifecycle controls. M3.2 adds structured logging, Prometheus metrics, backend health visibility, the cache admission fix and clean disconnect handling (below); M3.3 adds release engineering (below); M4.1 adds configurable route visibility exclusions. M4.2 adds search-only community feature flags, Loc-RIB-only queries and collapsible advanced filters with explicit prefix scopes. Flags never remove route attributes or Community Explorer. Bare addresses retain longest-prefix-match behavior. Visibility applies before retention in every search mode.
 
 ## Public request lifecycle
 

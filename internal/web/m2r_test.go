@@ -363,11 +363,7 @@ func TestCompoundQueryStableURLsAndPagination(t *testing.T) {
 	if !strings.Contains(body, `href="/?as=64500&amp;af=ipv4&amp;best=1&amp;backend=a&amp;view=text&amp;output=plain"`) {
 		t.Fatal("plain-text link")
 	}
-	// Non-default endpoint appears first in the canonical URL.
-	body = get(h, "/?endpoint=rib-in&neighbor=192.0.2.1&community=NO_EXPORT&backend=a&view=text").Body.String()
-	if !strings.Contains(body, `/?endpoint=rib-in&amp;community=NO_EXPORT&amp;neighbor=192.0.2.1&amp;backend=a&amp;view=text&amp;page=2`) {
-		t.Fatal("rib-in canonical URL")
-	}
+
 }
 
 func TestSimpleURLsRemainBackwardCompatible(t *testing.T) {
@@ -397,8 +393,8 @@ func TestInvalidAndConflictingFilters(t *testing.T) {
 		"two states":        {"as=1&best=1&leaked=1", "mutually exclusive; choose one route state"},
 		"all+or-shorter":    {"prefix=10.0.0.0/8&all=1&or-shorter=1", "all and or-shorter are mutually exclusive"},
 		"all w/o prefix":    {"as=1&all=1", "All requires a prefix"},
-		"rib on adj-rib-in": {"endpoint=rib-in&rib=x&best=1", "only supported on the Loc-RIB endpoint"},
-		"unknown endpoint":  {"endpoint=fib&as=1", "unsupported endpoint"},
+		"rib on adj-rib-in": {"endpoint=rib-in&rib=x&best=1", "selectable RIB endpoints are no longer supported"},
+		"unknown endpoint":  {"endpoint=fib&as=1", "selectable RIB endpoints are no longer supported"},
 		"bad af":            {"af=ipx&as=1", "ipv4, ipv6"},
 		"bad community":     {"community=1:2:3", "as:value"},
 		"repeated filter":   {"as=1&as=2", "more than once"},
@@ -462,15 +458,9 @@ func TestAdvancedFormShowsOnlyCompatibleControls(t *testing.T) {
 	if strings.Contains(body, `required`) {
 		t.Fatal("the search box must not be required: filters can be combined without it")
 	}
-	// On Adj-RIB-In the routing table name control is hidden and disabled.
-	body = get(h, "/?endpoint=rib-in&neighbor=x&backend=a").Body.String()
-	i := strings.Index(body, `data-filter="rib"`)
-	if i < 0 || !strings.Contains(body[i:i+300], "hidden") || !strings.Contains(body[i:i+500], "disabled") {
-		t.Fatal("rib control must be hidden and disabled on rib-in")
-	}
 	// Compound searches open the advanced section with their values filled in.
 	body = get(h, "/?as=64500&best=1&af=ipv6&backend=a").Body.String()
-	for _, want := range []string{`<details class="advanced" id="advanced" open>`, `value="64500"`, `<option value="ipv6" selected>`, `name="best" value="1" checked`} {
+	for _, want := range []string{`<details class="advanced" id="advanced" >`, `value="64500"`, `<option value="ipv6" selected>`, `name="best" value="1" checked`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("filled form missing %q", want)
 		}

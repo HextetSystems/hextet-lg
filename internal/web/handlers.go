@@ -57,10 +57,10 @@ func WithLogger(l *slog.Logger) Option { return func(h *Handler) { h.log = l } }
 // Form is the search form state: the simple box plus the advanced filters.
 type Form struct {
 	Type, Q      string
-	Endpoint     string
 	Values       map[string]string
 	Flags        map[string]bool
 	AdvancedOpen bool
+	ActiveCount  int
 }
 
 // Page is the template model for every page.
@@ -75,19 +75,18 @@ type Page struct {
 	Communities                               []Community
 	Categories                                []string
 
-	Form     Form
-	Searched bool
-	Filters  []bgp.Filter
-	Endpoint bgp.Endpoint
-	Upstream string // bgplgd path and query (never the backend address)
-	Summary  Summary
-	Sections []Section
-	Pager    Pager
-	Text     string
-	PlainURL string
-	CacheTTL time.Duration
-	Groups   []FormGroup
-	Options  []struct{ Value, Label string }
+	Form                  Form
+	Searched              bool
+	Filters               []bgp.Filter
+	Upstream              string // bgplgd path and query (never the backend address)
+	Summary               Summary
+	Sections              []Section
+	Pager                 Pager
+	Text                  string
+	PlainURL              string
+	CacheTTL              time.Duration
+	LargeCommunityEnabled bool
+	Groups                []FormGroup
 }
 
 func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
@@ -163,8 +162,6 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 		},
 		"selected": selected,
 		"checked":  checked,
-		"accepts":  func(f Field, e string) bool { return f.accepts(e) },
-		"epAttr":   endpointsAttr,
 		"commas":   commas,
 		"bytes":    bgp.FormatBytes,
 		"seconds":  seconds,
@@ -246,10 +243,7 @@ func (h *Handler) backendList() []config.Backend {
 
 // formFor builds the form state for a parsed query.
 func formFor(q bgp.Query, raw url.Values) Form {
-	f := Form{Endpoint: string(q.Endpoint), Values: map[string]string{}, Flags: map[string]bool{}}
-	if f.Endpoint == "" {
-		f.Endpoint = string(bgp.EndpointRIB)
-	}
+	f := Form{Values: map[string]string{}, Flags: map[string]bool{}}
 	if t, v, ok := q.Simple(); ok {
 		f.Type, f.Q = string(t), v
 	} else {
@@ -260,7 +254,28 @@ func formFor(q bgp.Query, raw url.Values) Form {
 		for _, k := range bgp.FlagFilterKeys {
 			f.Flags[k] = q.Get(k) != ""
 		}
-		f.AdvancedOpen = !q.IsEmpty()
+
+	}
+	if q.Prefix != "" && len(q.Filters()) == 2 && (q.All || q.OrShorter) {
+		f.Type, f.Q = string(bgp.SearchPrefix), q.Prefix
+		f.Values[bgp.KeyPrefix] = ""
+	}
+	if raw.Get("q") != "" {
+		f.Type, f.Q = raw.Get("type"), raw.Get("q")
+		key := map[string]string{"prefix": bgp.KeyPrefix, "asn": bgp.KeyAS, "community": bgp.KeyCommunity, "ext-community": bgp.KeyExtCommunity, "large-community": bgp.KeyLargeCommunity}[f.Type]
+		if key != "" {
+			f.Values[key] = raw.Get(key)
+		}
+	}
+	for _, v := range f.Values {
+		if v != "" {
+			f.ActiveCount++
+		}
+	}
+	for _, v := range f.Flags {
+		if v {
+			f.ActiveCount++
+		}
 	}
 	if f.Type == "" {
 		f.Type = string(bgp.SearchPrefix)
@@ -317,7 +332,7 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 		defer h.work.release()
 	}
 	hx := r.Header.Get("HX-Request") == "true"
-	p := Page{Active: "routes", Title: h.cfg.Server.Title, SelectedBackend: vals.Get("backend"), IsHTMX: hx, View: vals.Get("view"), Groups: formGroups, Options: endpointOptions, Backends: h.backendList(), CacheTTL: h.cfg.LookingGlass.CacheTTL}
+	p := Page{Active: "routes", Title: h.cfg.Server.Title, SelectedBackend: vals.Get("backend"), IsHTMX: hx, View: vals.Get("view"), Groups: h.formGroups(), Backends: h.backendList(), CacheTTL: h.cfg.LookingGlass.CacheTTL, LargeCommunityEnabled: h.cfg.Features.LargeCommunityEnabled()}
 	if p.View == "" {
 		p.View = "table"
 	}
@@ -329,10 +344,6 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 	q, perr := bgp.ParseQuery(vals)
 	p.Form = formFor(q, vals)
 	p.SearchType, p.Query = p.Form.Type, p.Form.Q
-	p.Endpoint = q.Endpoint
-	if p.Endpoint == "" {
-		p.Endpoint = bgp.EndpointRIB
-	}
 	plain := wantsPlain(r, p.View)
 
 	var problems []string
@@ -347,6 +358,14 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 		problems = append(problems, fmt.Sprintf("Unknown parameter: %s is not supported; check the spelling of the filter name.", k))
 	}
 	searching := perr != nil || !q.IsEmpty() || len(problems) > 0
+	for _, f := range []struct {
+		key     string
+		enabled bool
+	}{{bgp.KeyCommunity, h.cfg.Features.CommunityEnabled()}, {bgp.KeyLargeCommunity, h.cfg.Features.LargeCommunityEnabled()}, {bgp.KeyExtCommunity, h.cfg.Features.ExtendedCommunityEnabled()}} {
+		if !f.enabled && (q.Get(f.key) != "" || (vals.Get("type") == f.key && vals.Get("q") != "")) {
+			problems = append(problems, f.key+" search is disabled.")
+		}
+	}
 	if perr != nil {
 		problems = append(problems, problemList(perr)...)
 	} else if searching {
@@ -357,17 +376,19 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 			q = nq
 			p.Form = formFor(q, vals)
 			p.SearchType, p.Query = p.Form.Type, p.Form.Q
-			p.Endpoint = q.Endpoint
 		}
 	}
 	p.Problems = problems
+	if len(problems) > 0 {
+		p.Form.AdvancedOpen = true
+	}
 	p.Searched = searching
 
 	if searching && len(problems) == 0 {
 		// Canonicalize form noise (empty fields) with one redirect; HTMX
 		// requests instead tell the browser which URL to record in history.
 		canonical := publicURL(q, p.SelectedBackend, p.View, page, plain && !hx)
-		if !hx && hasEmptyParam(vals) {
+		if !hx && (hasEmptyParam(vals) || vals.Has(bgp.KeyEndpoint)) {
 			http.Redirect(w, r, canonical, http.StatusSeeOther)
 			return
 		}
@@ -452,7 +473,7 @@ func (h *Handler) fillResults(p *Page, q bgp.Query, results []BackendResult, pag
 	p.Summary = summarize(results)
 	p.Filters = q.Filters()
 	if params, err := q.Params(); err == nil {
-		p.Upstream = q.Endpoint.Path() + "?" + params.Encode()
+		p.Upstream = "/rib?" + params.Encode()
 	}
 	p.Sections, p.Pager = paginate(results, page, h.cfg.LookingGlass.PageSize)
 	p.Pager.setLinks(q, p.SelectedBackend, p.View)
@@ -750,4 +771,21 @@ func (h *Handler) admitWork(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+func (h *Handler) formGroups() []FormGroup {
+	var groups []FormGroup
+	for _, group := range formGroups {
+		g := FormGroup{Title: group.Title, Flags: group.Flags}
+		for _, f := range group.Fields {
+			if f.Key == bgp.KeyCommunity && !h.cfg.Features.CommunityEnabled() || f.Key == bgp.KeyLargeCommunity && !h.cfg.Features.LargeCommunityEnabled() || f.Key == bgp.KeyExtCommunity && !h.cfg.Features.ExtendedCommunityEnabled() {
+				continue
+			}
+			g.Fields = append(g.Fields, f)
+		}
+		if len(g.Fields)+len(g.Flags) > 0 {
+			groups = append(groups, g)
+		}
+	}
+	return groups
 }

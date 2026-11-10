@@ -32,7 +32,7 @@ func TestVisibilityAcrossOutputsAndCache(t *testing.T) {
 	defer h.Close()
 	handler := h.Routes()
 	cases := []string{
-		"type=prefix&q=10.0.0.0%2F8", "type=prefix&q=10.1.0.0%2F16", "prefix=10.1.0.0%2F16&or-shorter=1", "type=prefix&q=fd00%3A%3A%2F8",
+		"type=prefix&q=10.0.0.0%2F8", "type=prefix&q=10.0.0.0%2F8&all=1", "type=prefix&q=10.1.0.0%2F16", "prefix=10.1.0.0%2F16&or-shorter=1", "type=prefix&q=fd00%3A%3A%2F8", "type=prefix&q=fd00%3A%3A%2F8&all=1", "type=prefix&q=fd00%3A%3A%2F8&or-shorter=1",
 		"type=asn&q=64500", "community=64500%3A1", "type=large-community&q=64500%3A1%3A2", "ext-community=rt%2064500%3A1", "as=64500&af=ipv6&best=1",
 	}
 	for _, query := range cases {

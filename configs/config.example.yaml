@@ -129,3 +129,10 @@ backends:
     # Optional per-backend override of looking_glass.query_timeout, e.g. for a
     # distant or slower router:
     # query_timeout: 60s
+
+# Search availability only; route attributes and Community Explorer remain visible.
+# Omitted values default to true, true and false respectively.
+features:
+  communities: true
+  large_communities: true
+  extended_communities: false

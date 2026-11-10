@@ -2,6 +2,12 @@
 
 Hextet LG is a read-only web looking glass for one or more OpenBGPD `bgplgd` HTTP APIs. It is a Go application with Go HTML templates, HTMX form updates, and embedded frontend assets. It has no database or other persistent service.
 
+## Search options
+
+The optional `features.communities` and `features.large_communities` settings default to `true`; `features.extended_communities` defaults to `false`. Set any to `false` to disable that search type. These flags affect searches only: route community attributes remain visible and Community Explorer remains available. Disabled searches are rejected even through direct URLs.
+
+Advanced Filters start collapsed and collapse after a successful search; validation errors open them. The indicator counts active advanced criteria, and expanding the section retains their values. CIDR searches default to exact prefix; select **Include more specifics** (`all=1`) or **Include covering prefixes** (`or-shorter=1`) for other scopes. For example, `/?type=prefix&q=8.8.8.0%2F24&all=1` and `/?type=prefix&q=2001%3Adb8%3A%3A%2F32&or-shorter=1` are shareable links. Bare IPv4 and IPv6 addresses use longest-prefix match and cannot be combined with these scope flags. Route visibility exclusions apply to every mode and enabled community search before results are cached or counted.
+
 ## Route visibility exclusions
 
 Optionally configure `route_visibility.exclude.ipv4` and `ipv6` to hide destination routes across all backends and route outputs. No prefixes are excluded by default. For example:
@@ -33,7 +39,7 @@ Every view is a bookmarkable GET URL. Shared links are **live queries, not snaps
 | `/neighbors`, `/summary` | `backend` |
 | `/communities` | `q`, `category` |
 
-Simple searches keep their original form: `/?type=prefix\|asn\|large-community&q=...&backend=...&view=...`. Compound searches name each filter, for example `/?as=15169&large-community=395089%3A0%3A6&af=ipv6&best=1&backend=all&view=table&page=2`. The application emits parameters in a canonical order (filters in the order of the table below, then `backend`, `view`, `page`); both forms are accepted as input and mixed. A form submission that carries empty fields is redirected once to the canonical URL, and HTMX updates push the canonical URL into browser history. Back/forward and fresh-session opening work without any stored state, and ordinary navigation works without JavaScript.
+Simple searches keep their original form: `/?type=prefix\|asn\|large-community&q=...&backend=...&view=...`. Prefix searches with a scope flag also use `type` and `q`. Other compound searches name each filter, for example `/?as=15169&large-community=395089%3A0%3A6&af=ipv6&best=1&backend=all&view=table&page=2`. The application emits parameters in a canonical order (filters in the order of the table below, then `backend`, `view`, `page`); both forms are accepted as input and mixed. A form submission that carries empty fields is redirected once to the canonical URL, and HTMX updates push the canonical URL into browser history. Back/forward and fresh-session opening work without any stored state, and ordinary navigation works without JavaScript.
 
 Unknown parameters, repeated parameters (there are no OR lists), invalid values and mutually exclusive combinations are rejected with an explanation; filters are never silently dropped. HTML and plaintext responses return HTTP 400; HTMX swaps the error fragment into the page.
 
@@ -55,14 +61,13 @@ All filters are optional and combinable; they are sent to OpenBGPD in a **single
 | `avs` | `valid`, `invalid`, `unknown` |
 | `best`, `error`, `filtered`, `invalid`, `leaked` | route state flags, value `1` |
 | `all`, `or-shorter` | prefix scope flags (need `prefix`) |
-| `endpoint` | `rib` (default), `rib-in`, `rib-out` |
 
 Rules enforced before any request is made, because bgplgd would otherwise silently honour only one of them:
 
 - `neighbor` and `group` are mutually exclusive.
 - At most one of `best`, `error`, `filtered`, `invalid`, `leaked`.
 - `all` and `or-shorter` are mutually exclusive and require `prefix`.
-- `rib` is only available on the Loc-RIB endpoint (`/rib`); `rib-in`/`rib-out` map to `/rib/in` and `/rib/out`, which exist only in newer bgplgd versions (a backend answering 404 is reported as such).
+- All searches use Loc-RIB (`/rib`). Legacy `endpoint=rib-in|rib-out` and `rib=in|out|local` are rejected; `endpoint=rib` is accepted as a legacy alias and removed from canonical links. Other `rib` values select a Loc-RIB routing table.
 - Standard, extended and large communities stay separate filters and separate result columns.
 - A flag value of `0` is treated as unset.
 
@@ -375,7 +380,6 @@ Tests use `httptest` fixtures and do not require a live OpenBGPD process. Depend
 - **OpenBGPD API.** bgplgd offers no pagination, result limit or streaming contract; HTML paging slices a fully decoded answer. Its filters are the ones listed above only; there is no AS-path or customer-cone search, and none is emulated locally.
 - A query that exceeds `query_timeout`, `max_response_bytes` or `max_retained_bytes` returns a clearly identified **partial** result; not every DFZ-sized query can complete within the default 30 seconds.
 - bgplgd cannot distinguish "bgpd returned nothing" from "no matches" when it emits a valid empty document (for example for a neighbor address that does not exist); such answers are reported as complete with zero routes. Rejected queries that produce an *empty body* are reported as failures.
-- `/rib/in` and `/rib/out` (and so `endpoint=rib-in|rib-out`) depend on the bgplgd version; a 404 from the backend is reported as unsupported.
 - Extended-community syntax is validated by OpenBGPD, not by this application.
 - Metrics and log records are in-process only: counters reset on restart, and logs are as durable as the container log driver. There is no tracing and no bundled dashboard or alert rules.
 - Cached results can be up to `cache_ttl` old; disable with `cache_ttl: 0s` for strictly live results.

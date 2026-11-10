@@ -148,7 +148,7 @@ func (c *Client) SearchWithReservation(ctx context.Context, q Query, reserve fun
 		return finish()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpointURL(n.Endpoint.Path(), params), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpointURL("/rib", params), nil)
 	if err != nil {
 		return fail(ReasonBackendError, err), nil
 	}
@@ -161,7 +161,7 @@ func (c *Client) SearchWithReservation(ctx context.Context, q Query, reserve fun
 		res.Status, res.Reason = StatusFailed, ReasonBackendError
 		switch {
 		case resp.StatusCode == http.StatusNotFound:
-			res.Detail = fmt.Sprintf("Backend does not provide %s (HTTP 404); this bgplgd version may not support the endpoint", n.Endpoint.Path())
+			res.Detail = fmt.Sprintf("Backend does not provide %s (HTTP 404); this bgplgd version may not support the endpoint", "/rib")
 		case resp.StatusCode >= 400 && resp.StatusCode < 500:
 			res.Detail = fmt.Sprintf("Backend rejected the query (HTTP %d)", resp.StatusCode)
 		default:

@@ -136,7 +136,7 @@ func (h *Handler) fetch(ctx context.Context, b backendClient, q bgp.Query) Backe
 // after half of its timeout. Queries are never retried.
 func (h *Handler) query(ctx context.Context, b backendClient, q bgp.Query) *BackendResult {
 	res := &BackendResult{ID: b.ID, Name: b.Name, Location: b.Location}
-	op := operationName(q.Endpoint.Path())
+	op := operationName("/rib")
 	reject := func(metric string, reason bgp.Reason, detail string) *BackendResult {
 		res.Result.Completion = bgp.Completion{Status: bgp.StatusFailed, Reason: reason, Detail: detail}
 		h.metrics.queryRejected.WithLabelValues(metric).Inc()

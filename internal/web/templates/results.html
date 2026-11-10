@@ -2,7 +2,7 @@
 {{if .Problems}}<div class="notice error"><strong>Search could not be run</strong><ul>{{range .Problems}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
 {{if .Results}}
 <section class="panel result-group meta">
-  <div class="group-head"><div><span class="eyebrow">QUERY · {{.Endpoint.Label}}</span><h2>{{range .Filters}}<span class="chip"><b>{{.Key}}</b>={{.Value}}</span> {{end}}</h2></div>
+  <div class="group-head"><div><span class="eyebrow">QUERY · Loc-RIB</span><h2>{{range .Filters}}<span class="chip"><b>{{.Key}}</b>={{.Value}}</span> {{end}}</h2></div>
     <span class="actions"><button type="button" data-copy-link>Copy link</button>{{if ne .View "table"}}<a class="btn" href="{{.PlainURL}}">Plain text (all routes)</a>{{end}}</span></div>
   <ul class="status-list">{{range .Results}}<li>{{template "statusline" .}}</li>{{end}}</ul>
   <p class="hint meta-note">Live query sent to each backend as <code>{{.Upstream}}</code>. Shared links re-run the query; results may change{{if .CacheTTL}} and may be served from a cache for up to {{round .CacheTTL}}{{end}}. They are not snapshots.</p>
