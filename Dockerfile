@@ -13,7 +13,7 @@ ARG BINARY_SOURCE=compiled
 
 # Always runs on the build host and cross-compiles, so building the arm64 image
 # never needs QEMU emulation.
-FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS compiled
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS compiled
 ARG TARGETOS=linux
 ARG TARGETARCH
 ARG VERSION=dev
