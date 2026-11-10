@@ -1,7 +1,13 @@
-(function(){try{var c=document.getElementById('copy-link');if(c)c.onclick=function(){if(navigator.clipboard)navigator.clipboard.writeText(location.href)};var b=document.getElementById('theme');if(!b)return;
+(function(){try{var b=document.getElementById('theme');if(!b)return;
 // The visitor's choice is kept in localStorage under "theme" ("light" or "dark") and overrides the configured default in this browser only. Remove the key (or clear site data) to return to the default.
 b.onclick=function(){var d=document.documentElement,cur=d.dataset.theme;if(cur!=='light'&&cur!=='dark'){var def=d.dataset.themeDefault;cur=def==='light'||def==='dark'?def:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}var next=cur==='dark'?'light':'dark';d.dataset.theme=next;try{localStorage.setItem('theme',next)}catch(e){}}}catch(e){}})();
-document.addEventListener("click",e=>{if(e.target.matches("[data-copy]")){let el=document.getElementById(e.target.dataset.copy);if(navigator.clipboard)navigator.clipboard.writeText(el.textContent)}else if(e.target.matches("[data-copy-link]")){if(navigator.clipboard)navigator.clipboard.writeText(location.href)}});
+// Copy buttons confirm in their own label and in the #copy-status live region (when present), then restore the label.
+document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("[data-copy],[data-copy-link]");if(!t)return;
+ const isLink=t.matches("[data-copy-link]"),src=isLink?null:document.getElementById(t.dataset.copy),text=isLink?location.href:src&&src.textContent;
+ const label=t.dataset.label||t.textContent;t.dataset.label=label;const status=document.getElementById('copy-status');
+ const say=(button,live)=>{t.textContent=button;if(status)status.textContent=live;clearTimeout(t._copyTimer);t._copyTimer=setTimeout(()=>{t.textContent=label;if(status)status.textContent=''},1800)};
+ if(typeof text!=='string'||!navigator.clipboard){say('Copy unavailable','Copying is not available in this browser');return}
+ navigator.clipboard.writeText(text).then(()=>say('Copied',isLink?'Link copied':'Text copied'),()=>say('Copy failed','Copy failed'))});
 (function(){var f=document.getElementById('search-form');if(!f)return;
 function sync(){var n=f.elements.neighbor,g=f.elements.group;if(n&&g){g.disabled=n.value.trim()!=='';n.disabled=!g.disabled&&g.value.trim()!==''}}
 f.addEventListener('change',function(e){var t=e.target;if(t.type==='checkbox'&&t.checked){var grp=t.closest('[data-excl]').dataset.excl;f.querySelectorAll('[data-excl="'+grp+'"] input[type=checkbox]').forEach(function(o){if(o!==t)o.checked=false})}sync()});

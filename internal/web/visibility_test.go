@@ -44,6 +44,9 @@ func TestVisibilityAcrossOutputsAndCache(t *testing.T) {
 			rr := get(handler, target, "HX-Request", "true")
 			body := rr.Body.String()
 			if view != "text" {
+				// The searched value itself is echoed in the canonical document title
+				// (and, for compound searches, the query context); nothing else may be.
+				body = titleElement.ReplaceAllString(body, "")
 				body = strings.ReplaceAll(body, "<span class=\"chip\"><b>prefix</b>=10.1.0.0/16</span>", "")
 			}
 			if rr.Code != 200 || strings.Contains(body, "10.1.0.0/16") || strings.Contains(body, "fd12::/16") {

@@ -98,9 +98,12 @@ type Page struct {
 	// filters; Communities is capped at maxExplorerRows.
 	CommunityMatched int
 
-	Form                  Form
-	Searched              bool
-	Filters               []bgp.Filter
+	Form     Form
+	Searched bool
+	Filters  []bgp.Filter
+	// Context holds the filters the search box does not show (advanced
+	// filters and prefix modes); it is rendered with the search controls.
+	Context               []bgp.Filter
 	Upstream              string // bgplgd path and query (never the backend address)
 	Summary               Summary
 	Sections              []Section
@@ -414,7 +417,7 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 		defer h.work.release()
 	}
 	hx := r.Header.Get("HX-Request") == "true"
-	p := Page{Active: "routes", Started: requestStart(r), Title: h.cfg.Server.Title, SelectedBackend: vals.Get("backend"), IsHTMX: hx, View: vals.Get("view"), Groups: h.formGroups(), Backends: h.backendList(), CacheTTL: h.cfg.LookingGlass.CacheTTL, LargeCommunityEnabled: h.cfg.Features.LargeCommunityEnabled()}
+	p := Page{Active: "routes", Started: requestStart(r), SelectedBackend: vals.Get("backend"), IsHTMX: hx, View: vals.Get("view"), Groups: h.formGroups(), Backends: h.backendList(), CacheTTL: h.cfg.LookingGlass.CacheTTL, LargeCommunityEnabled: h.cfg.Features.LargeCommunityEnabled()}
 	if p.View == "" {
 		p.View = "table"
 	}
@@ -465,6 +468,9 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 		p.Form.AdvancedOpen = true
 	}
 	p.Searched = searching
+	if searching && len(problems) == 0 {
+		p.Context = contextFilters(q, p.Form)
+	}
 
 	if searching && len(problems) == 0 {
 		// Canonicalize form noise (empty fields) with one redirect; HTMX
@@ -493,6 +499,11 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 	if len(p.Problems) > 0 {
 		p.Error = strings.Join(p.Problems, " ")
 	}
+	// The title describes the canonical query, or "Invalid search" when the
+	// request was rejected. It is the same for the full page and the HTMX
+	// fragment, which carries it as a <title> element that HTMX applies to the
+	// document.
+	p.Title = h.routeTitle(q, searching, len(p.Problems) > 0, p.SelectedBackend, page)
 
 	if plain || (len(p.Problems) > 0 && (vals.Get("output") == "plain" || strings.Contains(r.Header.Get("Accept"), "text/plain"))) {
 		h.servePlain(w, r, &p, q, page, vals)
@@ -669,9 +680,21 @@ func FormatAge(sec *int64) string {
 }
 
 func (h *Handler) basePage(r *http.Request, active string) Page {
-	p := Page{Started: requestStart(r), Title: h.cfg.Server.Title, Active: active, SelectedBackend: r.URL.Query().Get("backend"), Query: r.URL.Query().Get("q"), Category: r.URL.Query().Get("category"), Backends: h.backendList()}
+	p := Page{Started: requestStart(r), Active: active, SelectedBackend: r.URL.Query().Get("backend"), Query: r.URL.Query().Get("q"), Category: r.URL.Query().Get("category"), Backends: h.backendList()}
 	if p.SelectedBackend == "" {
 		p.SelectedBackend = h.cfg.LookingGlass.DefaultBackend
+	}
+	switch active {
+	case "neighbors":
+		p.Title = h.sessionTitle("BGP Neighbors", p.SelectedBackend)
+	case "summary":
+		p.Title = h.sessionTitle("BGP Summary", p.SelectedBackend)
+	case "rtr":
+		p.Title = h.sessionTitle("RTR Sessions", p.SelectedBackend)
+	case "communities":
+		p.Title = h.pageTitle("Communities")
+	default:
+		p.Title = h.pageTitle("")
 	}
 	return p
 }

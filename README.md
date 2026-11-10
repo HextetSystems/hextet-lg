@@ -56,6 +56,39 @@ Simple searches keep their original form: `/?type=prefix\|asn\|large-community&q
 
 Unknown parameters, repeated parameters (there are no OR lists), invalid values and mutually exclusive combinations are rejected with an explanation; filters are never silently dropped. HTML and plaintext responses return HTTP 400; HTMX swaps the error fragment into the page.
 
+## Route Explorer layout and page titles
+
+The Route Explorer is built to put the route table near the top of the page. From top to bottom:
+
+1. **Search panel.** One row with Backend, Search by, Search value (the widest control), View and **Search**. Each control has a real `<label>` (visually hidden to save height) and the form is a labelled `role="search"` landmark. A second line holds the **Advanced filters** disclosure (collapsed unless a search was rejected; the active-filter count stays visible) and, on the right, the query context, **Copy link** and **Clear search**. On narrow screens the controls wrap (the search value first) and grow to touch-sized heights; desktop controls stay compact.
+2. **Query context.** For an executed search: a `Loc-RIB` tag (searches always use the Loc-RIB), a chip for every filter that the search box does not already show (advanced filters and prefix modes, so the search value is never shown twice), and an **i** help popover with the live-query explanation (the `/rib?…` query sent to each backend, "not snapshots", cache lifetime). This element lives next to the form, outside `#results`, so HTMX responses replace it out of band.
+3. **Backend status.** One line directly above each backend's table: outcome (`COMPLETE`, `PARTIAL`, `FAILED`, always as text), backend name and location, route count, query duration, response size and, if applicable, `cached … ago`; a paged result adds `showing 1–100`. Failures and partial results get a compact notice inside that backend's panel, so a failed backend never hides a successful one and backends are never merged. Long names are truncated visually and stay complete in the tooltip. The line's duration is the *backend query* time; it is not the footer's page-generation time.
+4. **Route table.** Unchanged columns and row content; the table has a screen-reader caption naming its backend.
+5. **Pager.** Shown (above and below the results) only when there is more than one page; a single-page result shows its count in the status line only. Page semantics are unchanged.
+6. **Footer** with the page-generation time.
+
+Copy link confirms in its label ("Copied") and in a polite live region, then restores itself; the navigation bar keeps its own Copy link on pages that have no search panel.
+
+### Browser titles
+
+Every HTML page has a title of the form `<subject> · <site name>`; the site name is the configured `server.title` (default `Hextet Looking Glass`) and is produced by a single function (`Handler.siteName`), so it is the only thing that changes when the application name becomes configurable branding.
+
+| Page | Subject |
+|---|---|
+| `/` without a search | `Route Explorer` |
+| Prefix or address | the normalized value, e.g. `192.0.2.0/24`, `2001:db8::/32` |
+| Source ASN | `AS395611` |
+| Large community | `395089:5:2` |
+| Standard / extended community | `Community 65000:100`, `Extended community rt 65000:1` |
+| Neighbor / peer group | `Neighbor 192.0.2.1`, `Peer group transit` |
+| Several filters | the first primary filter above plus `+N filters`; prefix modes read `(more specifics)` / `(covering prefixes)`; filters without a primary one read `Route search (N filters)` |
+| Rejected request | `Invalid search` (the rejected input is never echoed) |
+| `/neighbors`, `/summary`, `/rtr`, `/communities` | `BGP Neighbors`, `BGP Summary`, `RTR Sessions`, `Communities` |
+
+A single selected backend is appended as `@ <backend name>` (neighbor addresses and route views are backend-specific); `all` adds nothing. Page 2 and later add `(page N)`. Values come from the normalized query, not the raw input; control and invisible characters are removed, long values are cut at 64 characters with `…`, backend names at 32, and the text is HTML-escaped. Backend addresses never appear.
+
+HTMX responses carry the title as a leading `<title>` element, which HTMX 2 applies to `document.title` in the same swap (no extra script). Full pages, including the one served for a history-restore request, have exactly one `<title>` in `<head>`. Back and forward restore each entry's title with its results; **Clear search** is a normal link to `/`, so it loads the default title.
+
 ## Page generation timing
 
 HTML pages end with a muted footer note such as `Generated in 42.7 ms`. It is on by default and is switched off with `features.page_timing: false` (existing configurations need no change). The flag only removes the display: the HTTP duration metric and the access log keep measuring every request.

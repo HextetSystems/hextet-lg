@@ -111,7 +111,7 @@ func TestOmittingAddressFamilyReturnsBothFamilies(t *testing.T) {
 		_, _ = io.WriteString(w, doc)
 	}})
 	body := get(h, "/?as=64500&backend=a&view=table").Body.String()
-	if !strings.Contains(body, "2001:db8:1::/48") || !strings.Contains(body, "10.0.0.0/24") || !strings.Contains(body, "8 routes decoded") {
+	if !strings.Contains(body, "2001:db8:1::/48") || !strings.Contains(body, "10.0.0.0/24") || !strings.Contains(body, " 8 routes ") {
 		t.Fatal("mixed results missing")
 	}
 	if _, has := queries[0]["af"]; has {

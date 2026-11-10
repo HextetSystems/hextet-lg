@@ -9,25 +9,28 @@
 <body>
 <header class="topbar"><a class="brand" href="/" aria-label="Hextet Looking Glass home"><span class="mark">H</span><span>HEX<span class="accent">TET</span><small>NETWORK OPERATIONS</small></span></a>{{template "nav" .}}</header>
 <main>
-  <section class="intro"><p class="eyebrow">ROUTING INTELLIGENCE <span> / </span> NETWORK</p><h1>Route Explorer</h1><p class="lead">Inspect routes announced across Hextet's OpenBGPD backends.</p></section>
-  <section class="panel search-panel"><form id="search-form" method="get" action="/" hx-get="/" hx-target="#results" hx-swap="innerHTML" hx-push-url="true">
+  <div class="page-head"><h1>Route Explorer</h1><p class="lead">Inspect routes announced across Hextet's OpenBGPD backends.</p></div>
+  <form id="search-form" class="panel search-panel" method="get" action="/" role="search" aria-label="Route search" hx-get="/" hx-target="#results" hx-swap="innerHTML" hx-push-url="true">
     <div class="controls">
-      <label>Backend<select name="backend"><option value="all" {{if eq .SelectedBackend "all"}}selected{{end}}>All enabled backends</option>{{range .Backends}}<option value="{{.ID}}" {{if eq $.SelectedBackend .ID}}selected{{end}}>{{.Name}}{{if .Location}} · {{.Location}}{{end}}</option>{{end}}</select></label>
-      <label>Search by<select name="type"><option value="prefix" {{if eq .SearchType "prefix"}}selected{{end}}>IP address or prefix</option><option value="asn" {{if eq .SearchType "asn"}}selected{{end}}>Source ASN</option>{{if .LargeCommunityEnabled}}<option value="large-community" {{if eq .SearchType "large-community"}}selected{{end}}>Large community</option>{{end}}</select></label>
-      <label>View<select name="view"><option value="table" {{if eq .View "table"}}selected{{end}}>HTML table</option><option value="text" {{if eq .View "text"}}selected{{end}}>Plain text summary</option><option value="detail" {{if eq .View "detail"}}selected{{end}}>Plain text detail</option></select></label><label class="query-label">Search value<input name="q" type="search" value="{{.Form.Q}}" placeholder="8.8.8.8, 2001:4860::/32, AS15169, or 395089:0:6"></label>
-      <button type="submit"><span class="button-text">Search routes</span><span class="spinner" aria-hidden="true"></span><span aria-hidden="true">↗</span></button>
+      <label class="c-backend"><span class="sr-only">Backend</span><select name="backend" title="Backend"><option value="all" {{if eq .SelectedBackend "all"}}selected{{end}}>All enabled backends</option>{{range .Backends}}<option value="{{.ID}}" {{if eq $.SelectedBackend .ID}}selected{{end}}>{{.Name}}{{if .Location}} · {{.Location}}{{end}}</option>{{end}}</select></label>
+      <label class="c-type"><span class="sr-only">Search by</span><select name="type" title="Search by"><option value="prefix" {{if eq .SearchType "prefix"}}selected{{end}}>IP address or prefix</option><option value="asn" {{if eq .SearchType "asn"}}selected{{end}}>Source ASN</option>{{if .LargeCommunityEnabled}}<option value="large-community" {{if eq .SearchType "large-community"}}selected{{end}}>Large community</option>{{end}}</select></label>
+      <label class="c-query"><span class="sr-only">Search value</span><input name="q" type="search" value="{{.Form.Q}}" placeholder="8.8.8.8, 2001:4860::/32, AS15169, or 395089:0:6"></label>
+      <label class="c-view"><span class="sr-only">View</span><select name="view" title="View"><option value="table" {{if eq .View "table"}}selected{{end}}>HTML table</option><option value="text" {{if eq .View "text"}}selected{{end}}>Plain text summary</option><option value="detail" {{if eq .View "detail"}}selected{{end}}>Plain text detail</option></select></label>
+      <button type="submit" aria-label="Search routes"><span class="button-text">Search</span><span class="spinner" aria-hidden="true"></span></button>
     </div>
+    <div class="search-tools">{{template "context" .}}<button type="button" data-copy-link>Copy link</button><a href="/">Clear search</a><span id="copy-status" class="sr-only" role="status" aria-live="polite"></span></div>
     <details class="advanced" id="advanced" {{if .Form.AdvancedOpen}}open{{end}}>
       <summary>Advanced filters <small id="advanced-count">{{if .Form.ActiveCount}}({{.Form.ActiveCount}} active){{end}}</small></summary>
-      <p class="hint">OpenBGPD applies every filled filter together in a single request. Each filter takes one value (no OR lists). Leave unused fields empty. Do not fill a filter both here and in the search box above.</p>
+      <div class="adv-body">
+      <p class="hint">OpenBGPD applies every filled filter together in a single request. Each filter takes one value (no OR lists). Leave unused fields empty. Do not fill a filter both here and in the search box above. CIDR searches match the exact prefix by default; choose a prefix mode to include more specifics or covering prefixes. Bare IPv4 and IPv6 addresses use longest-prefix match; without an address-family filter both families are returned. ASN searches use OpenBGPD's source-AS filter.</p>
       {{range .Groups}}<fieldset><legend>{{.Title}}</legend><div class="adv-grid">
         {{range .Fields}}{{$f := .Key}}<label data-filter="{{.Key}}" data-excl="{{.Group}}">{{.Label}}{{if .Options}}<select name="{{.Key}}"><option value="">any</option>{{range .Options}}<option value="{{.}}" {{selected (index $.Form.Values $f) .}}>{{.}}</option>{{end}}</select>{{else}}<input name="{{.Key}}" value="{{index $.Form.Values .Key}}" placeholder="{{.Placeholder}}" autocomplete="off">{{end}}{{if .Hint}}<small>{{.Hint}}</small>{{end}}</label>{{end}}
         {{range .Flags}}<label class="check" data-excl="{{.Group}}"><input type="checkbox" name="{{.Key}}" value="1" {{checked (index $.Form.Flags .Key)}}> {{.Label}}</label>{{end}}
       </div></fieldset>{{end}}
+      </div>
     </details>
-    <a href="/">Clear search</a><p class="hint">CIDR searches match the exact prefix by default; choose a prefix mode in Advanced filters to include more specifics or covering prefixes. Bare IPv4 and IPv6 addresses use longest-prefix match; without an address-family filter both families are returned. ASN searches use OpenBGPD's source-AS filter. Results are live queries; the same URL may return different routes later.</p>
-  </form></section>
-  <section id="results" aria-live="polite">{{template "results.html" .}}</section>
+  </form>
+  <section id="results" aria-live="polite" aria-label="Route results">{{template "results.html" .}}</section>
   <footer><span>Powered by OpenBGPD <span class="dot">·</span> Read-only queries</span><span>Hextet Systems <span class="dot">·</span> AS395089{{template "timing" .}}</span></footer>
 </main>
 {{template "theme" .}}

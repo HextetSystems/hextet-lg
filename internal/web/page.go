@@ -144,3 +144,19 @@ func (p *Pager) setLinks(q bgp.Query, backend, view string) {
 	p.PrevURL = publicURL(q, backend, view, max(1, min(p.Page-1, p.Pages)), false)
 	p.NextURL = publicURL(q, backend, view, p.Page+1, false)
 }
+
+// contextFilters returns the active filters that the search box does not
+// already show, so the query context next to the form never repeats the box.
+func contextFilters(q bgp.Query, f Form) []bgp.Filter {
+	boxKey := ""
+	if f.Q != "" {
+		boxKey = map[string]string{"prefix": bgp.KeyPrefix, "asn": bgp.KeyAS, "community": bgp.KeyCommunity, "ext-community": bgp.KeyExtCommunity, "large-community": bgp.KeyLargeCommunity}[f.Type]
+	}
+	var out []bgp.Filter
+	for _, fl := range q.Filters() {
+		if fl.Key != boxKey {
+			out = append(out, fl)
+		}
+	}
+	return out
+}

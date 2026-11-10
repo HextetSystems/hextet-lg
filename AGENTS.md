@@ -58,7 +58,7 @@
 
 ## Milestones
 
-- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) and M4.5.1 (configurable themes) are in scope by explicit request; M4.6 (next-hop PTR enrichment) and M4.7 (BGP neighbor and RPKI RTR session visibility) and M4.8 (page generation timing) are in scope by explicit request; do not begin M4.8.1 or later without an explicit request.
+- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) and M4.5.1 (configurable themes) are in scope by explicit request; M4.6 (next-hop PTR enrichment) and M4.7 (BGP neighbor and RPKI RTR session visibility) and M4.8 (page generation timing) and M4.8.1 (compact Route Explorer layout and dynamic page titles) are in scope by explicit request; do not begin M4.9 or later without an explicit request.
 
 ## Public URLs
 
@@ -86,6 +86,12 @@
 - `features.page_timing` (default true) only controls the footer display; HTTP metrics and the access log are never conditional on it. The start is `reqInfo.start` set by `protect`; the single read happens in the `pageTiming` template function at footer execution. Do not add a second clock, buffer HTML responses to obtain the figure, or put timing into JSON, CSV, `output=plain`, metrics or headers.
 - HTMX fragments carry the figure as a trailing `hx-swap-oob` element so it is replaced together with the results; keep it top-level, singular and absent from full pages. Omit the indicator (full page) or hide it (fragment) instead of showing an unmeasured value. History restoration may show the original request's figure.
 
+## Route Explorer layout and titles
+
+- Order: compact search panel (one control row, a secondary row with Advanced filters, query context, Copy link, Clear search), one status line per backend directly above its table, the unchanged table, the footer. Do not reintroduce a query-summary panel, per-backend heading cards, repeated counts or long explanatory paragraphs; explanations belong in the help popover or Advanced filters.
+- Controls keep real labels (visually hidden is fine), the `role="search"` form, collapsed Advanced filters (opened only by validation errors) and the active-filter count. The query context (`context` template) is outside `#results`: fragments replace it with `hx-swap-oob`, singular and top-level, like `#page-timing`; it never repeats the search box value. Backend outcomes are text, never colour only; backends are never merged and a failed one never hides another. The pager exists only for more than one page.
+- Every HTML page has exactly one `<title>`, `<subject> · <site>`, built only in `internal/web/title.go` (`siteName` is the single suffix hook for M4.9). Subjects come from the normalized query, never raw input; rejected requests are "Invalid search"; no query strings beyond the bounded canonical primary filter, no backend addresses, advanced filters only counted, user-derived text stripped and bounded. A fragment starts with `<title>` (HTMX applies it); a full page (including history restore) has it only in `<head>`. Add no client-side title code.
+
 ## Public deployment controls
 
 - Preserve bounded request parsing, direct-peer rate limiting, security headers, bounded route-query admission, liveness/readiness, and graceful shutdown. Never trust forwarded identity headers without explicitly configured trusted proxies.
@@ -104,7 +110,7 @@
 - Every UI color is a semantic CSS custom property defined by the generated `/static/theme.css`; `static/app.css` must contain no color literals, gradients or shadows, templates no inline styles (CSP `style-src 'self'`). Add a token to `internal/theme` rather than a literal.
 - Theme configuration accepts only strict `#RRGGBB`, never CSS text; generate CSS only from validated values, once at startup. Derived tokens are deterministic. Contrast shortfalls warn (below 3:1 for primary text fails startup); never silently replace operator colors. See `docs/THEMING.md`.
 - Status colors (route `valid`, RPKI `ovs`, ASPA `avs`, completeness, warnings) are fixed, distinct from the single accent, and always paired with a text label. Do not collapse them into the accent.
-- The visitor's choice lives only in `localStorage` key `theme` (`light`/`dark`); no cookies or server-side preference. `theme-init.js` stays a synchronous script in `<head>` after the stylesheets. Do not begin M4.8.1 without explicit authorization.
+- The visitor's choice lives only in `localStorage` key `theme` (`light`/`dark`); no cookies or server-side preference. `theme-init.js` stays a synchronous script in `<head>` after the stylesheets. Do not begin M4.9 without explicit authorization.
 
 ## Release engineering
 
@@ -117,7 +123,7 @@
 
 ## ASN enrichment
 
-- Optional Team Cymru DNS enrichment is descriptive only and separate from route results and shared flights. DNS work is asynchronous, bounded, and limited to visible ASNs. The cache-only status endpoint must never schedule lookups. Persistence is opt-in and requires a writable cache directory. Do not begin M4.8.1 without explicit authorization.
+- Optional Team Cymru DNS enrichment is descriptive only and separate from route results and shared flights. DNS work is asynchronous, bounded, and limited to visible ASNs. The cache-only status endpoint must never schedule lookups. Persistence is opt-in and requires a writable cache directory. Do not begin M4.9 without explicit authorization.
 
 ## PTR enrichment
 
