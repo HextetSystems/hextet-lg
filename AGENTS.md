@@ -34,7 +34,7 @@
 - Decode `/rib` responses as a stream (`encoding/json.Decoder`); never read the whole body into memory. Only a fully decoded route object may be kept, and a response is `complete` only after the whole document (including its closing delimiters and the absence of trailing data) validated. Interrupted queries keep their complete routes as `partial` with a reason; with no routes they are `failed`. Never present partial or failed results as complete or as "no matching routes", and keep each backend's status separate.
 - bgplgd answers a query bgpctl rejected with HTTP 200 and an empty body; treat that as a failure, not as an empty result.
 - Enforce the response-size limit while reading, bound retained decoded memory separately, and bound expensive (non-prefix) upstream queries across the whole instance. Never retry large interrupted queries.
-- The only cache is the short-lived, memory-bounded in-process result cache (validated complete/partial results only, never failures); do not add Redis, a database, a queue or other persistent storage, and never describe cached results as snapshots.
+- The route result cache is the short-lived, memory-bounded in-process result cache (validated complete/partial results only, never failures); do not add Redis, a database, or persistent route storage, and never describe cached results as snapshots.
 - Apply the immutable startup-compiled route visibility policy before retaining or caching decoded routes; counts describe visible routes, while interruptions preserve their underlying completion status.
 - Keep route `valid`, RPKI `ovs`, and ASPA `avs` distinct.
 - Backend URLs come only from validated YAML configuration, never public request parameters.
@@ -57,7 +57,7 @@
 
 ## Milestones
 
-- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) are in scope by explicit request; do not begin other M4 work (M4.5 and later) without an explicit request.
+- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) are in scope by explicit request; do not begin other M4 work (M4.6 and later) without an explicit request.
 
 ## Public URLs
 
@@ -94,3 +94,7 @@
 - Archives use an explicit file allow-list; runtime configuration (`configs/config.yaml`, `configs/config.docker.yaml`) is never packaged, committed or baked into an image. Pin third-party GitHub Actions to commit SHAs, keep workflow permissions least-privilege, and let only `release.yaml` publish (after `ci.yaml` passes).
 
 - Community feature flags control search only; never strip route attributes or hide the Community Explorer. Searches always use Loc-RIB; reject removed endpoint choices.
+
+## ASN enrichment
+
+- Optional Team Cymru DNS enrichment is descriptive only and separate from route results and shared flights. DNS work is asynchronous, bounded, and limited to visible ASNs. The cache-only status endpoint must never schedule lookups. Persistence is opt-in and requires a writable cache directory. Do not begin M4.6 without explicit authorization.

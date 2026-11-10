@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/HextetSystems/hextet-lg/internal/asn"
 	"github.com/HextetSystems/hextet-lg/internal/bgp"
 	"github.com/HextetSystems/hextet-lg/internal/communities"
 	"github.com/HextetSystems/hextet-lg/internal/config"
@@ -27,9 +28,11 @@ type backendClient struct {
 }
 
 type Handler struct {
-	cfg       config.Config
-	backends  []backendClient
-	templates *template.Template
+	cfg         config.Config
+	asn         *asn.Service
+	asnResolver asn.Resolver
+	backends    []backendClient
+	templates   *template.Template
 	// defs holds the operator-supplied community definitions, compiled once at
 	// startup and immutable afterwards. It is nil when they are disabled.
 	defs   *communities.Set
@@ -56,6 +59,8 @@ type Option func(*Handler)
 // WithLogger sets the logger. Without it the handler logs to stderr using the
 // configured logging.level and logging.format.
 func WithLogger(l *slog.Logger) Option { return func(h *Handler) { h.log = l } }
+
+func WithASNResolver(r asn.Resolver) Option { return func(h *Handler) { h.asnResolver = r } }
 
 // Form is the search form state: the simple box plus the advanced filters.
 type Form struct {
@@ -133,6 +138,10 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 	for i, b := range h.backends {
 		ids[i] = b.ID
 	}
+	if cfg.ASNEnrichment.Enabled {
+		a := cfg.ASNEnrichment
+		h.asn = asn.New(asn.Config{Timeout: a.Timeout, PositiveTTL: a.Cache.PositiveTTL, NegativeTTL: a.Cache.NegativeTTL, MaxConcurrent: a.MaxConcurrent, MaxEntries: a.Cache.MaxEntries, Persist: a.Cache.Persist, Path: a.Cache.Path}, h.asnResolver)
+	}
 	h.metrics = newMetrics(ids)
 	h.budget = &resultBudget{limit: cfg.LookingGlass.MaxTotalRetainedBytes}
 	h.work = &workGate{active: make(chan struct{}, cfg.LookingGlass.MaxConcurrentWork), queue: make(chan struct{}, cfg.LookingGlass.MaxQueuedWork), wait: cfg.LookingGlass.QueueWait, stop: h.stopCh}
@@ -142,6 +151,9 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 	h.limiter = newRateLimiter(cfg.Server)
 	var err error
 	h.templates, err = template.New("root").Funcs(template.FuncMap{
+		"asnTitle":      h.asnTitle,
+		"asnEnabled":    func(s string) bool { return h.asn != nil && parseASN(s) != 0 },
+		"asnPath":       h.pathParts,
 		"neighborURL":   neighborURL,
 		"neighborTitle": neighborTitle,
 		"searchURL":     searchURL,
@@ -242,6 +254,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /neighbors", h.overview)
 	mux.HandleFunc("GET /summary", h.overview)
 	mux.HandleFunc("GET /communities", h.communityPage)
+	mux.HandleFunc("GET /asn-status", h.asnStatus)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("ok\n"))
@@ -441,6 +454,7 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 		h.servePlain(w, r, &p, q, page, vals)
 		return
 	}
+	h.scheduleASNs(&p)
 	name := "index.html"
 	if hx && r.Header.Get("HX-History-Restore-Request") != "true" {
 		name = "results.html"
@@ -681,6 +695,7 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 		p.Results = append(p.Results, result)
 	}
 	sort.Slice(p.Results, func(i, j int) bool { return p.Results[i].Name < p.Results[j].Name })
+	h.scheduleASNs(&p)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.templates.ExecuteTemplate(w, "overview.html", p); err != nil {
 		h.renderFailed(w, r, err)
@@ -786,7 +801,13 @@ func (h *Handler) loadCommunityDefinitions() error {
 func (h *Handler) StopAdmission() { h.stopping.Store(true); h.stopOnce.Do(func() { close(h.stopCh) }) }
 
 // Close cancels shared work and releases cached results.
-func (h *Handler) Close() { h.StopAdmission(); h.cache.Close() }
+func (h *Handler) Close() {
+	h.StopAdmission()
+	h.cache.Close()
+	if h.asn != nil {
+		h.asn.Close()
+	}
+}
 
 // Shutdown is the process shutdown sequence: stop admitting new work, let
 // in-flight requests (including slow writers) finish for at most grace, then

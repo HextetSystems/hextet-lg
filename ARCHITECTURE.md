@@ -103,3 +103,11 @@ git tag vX.Y.Z ─► release.yaml: validate-tag ─► ci.yaml (go, docker, gor
 - **One runtime image design**: the `Dockerfile` defines the runtime stage once; `BINARY_SOURCE` chooses between compiling from source (`compiled`, cross-compiling on the build host so no emulation is needed) and the binary GoReleaser built (`prebuilt`), so a released image contains the archive's executable.
 - **GoReleaser owns the release** (builds, archives, checksums, GitHub Release, image build, tags and manifest push via `dockers_v2`); the workflow only supplies Go, Buildx and the GHCR login, and records the pushed digest. `latest` is templated to exist only for non-prerelease, non-snapshot builds.
 - **Deployment**: `compose.yaml` takes `HEXTET_LG_IMAGE`; `scripts/deploy.sh` wraps native Compose commands to preserve the running image under an immutable local tag, verify health, readiness, metrics isolation and log format, and roll back. It never reads or changes runtime configuration.
+
+ASN enrichment is independent of BGP route retention and shared flights.
+When enabled, page rendering schedules eligible displayed ASNs into a bounded
+worker queue. Team Cymru TXT lookups use the system resolver with a timeout;
+results live in a separate bounded cache. A rate-limited cache-only status
+endpoint supports a finite sequence of browser updates to native titles, and
+cannot initiate DNS lookups. Optional cache persistence uses atomic replacement
+in an explicitly writable directory; it is disabled by default.

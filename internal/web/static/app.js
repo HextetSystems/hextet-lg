@@ -11,3 +11,28 @@ document.body.addEventListener('htmx:beforeSwap',function(e){if(e.detail.xhr.sta
 
 // The form is outside the HTMX results target, so update its disclosure after each response.
 document.body.addEventListener('htmx:afterRequest',function(e){if(e.target.id!=='search-form')return;var d=document.getElementById('advanced');if(e.detail.xhr.status===400){d.open=true;return}if(e.detail.xhr.status>=200&&e.detail.xhr.status<300){d.open=false;var n=0;var canonical=new URL(e.detail.xhr.getResponseHeader('HX-Push-Url')||location.href,location.href);d.querySelectorAll('input,select').forEach(function(x){if(x.name==='prefix'&&canonical.searchParams.get('type')==='prefix'&&canonical.searchParams.has('q'))return;if(!x.disabled&&((x.type==='checkbox'&&x.checked)||(x.type!=='checkbox'&&x.value.trim()!=='')))n++});document.getElementById('advanced-count').textContent=n?'('+n+' active)':''}});
+
+// Status requests only read the server cache; the page request schedules DNS.
+(function(){
+ let generation=0;
+ function update(){
+  const current=++generation;
+  let nodes=Array.from(document.querySelectorAll('[data-asn]')).filter(n=>!n.title && /^[0-9]{1,10}$/.test(n.dataset.asn));
+  nodes.sort((a,b)=>(a.dataset.asnPriority==='0'?0:1)-(b.dataset.asnPriority==='0'?0:1));
+  let ids=Array.from(new Set(nodes.map(n=>n.dataset.asn))).slice(0,256);
+  if(!ids.length)return;
+  let attempts=0;
+  function poll(){
+   if(current!==generation||!nodes.some(n=>n.isConnected))return;
+   fetch('/asn-status?asn='+encodeURIComponent(ids.join(',')),{headers:{'Accept':'application/json'},cache:'no-store'}).then(r=>r.ok?r.json():{}).then(data=>{
+    if(current!==generation)return;
+    nodes.forEach(n=>{if(n.isConnected&&data[n.dataset.asn])n.title=data[n.dataset.asn]});
+    if(++attempts<24 && nodes.some(n=>n.isConnected && !n.title))setTimeout(poll,1500);
+   }).catch(()=>{});
+  }
+  setTimeout(poll,500);
+ }
+ document.addEventListener('DOMContentLoaded',update);
+ document.body.addEventListener('htmx:afterSwap',update);
+ window.addEventListener('pagehide',()=>{generation++});
+})();

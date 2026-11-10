@@ -177,3 +177,20 @@ func TestMetricsLoopbackOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestASNEnrichmentDefaultsAndValidation(t *testing.T) {
+	c, err := Load("../../configs/config.example.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ASNEnrichment.Enabled || c.ASNEnrichment.Provider != "team_cymru" || c.ASNEnrichment.MaxLookupsPerPage != 64 || c.ASNEnrichment.Cache.PositiveTTL != 168*time.Hour {
+		t.Fatalf("unexpected defaults: %+v", c.ASNEnrichment)
+	}
+	for _, mutate := range []func(*ASNEnrichment){func(a *ASNEnrichment) { a.Provider = "other" }, func(a *ASNEnrichment) { a.Timeout = 0 }, func(a *ASNEnrichment) { a.MaxConcurrent = 0 }, func(a *ASNEnrichment) { a.MaxLookupsPerPage = 257 }, func(a *ASNEnrichment) { a.Cache.MaxEntries = 0 }, func(a *ASNEnrichment) { a.Cache.Persist = true; a.Cache.Path = "relative" }} {
+		bad := c
+		mutate(&bad.ASNEnrichment)
+		if bad.Validate() == nil {
+			t.Fatal("invalid ASN settings accepted")
+		}
+	}
+}

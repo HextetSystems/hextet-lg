@@ -398,3 +398,33 @@ Tests use `httptest` fixtures and do not require a live OpenBGPD process. Depend
 - The embedded HTMX runtime is pinned at version 2.0.4. No external browser assets are required.
 - Absent route fields display as unknown or an em dash. RPKI OVS, ASPA AVS, and route validity remain separate values.
 - Live route results depend on the separately managed OpenBGPD API.
+
+### Optional ASN registration descriptions
+
+`asn_enrichment` is disabled by default. When enabled, the server looks up
+`AS<asn>.asn.cymru.com` TXT records using its configured system DNS resolver.
+These are descriptive registration metadata, not proof of route ownership or
+routing authorization. The resolver and Team Cymru can observe queried ASNs;
+consider this DNS dependency and disclosure before enabling it.
+
+The initial route or neighbor page does not wait for DNS. Only visible table
+routes or displayed neighbors are considered, with origins ahead of path
+members. The default budget is 64 newly scheduled ASNs per page, four DNS
+workers, a two-second lookup timeout, and a separate bounded cache of 10,000
+entries (positive TTL seven days, negative TTL 24 hours). Private,
+documentation, and reserved ASNs are skipped. JavaScript makes a bounded
+series of cache-only status requests and adds native tooltips; without it,
+numbers and links remain usable. DNS failures leave the numbers unchanged.
+
+Persistence is optional and off by default. To enable it, set
+`asn_enrichment.cache.persist: true` and mount a writable directory for UID
+10001, for example in the Compose service:
+
+```yaml
+volumes:
+  - /srv/docker/data/hextet-lg/asn-cache:/var/lib/hextet-lg
+```
+
+The cache file is written atomically with restrictive permissions, periodically
+and at shutdown. An unavailable or unwritable cache file does not prevent the
+looking glass from serving requests. The root filesystem remains read-only.
