@@ -1,0 +1,7 @@
+.git
+.github
+*.md
+*.out
+hextet-lg
+configs/config.yaml
+configs/config.docker.yaml

@@ -1,0 +1,33 @@
+{{if .Searched}}
+{{if .Problems}}<div class="notice error"><strong>Search could not be run</strong><ul>{{range .Problems}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
+{{if .Results}}
+<section class="panel result-group meta">
+  <div class="group-head"><div><span class="eyebrow">QUERY · {{.Endpoint.Label}}</span><h2>{{range .Filters}}<span class="chip"><b>{{.Key}}</b>={{.Value}}</span> {{end}}</h2></div>
+    <span class="actions"><button type="button" data-copy-link>Copy link</button>{{if ne .View "table"}}<a class="btn" href="{{.PlainURL}}">Plain text (all routes)</a>{{end}}</span></div>
+  <ul class="status-list">{{range .Results}}<li>{{template "statusline" .}}</li>{{end}}</ul>
+  <p class="hint meta-note">Live query sent to each backend as <code>{{.Upstream}}</code>. Shared links re-run the query; results may change{{if .CacheTTL}} and may be served from a cache for up to {{round .CacheTTL}}{{end}}. They are not snapshots.</p>
+</section>
+{{if .Summary.Incomplete}}<div class="notice warn"><strong>{{if eq .Summary.Status "failed"}}No backend returned usable routes{{else}}Incomplete results{{end}}</strong><p>{{.Summary.Complete}} of {{.Summary.Backends}} backends completed. Routes below are only those fully received; more matching routes may exist. Do not conclude that a prefix is absent from the routing table.</p></div>{{end}}
+{{if .Pager.OutOfRange}}<div class="notice"><strong>Page {{.Pager.Page}} does not exist</strong><p>These results have {{.Pager.Pages}} page(s). <a href="{{.Pager.PrevURL}}">Go to the last page</a>.</p></div>{{end}}
+{{template "pager" .}}
+{{if eq .View "table"}}
+  {{range .Sections}}{{with .Result}}
+  <section class="result-group panel">
+    <div class="group-head"><div><span class="eyebrow">BACKEND</span><h2>{{.Name}} {{if .Location}}<small>· {{.Location}}</small>{{end}}</h2></div><span class="count">{{.Label}} · {{commas (len .Routes)}} ROUTES · {{seconds .Elapsed}}</span></div>
+    {{if .IsFailed}}<div class="notice error"><strong>Query failed — {{.Detail}}</strong><p>No routes were received from this backend. This is not evidence that no matching routes exist.</p></div>
+    {{else}}{{if .IsPartial}}<div class="notice warn"><strong>Partial results — {{.Detail}}</strong><p>{{commas (len .Routes)}} complete routes were decoded before the query was interrupted. Additional matching routes may exist.</p></div>{{end}}
+    {{if eq (len .Routes) 0}}<div class="empty"><span>⌕</span><div><strong>No matching routes</strong><p>This backend completed the query and returned no routes.</p></div></div>{{end}}{{end}}
+  {{end}}
+    {{if .Rows}}<p class="hint range-note">Showing routes {{commas .First}}–{{commas .Last}} of {{commas (len .Result.Routes)}} from this backend.</p>
+    <div class="table-wrap"><table><thead><tr><th>Prefix</th><th>AS path</th><th>Origin ASN</th><th>Next hop</th><th>Neighbor</th><th>Local pref</th><th>MED</th><th>Age</th><th>RPKI</th><th>ASPA</th></tr></thead><tbody>
+      {{range $i, $r := .Rows}}<tr><td><a href="{{searchURL "prefix" $r.Prefix $.SelectedBackend}}"><code class="prefix">{{human $r.Prefix}}</code></a>{{if $r.Best}} <span class="pill good">BEST</span>{{end}}</td><td><code>{{human $r.ASPath}}</code></td><td>{{if $r.OriginASN}}<a href="{{searchURL "asn" $r.OriginASN $.SelectedBackend}}">AS{{$r.OriginASN}}</a>{{else}}—{{end}}</td><td><code>{{human $r.NextHop}}</code></td><td>{{human $r.Neighbor}}</td><td>{{number $r.LocalPref}}</td><td>{{number $r.Metric}}</td><td>{{age $r.LastUpdateSec}}</td><td><span class="pill {{if eq $r.OVS "valid"}}good{{else if eq $r.OVS "invalid"}}bad{{else}}muted{{end}}">{{human $r.OVS}}</span></td><td><span class="pill {{if eq $r.AVS "valid"}}good{{else if eq $r.AVS "invalid"}}bad{{else}}muted{{end}}">{{human $r.AVS}}</span></td></tr>
+      <tr class="details-row"><td colspan="10"><details><summary>Route details</summary><div class="details-grid"><div><span>Address family</span><strong>{{human $r.Family}}</strong></div><div><span>Route validity</span><strong>{{validity $r.Valid}}</strong></div><div><span>Source</span><strong>{{human $r.Source}}</strong></div><div><span>Exit next hop</span><strong>{{human $r.ExitNexthop}}</strong></div><div><span>Metric / weight</span><strong>{{number $r.Metric}} / {{number $r.Weight}}</strong></div><div class="wide"><span>Standard communities</span><strong>{{if $r.Communities}}{{join $r.Communities ", "}}{{else}}—{{end}}</strong></div><div class="wide"><span>Extended communities</span><strong>{{if $r.ExtCommunities}}{{join $r.ExtCommunities ", "}}{{else}}—{{end}}</strong></div><div class="wide"><span>Large communities</span><strong>{{if $r.LargeCommunities}}{{range $j,$c := $r.LargeCommunities}}{{if $j}}, {{end}}<a href="{{searchURL "large-community" $c $.SelectedBackend}}">{{$c}}</a>{{end}}{{else}}—{{end}}</strong></div><div><span>Last update</span><strong>{{human $r.LastUpdate}}</strong></div><div><span>Origin</span><strong>{{human $r.Origin}}</strong></div><div><span>True next hop</span><strong>{{human $r.TrueNexthop}}</strong></div><div class="wide"><span>Raw OpenBGPD JSON</span><pre>{{rawJSON $r.Raw}}</pre></div></div></details></td></tr>{{end}}
+    </tbody></table></div>{{else if and .Result.Routes (not $.Pager.OutOfRange)}}<p class="hint range-note">No routes from this backend on this page ({{commas (len .Result.Routes)}} decoded in total).</p>{{end}}
+  </section>
+  {{end}}
+{{else}}
+<section class="panel result-group"><div class="group-head"><h2>Route output</h2><button type="button" data-copy="route-text">Copy text</button></div><pre id="route-text" class="route-text">{{.Text}}</pre></section>
+{{end}}
+{{template "pager" .}}
+{{end}}
+{{end}}

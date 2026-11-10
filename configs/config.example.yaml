@@ -1,0 +1,119 @@
+# Copy this file to configs/config.yaml and set each backend URL to the
+# OpenBGPD bgplgd HTTP API address reachable from the application.
+#
+#   cp configs/config.example.yaml configs/config.yaml
+#
+# For standalone development set server.listen to port 7000 in config.yaml.
+# Compose uses a separate ignored configs/config.docker.yaml with port 8080;
+# copy the completed local config to that file and change only its listener.
+# Both runtime files are local and ignored by Git. Every looking_glass setting
+# below is optional: omitted settings fall back to the defaults shown here, so
+# configurations written for earlier versions keep working.
+server:
+  listen: "0.0.0.0:8080"
+  title: "Hextet Looking Glass"
+  # Request-target, query string, parameter count and HTTP header limits.
+  max_url_bytes: 8192
+  max_query_bytes: 6144
+  max_query_params: 64
+  max_header_bytes: 32768
+  # Per direct TCP peer token buckets, requests per second and burst size.
+  rate_per_second: 10
+  rate_burst: 60
+  live_rate_per_second: 1
+  live_rate_burst: 8
+  # How long shutdown waits for in-flight requests before closing their
+  # connections. Keep it below the container stop grace period (Compose
+  # stop_grace_period: 45s) or Docker will SIGKILL the process mid-shutdown.
+  shutdown_grace: 40s
+
+# Structured logging to stderr (optional; the values shown are the defaults).
+# level:  debug | info | warn | error
+# format: json (one object per line, for production) | text (for a terminal)
+# Routine requests log at info; health checks, static files and rate-limited
+# requests log at debug; overload (503) and backend failures log at warn.
+# Client cancellations are informational. Query strings, prefixes, backend
+# addresses and headers are never logged.
+logging:
+  level: info
+  format: json
+
+# Prometheus metrics (optional, DISABLED by default). Metrics are served by a
+# separate listener, never by the public server.listen address, and no
+# forwarded header is trusted. Bind to loopback, or to a management address
+# that only your collector can reach. Do not publish this port in Compose.
+# Inside a container, loopback is reachable only from that container: to let a
+# Prometheus container on a shared Docker network scrape it, listen on
+# "0.0.0.0:9090" and keep the port unpublished (see README, "Metrics").
+metrics:
+  enabled: false
+  listen: "127.0.0.1:9090"
+
+looking_glass:
+  # Backend preselected in the interface: "all" or an enabled backend id.
+  default_backend: "all"
+
+  # Time budget for ONE backend query, including reading the whole streamed
+  # response. When it expires, routes that were already fully decoded are kept
+  # and the result is marked PARTIAL (reason: timeout). Backends may override
+  # it with their own query_timeout.
+  query_timeout: 30s
+
+  # Maximum upstream response body per backend query (128 MiB). Enforced while
+  # reading; the response is never buffered whole. Reaching it yields a PARTIAL
+  # result (reason: response_limit). Large Community and source-AS searches in
+  # the default-free zone can legitimately return tens of MiB.
+  max_response_bytes: 134217728
+
+  # Maximum estimated memory retained for the decoded routes of one backend
+  # query (256 MiB). Decoded routes cost more RAM than their JSON size, so this
+  # is bounded separately. Reaching it yields a PARTIAL result (reason:
+  # memory_limit). The aggregate limit below also applies.
+  max_retained_bytes: 268435456
+
+  # Reaching the aggregate limit below yields a PARTIAL result with reason
+  # "capacity". That outcome describes momentary load, so it is never cached.
+
+  # Aggregate estimated retained route bytes, shared across active queries,
+  # cached entries, evicted results still being rendered, and overview
+  # reservations. Cache bytes are a subset of this limit, not an addition.
+  max_total_retained_bytes: 805306368 # 768 MiB
+  # Concurrent backend-driven requests including cached rendering, and waiters.
+  max_concurrent_work: 8
+  max_queued_work: 16
+
+  # Routes per HTML page (and per plaintext page when page= is requested).
+  page_size: 100
+
+  # Simultaneous upstream route queries (including prefix searches, e.g.
+  # source-AS or community searches) for the whole application instance,
+  # across all users and backends. A query that cannot start within half of
+  # queue_wait (or half the backend timeout, whichever is less) is busy.
+  # At most max_queued_queries may be active or waiting for a slot. Not retried.
+  max_concurrent_queries: 2
+  queue_wait: 2s
+  max_queued_queries: 16
+
+  # Backends queried in parallel for a single request.
+  max_concurrent_backends: 4
+
+  # Short-lived in-memory cache of validated route results so that paging
+  # through a large result does not re-run it for every page. Cached results are
+  # temporary, never historical snapshots. 0s disables caching. Failed queries
+  # are never cached, and neither are partial results caused by momentary load
+  # (reasons capacity, busy, canceled). Complete results and partial results
+  # from deterministic limits (memory_limit, response_limit, timeout, ...) are.
+  cache_ttl: 20s
+  # Global memory budget (estimated) for cached results.
+  cache_max_bytes: 268435456
+
+# Backend URLs are configured here exclusively; never pass them in requests.
+backends:
+  - id: local
+    name: "Local OpenBGPD"
+    location: "Winnipeg"
+    url: "http://openbgpd.example.invalid:9099"
+    enabled: true
+    # Optional per-backend override of looking_glass.query_timeout, e.g. for a
+    # distant or slower router:
+    # query_timeout: 60s
