@@ -45,10 +45,10 @@ LABEL org.opencontainers.image.title="hextet-lg" \
       org.opencontainers.image.source="https://github.com/HextetSystems/hextet-lg" \
       org.opencontainers.image.url="https://github.com/HextetSystems/hextet-lg" \
       org.opencontainers.image.documentation="https://github.com/HextetSystems/hextet-lg#readme" \
+      org.opencontainers.image.licenses="BSD-2-Clause" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}" \
       org.opencontainers.image.created="${CREATED}"
-# No license label: the repository does not yet contain a LICENSE file.
 COPY --from=binary --chmod=0555 /out/hextet-lg /hextet-lg
 # A numeric, non-root identity needs no passwd entry (and no RUN step, which
 # would require emulation to build the non-native architecture).

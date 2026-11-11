@@ -65,7 +65,7 @@ GoReleaser's `dockers_v2` drives Buildx to build and push **one multi-architectu
 | `…:latest` | newest **stable** release | moves; never use for production or rollback |
 | `…@sha256:<digest>` | one exact manifest | **immutable; use this in production** |
 
-Labels: `org.opencontainers.image.{title,description,source,url,documentation,version,revision,created}`. There is no `licenses` label because the repository has no LICENSE file yet; add the label with the file, not before.
+Labels: `org.opencontainers.image.{title,description,source,url,documentation,licenses,version,revision,created}`. The `licenses` label is `BSD-2-Clause`.
 
 ## CI/CD
 
