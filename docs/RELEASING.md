@@ -4,7 +4,7 @@ Releases are produced by **GoReleaser Community Edition** (`.goreleaser.yaml`) a
 
 ## Versioning
 
-Versions are [Semantic Versions](https://semver.org) and **Git tags are the only source of the version**: `vMAJOR.MINOR.PATCH` for a stable release, `vMAJOR.MINOR.PATCH-rc.1` (any `-prerelease` suffix) for a prerelease. No file in the repository carries a version number. A `v1.0.0` tag is only a version number; it does not by itself declare the project production-stable.
+Versions are [Semantic Versions](https://semver.org) and **Git tags are the only source of the build version**: `vMAJOR.MINOR.PATCH` for a stable release, `vMAJOR.MINOR.PATCH-rc.1` (any `-prerelease` suffix) for a prerelease. The changelog's release headings do not set the build version. A `v1.0.0` tag is only a version number; it does not by itself declare the project production-stable.
 
 | Build | How | `hextet-lg version` | Image |
 |---|---|---|---|
@@ -27,7 +27,7 @@ The same values appear in the `listening` log record, the `org.opencontainers.im
 
 ## Building
 
-Requirements: Go 1.24 or newer (the version in `go.mod`). Docker with Buildx is needed for images and GoReleaser snapshots; GoReleaser v2 (CI pins `v2.20.0`) for release builds.
+Requirements: Go 1.26 or newer (the version in `go.mod`). Docker with Buildx is needed for images and GoReleaser snapshots; GoReleaser v2 (CI pins `v2.20.0`) for release builds.
 
 ```sh
 go build ./cmd/hextet-lg && ./hextet-lg version   # development binary
@@ -47,6 +47,7 @@ checksums.txt                        # SHA-256, verify with: cd dist && sha256su
 and two single-architecture local images (`…-amd64`, `…-arm64`). Each archive holds `hextet-lg`, `README.md`, `ARCHITECTURE.md`, `docs/RELEASING.md` and `configs/config.example.yaml` (plus a `LICENSE*` file once the repository has one). Runtime configuration is never packaged: the archive file list is an explicit allow-list. `<version>` is GoReleaser's version without the `v` (tag `v0.2.0` → `hextet-lg_0.2.0_linux_amd64.tar.gz`). `dist/` is ignored by Git.
 
 Binaries are static (`CGO_ENABLED=0`, `-trimpath`) for linux/amd64 and linux/arm64. Version, commit and build time are injected by GoReleaser with linker flags (`internal/version`).
+The build date is an input, so builds with different dates are not expected to be byte-identical. Compare checksums from the same published release rather than assuming independently timed builds match.
 
 ## Container image
 
@@ -81,6 +82,14 @@ Labels: `org.opencontainers.image.{title,description,source,url,documentation,ve
 3. `release` (needs both): checkout at the tag, Go, Buildx, `docker/login-action` to `ghcr.io` with the built-in `GITHUB_TOKEN`, `goreleaser release --clean`, then the digest of the pushed manifest list is read back with `docker buildx imagetools inspect`, written to the job summary and attached to the GitHub Release as `image-digests.txt`.
 
 Permissions are `contents: read` for the workflow; only the `release` job gets `contents: write` and `packages: write`. No personal access tokens are used. Pull requests cannot reach the release workflow, and because `release` needs `ci`, a failing test cannot produce a release. Third-party actions are pinned to commit SHAs (version in the trailing comment); update them deliberately (Dependabot is configured for this).
+
+### v1.1.0 operator checklist (unreleased)
+
+- Review the complete staged and unstaged diff and the validation report, then commit the reviewed changes and ensure the release commit is on `main`.
+- Confirm the intended version is `v1.1.0` and review release notes, including `CHANGELOG.md`. The existing `v1.0.0` tag is not an ancestor of this line of development, so generated Git history cannot identify it as the previous release. Create and push the signed tag using the workflow below. The tag triggers CI, the GitHub Release and the configured GHCR image publication; inspect their results, generated notes, checksums and recorded image digest. GoReleaser generates release notes from Git history; it does not automatically use `CHANGELOG.md`.
+- Before deployment, preserve and verify the current immutable image reference and rollback procedure. Deploy the reviewed release by its published digest using the procedure below.
+- Check `/healthz` and `/readyz`, OpenBGPD connectivity and RTR session visibility. Confirm Raw JSON and RTR validator addresses remain hidden unless deliberately enabled.
+- Verify public IPv4 and IPv6 access and TLS and HSTS at the reverse proxy. These are deployment checks, not claims about the public ingress.
 
 ### Cutting a release (maintainer)
 

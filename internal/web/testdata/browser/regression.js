@@ -3,7 +3,7 @@
 //
 //   node regression.js <base-url> [scenario ...]
 //
-// Driven by TestBrowserRegression (m51_browser_test.go), which starts the
+// Driven by TestBrowserRegression (browser_regression_test.go), which starts the
 // instance and the mock backends. Playwright is not a dependency of this
 // repository: point NODE_PATH at a node_modules directory that has it, and
 // install a Chromium (`npx playwright install chromium`). Without Playwright

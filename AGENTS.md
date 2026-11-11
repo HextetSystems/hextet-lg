@@ -104,7 +104,7 @@
 
 ## Security boundaries
 
-- Browser input, backend responses, DNS answers and forwarded headers are untrusted; operator configuration is trusted but strictly validated (README, "Security model and deployment"). Keep the M5.2 regression tests (`m52_test.go`, `m52_browser_test.go`, `testdata/browser/security.js`) passing; do not weaken the CSP (no `unsafe-inline`, `unsafe-eval`, wildcards or external origins) to accommodate a change or a test.
+- Browser input, backend responses, DNS answers and forwarded headers are untrusted; operator configuration is trusted but strictly validated (README, "Security model and deployment"). Keep the M5.2 regression tests (`http_security_test.go`, `browser_security_test.go`, `testdata/browser/security.js`) passing; do not weaken the CSP (no `unsafe-inline`, `unsafe-eval`, wildcards or external origins) to accommodate a change or a test.
 - The backend client never follows redirects (`noRedirect` in `internal/bgp/client.go`) and requests only `GET /rib`, `/neighbors`, `/summary`, `/rtr` on the configured base URL. Do not add a proxy, raw-data or debug endpoint to the public mux.
 - Static files are served by exact embedded name through `staticAsset` (no directory listing; fingerprint ETag; immutable only under the current `?v=`); link them with `assetURL`. Do not reintroduce a bare `http.FileServer`.
 - Unknown and repeated public parameters are rejected (filters in `bgp.ParseQuery`, `backend`/`view`/`output` in the index handler, everything on the other pages in `guard`), never first-wins. Error responses describe the problem without echoing input as markup.

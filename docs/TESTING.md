@@ -9,7 +9,7 @@ go fmt ./... && go vet ./... && go test ./... && go test -race ./...
 node --test internal/web/testdata/*.test.js
 ```
 
-Backends are `httptest` mocks. `internal/web/m51_test.go` adds the M5.1 regression set:
+Backends are `httptest` mocks. `internal/web/openbgpd_integration_test.go` adds the M5.1 regression set:
 
 - **OpenBGPD 9.3 shapes.** `internal/web/testdata/openbgpd93/*.json` have the exact field structure a live OpenBGPD 9.3 bgplgd returned for `/summary`, `/neighbors`, `/rtr` and `/rib`, with every address replaced by a documentation address (RFC 5737/3849), ASNs by private ASNs and descriptions by placeholders. Never commit a real response; sanitize first.
 - **Multi-backend matrix.** Eight mock backends (healthy, connection dropped, HTTP 500, malformed JSON, empty, partial, slow, IPv6) in one request: sections stay separate and attributed, failures never read as "no matching routes", cache keys are backend-aware and failures are never cached, pagination and per-backend RTR states (sessions, none, unsupported, unavailable, malformed) stay distinct.
@@ -17,7 +17,7 @@ Backends are `httptest` mocks. `internal/web/m51_test.go` adds the M5.1 regressi
 - **Privacy and safety.** RTR validator addresses never reach HTML, other pages, the PTR resolver or status endpoints; Raw JSON is absent by default; hostile strings are escaped (including titles and branding); the backend only ever receives GET `/rib`, `/neighbors`, `/summary`, `/rtr`.
 - **History.** A rejected search stays HTTP 400 on a history-restore request and is a full page (see *Browser history* in the README).
 
-`internal/web/m52_test.go`, `internal/bgp/client_test.go`, `internal/site/site_test.go` and `internal/config/m52_test.go` add the M5.2 security and deployment set:
+`internal/web/http_security_test.go`, `internal/bgp/client_test.go`, `internal/site/site_test.go` and `internal/config/security_defaults_test.go` add the M5.2 security and deployment set:
 
 - **HTTP surface.** Security headers and content types on every kind of response (pages, errors, 404/405, static, branding); no debug, metrics or raw-data route; `/static/` by exact name only, with validators and fingerprint-only immutability.
 - **Input.** A table of malformed, oversized, repeated, non-ASCII, control-character and markup inputs is rejected with HTTP 400 in full pages, HTMX fragments and history restores, is never reflected unescaped and never reaches the mock backend; valid free-text values stay one encoded upstream parameter.

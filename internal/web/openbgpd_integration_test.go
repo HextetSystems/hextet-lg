@@ -602,7 +602,7 @@ func TestHistoryRestoreOfRejectedSearchKeepsHTTP400AndServesTheFullPage(t *testi
 	// restored URL. The server contract is unchanged and must stay so: the
 	// status remains 400 (never masked as success) and the body is a complete,
 	// self-sufficient document; app.js falls back to an ordinary navigation of
-	// the URL (testdata/m51-history.test.js, testdata/browser/regression.js).
+	// the URL (testdata/history.test.js, testdata/browser/regression.js).
 	h := m47Handler(t, nil, backendSpec{"a", "Alpha", m51Real(t)})
 	bad := "/?backend=all&type=prefix&q=999.1.1.1&view=table&prefix=&as="
 	for name, hdr := range map[string][]string{

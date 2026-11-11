@@ -5,7 +5,7 @@
 //   HEXTET_LG_SEC_PROXY=<default instance behind a reverse proxy>
 //   node security.js [scenario ...]
 //
-// Driven by TestBrowserSecurity (m52_browser_test.go), which starts the
+// Driven by TestBrowserSecurity (browser_security_test.go), which starts the
 // instances, a hostile mock backend and the proxy. Playwright is resolved
 // through NODE_PATH exactly as for regression.js; it is not a dependency of
 // this repository. Nothing here talks to a real backend.
