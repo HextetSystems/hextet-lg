@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/HextetSystems/hextet-lg/configs"
 	"github.com/HextetSystems/hextet-lg/internal/config"
 	"github.com/HextetSystems/hextet-lg/internal/obs"
 	"github.com/HextetSystems/hextet-lg/internal/version"
@@ -29,7 +30,12 @@ func main() {
 		}
 	}
 	configPath := flag.String("config", "/etc/hextet-lg/config.yaml", "path to YAML configuration")
+	printConfig := flag.Bool("print-config", false, "print the embedded example YAML configuration and exit")
 	flag.Parse()
+	if *printConfig {
+		_, _ = os.Stdout.Write(configs.Example())
+		return
+	}
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		// The logger needs the configuration, so this one line is plain.

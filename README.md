@@ -436,6 +436,8 @@ A 305-second run with 10,000 mock routes per dataset and 24 client workers compl
 cp configs/config.example.yaml configs/config.yaml
 ```
 
+Release binaries also embed this same example. To write it to a file, run `hextet-lg --print-config > config.example.yaml`; this prints the sample and exits without loading runtime configuration.
+
 Then set each backend's `url` to the OpenBGPD `bgplgd` HTTP API address reachable from the application. Backend URLs are configured exclusively through YAML; requests cannot supply or override them. `default_backend` can be `all` or an enabled backend ID. Startup validates the listen address, backend IDs, URLs and every limit. Every `looking_glass` setting is optional and falls back to the defaults above, so configurations written for earlier versions keep working; note that explicit older values (for example `query_timeout: 10s` and `max_response_bytes: 16777216`) are honoured and will turn large searches into partial results; remove those lines to adopt the new defaults. The optional `community_definitions` section (disabled by default) is described under Community definitions above; the optional `theme` section is described under Themes. Use `--config /path/to/config.yaml`; the default is `/etc/hextet-lg/config.yaml`.
 
 **Compatibility.** The v1.0.0 example configuration loads unchanged and comes up with every newer disclosure setting in its safe position (Raw JSON off, RTR validator addresses hidden, metrics off, enrichment off); `server.title` still names the site when `site.name` is absent. Intentional behaviour changes since v1.0.0 that an existing deployment can notice:

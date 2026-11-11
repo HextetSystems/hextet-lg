@@ -44,7 +44,7 @@ hextet-lg_<version>_linux_arm64.tar.gz
 checksums.txt                        # SHA-256, verify with: cd dist && sha256sum -c checksums.txt
 ```
 
-Snapshot mode also asks Buildx to assemble the multi-architecture image locally; it does not push it. Each archive holds `hextet-lg`, `README.md`, `ARCHITECTURE.md`, `docs/RELEASING.md`, the listed operator guides, `configs/config.example.yaml`, community examples and any `LICENSE*` file. Runtime configuration is never packaged: the archive file list is an explicit allow-list. `<version>` is GoReleaser's version without the `v` (`v1.1.0` → `hextet-lg_1.1.0_linux_amd64.tar.gz`). `dist/` is ignored by Git.
+Snapshot mode also asks Buildx to assemble the multi-architecture image locally; it does not push it. Each release executable embeds the example YAML, printable with `hextet-lg --print-config`; archives also include `configs/config.example.yaml` beside the binary, plus `README.md`, `ARCHITECTURE.md`, `docs/RELEASING.md`, the listed operator guides, community examples and any `LICENSE*` file. Runtime configuration is never packaged: the archive file list is an explicit allow-list. `<version>` is GoReleaser's version without the `v` (`v1.1.0` → `hextet-lg_1.1.0_linux_amd64.tar.gz`). `dist/` is ignored by Git.
 
 Binaries are static (`CGO_ENABLED=0`, `-trimpath`) for linux/amd64 and linux/arm64. Version, commit and build time are injected by GoReleaser with linker flags (`internal/version`).
 The build date is an input, so builds with different dates are not expected to be byte-identical. Compare checksums from the same published release rather than assuming independently timed builds match.
