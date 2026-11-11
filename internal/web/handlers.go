@@ -336,7 +336,7 @@ func (h *Handler) Routes() http.Handler {
 	if h.site.Logo != nil {
 		mux.HandleFunc("GET /branding/logo", h.brandingAsset(h.site.Logo))
 	}
-	mux.Handle("GET /static/", http.FileServer(http.FS(assets)))
+	mux.HandleFunc("GET /static/", h.staticAsset(http.FileServer(http.FS(assets))))
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) {
 		if h.stopping.Load() {
 			http.Error(w, "shutting down", http.StatusServiceUnavailable)
@@ -471,6 +471,13 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, k := range unknownParams(vals) {
 		problems = append(problems, fmt.Sprintf("Unknown parameter: %s is not supported; check the spelling of the filter name.", k))
+	}
+	// The filters reject repetition in bgp.ParseQuery; the page controls must
+	// too, or the first value would silently win over the others.
+	for _, k := range []string{"backend", "view", "output"} {
+		if len(vals[k]) > 1 {
+			problems = append(problems, fmt.Sprintf("%s was given more than once.", capitalize(k)))
+		}
 	}
 	searching := perr != nil || !q.IsEmpty() || len(problems) > 0
 	for _, f := range []struct {

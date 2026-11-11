@@ -188,7 +188,9 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font:11px ui-mono
   .search-tools button{height:36px}
   .search-tools a,details.advanced>summary{line-height:36px}
   .search-tools{float:none;justify-content:flex-start}
-  .popover{right:auto;left:0}
+  /* The help text spans the search panel instead of hanging off its icon, so it can never be wider than a phone screen wherever the icon wraps to. */
+  details.help{position:static}
+  .popover{left:10px;right:10px;top:auto;width:auto;margin-top:4px}
   .status{font-size:8px}
   .details-grid{grid-template-columns:repeat(2,1fr)}
   .topbar{height:auto;min-height:56px;flex-wrap:wrap;gap:8px;padding-top:8px;padding-bottom:8px}

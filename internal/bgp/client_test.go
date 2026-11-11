@@ -344,3 +344,38 @@ func TestReasonTransient(t *testing.T) {
 		}
 	}
 }
+
+// A backend that answers with a redirect must never move this application to
+// another address: the request stays on the configured backend, the redirect
+// target is not contacted and its content is not used (M5.2).
+func TestBackendRedirectsAreNeverFollowed(t *testing.T) {
+	var targetHits atomic.Int64
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		targetHits.Add(1)
+		_, _ = io.WriteString(w, `{"rib":[`+genRoute(1, false)+`],"neighbors":[{"remote_as":"64500","remote_addr":"192.0.2.9","state":"Established"}],"rtrs":[{"descr":"redirected","state":"established"}]}`)
+	}))
+	defer target.Close()
+	for _, code := range []int{301, 302, 303, 307, 308} {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, target.URL+r.URL.Path, code)
+		}, time.Second, 1<<20)
+		res, err := c.Search(context.Background(), Query{AS: "1"})
+		if err != nil || res.Status != StatusFailed || res.Reason != ReasonBackendError || len(res.Routes) != 0 || !strings.Contains(res.Detail, "redirect") {
+			t.Errorf("%d rib: %+v %v", code, res.Completion, err)
+		}
+		if strings.Contains(res.Detail, "127.0.0.1") {
+			t.Errorf("%d rib: detail names an address: %q", code, res.Detail)
+		}
+		for _, kind := range []string{"neighbors", "summary"} {
+			if ov, err := c.Overview(context.Background(), kind); err == nil || len(ov.Neighbors) != 0 || ov.Raw != "" {
+				t.Errorf("%d %s: redirect followed: %+v %v", code, kind, ov, err)
+			}
+		}
+		if rtr := c.RTR(context.Background()); rtr.State != RTRUnavailable || len(rtr.Sessions) != 0 {
+			t.Errorf("%d rtr: %+v", code, rtr)
+		}
+	}
+	if n := targetHits.Load(); n != 0 {
+		t.Fatalf("redirect target was contacted %d times", n)
+	}
+}

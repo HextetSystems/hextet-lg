@@ -2,10 +2,11 @@ package site
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/xml"
 	"fmt"
 	"image"
-	_ "image/gif" // register decoders for image.DecodeConfig (header only)
+	_ "image/gif" // register the decoders used by validate
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
@@ -130,9 +131,8 @@ func validate(data []byte, want string) (*Asset, error) {
 		}
 		a.Width, a.Height = w, h
 	case "image/x-icon":
-		// ICONDIR: reserved 0, type 1 (icon), at least one image.
-		if len(data) < 6 || data[0] != 0 || data[1] != 0 || data[2] != 1 || data[3] != 0 || (data[4] == 0 && data[5] == 0) {
-			return nil, fmt.Errorf("content is not an ICO image")
+		if err := validateICO(data); err != nil {
+			return nil, err
 		}
 	default:
 		if got := http.DetectContentType(data); got != want {
@@ -145,11 +145,101 @@ func validate(data []byte, want string) (*Asset, error) {
 		if cfg.Width < 1 || cfg.Height < 1 || cfg.Width > maxPixels || cfg.Height > maxPixels {
 			return nil, fmt.Errorf("image is %dx%d; each side must be 1 to %d pixels", cfg.Width, cfg.Height, maxPixels)
 		}
+		// The header alone says nothing about the rest of the file: decode the
+		// pixels once so a truncated or corrupt image fails startup instead of
+		// being served as a broken logo. The work is bounded by the file-size
+		// and dimension limits checked above, and the decoded image is dropped.
+		if _, _, err := image.Decode(bytes.NewReader(data)); err != nil {
+			return nil, fmt.Errorf("image data is truncated or corrupt: %v", err)
+		}
+		if want == "image/gif" {
+			// image.Decode reads the first frame only; walk the remaining
+			// blocks (without decompressing them) so a cut-off animation is
+			// rejected as well.
+			if err := gifComplete(data); err != nil {
+				return nil, err
+			}
+		}
 		a.Width, a.Height = cfg.Width, cfg.Height
 	}
 	a.Version = fingerprint(data)
 	a.ETag = `"` + a.Version + `"`
 	return a, nil
+}
+
+// validateICO checks the ICONDIR header (reserved 0, type 1, at least one
+// image) and that every directory entry points at data inside the file, which
+// rejects truncated icons. The embedded bitmaps are not decoded.
+func validateICO(data []byte) error {
+	if len(data) < 6 || data[0] != 0 || data[1] != 0 || data[2] != 1 || data[3] != 0 {
+		return fmt.Errorf("content is not an ICO image")
+	}
+	count := int(binary.LittleEndian.Uint16(data[4:6]))
+	if count == 0 {
+		return fmt.Errorf("content is not an ICO image")
+	}
+	if len(data) < 6+16*count {
+		return fmt.Errorf("ICO image is truncated (directory)")
+	}
+	for i := 0; i < count; i++ {
+		e := data[6+16*i:]
+		size, off := uint64(binary.LittleEndian.Uint32(e[8:12])), uint64(binary.LittleEndian.Uint32(e[12:16]))
+		if size == 0 || off < uint64(6+16*count) || off+size > uint64(len(data)) {
+			return fmt.Errorf("ICO image is truncated or corrupt (image %d)", i+1)
+		}
+	}
+	return nil
+}
+
+// gifComplete walks the block structure of a GIF (header, color tables,
+// extensions, image descriptors and their data sub-blocks) up to the trailer.
+// Nothing is decompressed, so the cost is linear in the file size.
+func gifComplete(data []byte) error {
+	bad := fmt.Errorf("image data is truncated or corrupt: incomplete GIF")
+	if len(data) < 13 {
+		return bad
+	}
+	pos := 13
+	if data[10]&0x80 != 0 {
+		pos += 3 << (data[10]&7 + 1) // global color table
+	}
+	subBlocks := func() bool {
+		for pos < len(data) {
+			n := int(data[pos])
+			pos += 1 + n
+			if n == 0 {
+				return pos <= len(data)
+			}
+		}
+		return false
+	}
+	for pos < len(data) {
+		switch data[pos] {
+		case 0x3b: // trailer
+			return nil
+		case 0x21: // extension: label, then sub-blocks
+			pos += 2
+			if !subBlocks() {
+				return bad
+			}
+		case 0x2c: // image descriptor, optional local color table, LZW code size, data
+			if pos+10 > len(data) {
+				return bad
+			}
+			flags := data[pos+9]
+			pos += 10
+			if flags&0x80 != 0 {
+				pos += 3 << (flags&7 + 1)
+			}
+			pos++ // LZW minimum code size
+			if !subBlocks() {
+				return bad
+			}
+		default:
+			return bad
+		}
+	}
+	return bad
 }
 
 // Elements that can run code, load content or embed other documents.
@@ -179,6 +269,12 @@ func validateSVG(data []byte) (int, int, error) {
 			return 0, 0, fmt.Errorf("not well-formed SVG: %v", err)
 		}
 		switch t := tok.(type) {
+		case xml.ProcInst:
+			// Only the XML declaration: <?xml-stylesheet?> names an external
+			// stylesheet, and no other instruction belongs in a logo.
+			if t.Target != "xml" {
+				return 0, 0, fmt.Errorf("SVG processing instruction <?%s?> is not allowed", t.Target)
+			}
 		case xml.Directive:
 			if bytes.Contains(bytes.ToUpper(t), []byte("ENTITY")) {
 				return 0, 0, fmt.Errorf("SVG entity declarations are not allowed")
@@ -217,7 +313,9 @@ func validateSVG(data []byte) (int, int, error) {
 				if an == "href" && !strings.HasPrefix(strings.TrimSpace(at.Value), "#") {
 					return 0, 0, fmt.Errorf("SVG external references are not allowed (href must be a #fragment)")
 				}
-				if unsafeCSS(at.Value) && (an == "style" || an == "fill" || an == "stroke" || an == "filter" || an == "mask" || an == "clip-path") {
+				// Any presentation attribute may carry url(); none of them has a
+				// reason to name something outside the document.
+				if unsafeCSS(at.Value) {
 					return 0, 0, fmt.Errorf("SVG attribute %q references external content", an)
 				}
 			}
@@ -245,6 +343,11 @@ func validateSVG(data []byte) (int, int, error) {
 // same-document #fragment, an @import, or script-ish constructs.
 func unsafeCSS(s string) bool {
 	l := strings.ToLower(s)
+	// A CSS escape (\75rl, @\69mport) would hide a reference from the checks
+	// below, so they look at the unescaped text.
+	if strings.Contains(l, "\\") {
+		l = cssUnescape(l)
+	}
 	if strings.Contains(l, "@import") || strings.Contains(l, "javascript:") || strings.Contains(l, "expression(") {
 		return true
 	}
@@ -258,6 +361,35 @@ func unsafeCSS(s string) bool {
 			return true
 		}
 	}
+}
+
+// cssUnescape resolves CSS backslash escapes: up to six hexadecimal digits
+// (with one optional trailing space) name a code point, any other character
+// stands for itself.
+func cssUnescape(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\\' || i+1 >= len(s) {
+			b.WriteByte(s[i])
+			continue
+		}
+		j := i + 1
+		for j < len(s) && j < i+7 && strings.IndexByte("0123456789abcdefABCDEF", s[j]) >= 0 {
+			j++
+		}
+		if j == i+1 {
+			b.WriteByte(s[j]) // a literal character
+			i = j
+			continue
+		}
+		n, _ := strconv.ParseUint(s[i+1:j], 16, 32)
+		b.WriteString(strings.ToLower(string(rune(n))))
+		if j < len(s) && (s[j] == ' ' || s[j] == '\t' || s[j] == '\n') {
+			j++
+		}
+		i = j - 1
+	}
+	return b.String()
 }
 
 // length parses the numeric part of an SVG length; percentages and unknown

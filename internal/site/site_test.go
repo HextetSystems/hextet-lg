@@ -2,6 +2,7 @@ package site
 
 import (
 	"bytes"
+	"encoding/binary"
 	"image"
 	"image/color"
 	"image/gif"
@@ -231,7 +232,7 @@ func TestLoadsSupportedAssets(t *testing.T) {
 	write(t, dir, "a.JPG", jb.Bytes())
 	write(t, dir, "a.gif", gb.Bytes())
 	write(t, dir, "logo.svg", []byte(goodSVG))
-	write(t, dir, "fav.ico", []byte{0, 0, 1, 0, 1, 0, 16, 16, 0, 0, 1, 0, 32, 0, 0, 0, 0, 0, 22, 0, 0, 0})
+	write(t, dir, "fav.ico", icoBytes(pngBytes(t, 16, 16)))
 	for _, tc := range []struct {
 		file, ct string
 		w, h     int
@@ -253,6 +254,73 @@ func TestLoadsSupportedAssets(t *testing.T) {
 	s, err := compileWith(dir, "", "fav.ico")
 	if err != nil || s.Favicon.ContentType != "image/x-icon" || s.Favicon.Builtin {
 		t.Fatalf("ico favicon: %+v %v", s.Favicon, err)
+	}
+}
+
+// icoBytes wraps one image payload in a single-entry ICO container.
+func icoBytes(payload []byte) []byte {
+	b := []byte{0, 0, 1, 0, 1, 0, 16, 16, 0, 0, 1, 0, 32, 0}
+	b = binary.LittleEndian.AppendUint32(b, uint32(len(payload)))
+	b = binary.LittleEndian.AppendUint32(b, 22)
+	return append(b, payload...)
+}
+
+// A file whose header is valid but whose data is cut off must fail startup:
+// the header alone used to be enough (M5.2).
+func TestRejectsTruncatedAndCorruptImages(t *testing.T) {
+	dir := t.TempDir()
+	var jb, gb, ab bytes.Buffer
+	noise := image.NewRGBA(image.Rect(0, 0, 64, 64))
+	for i := range noise.Pix {
+		noise.Pix[i] = byte(i * 31)
+	}
+	_ = jpeg.Encode(&jb, noise, nil)
+	pal := color.Palette{color.Black, color.White}
+	_ = gif.Encode(&gb, image.NewPaletted(image.Rect(0, 0, 32, 32), pal), nil)
+	frame := func() *image.Paletted { return image.NewPaletted(image.Rect(0, 0, 32, 32), pal) }
+	_ = gif.EncodeAll(&ab, &gif.GIF{Image: []*image.Paletted{frame(), frame(), frame()}, Delay: []int{1, 1, 1}})
+	big := pngBytes(t, 300, 300)
+	corrupt := bytes.Clone(big)
+	corrupt[len(corrupt)/2] ^= 0xff // breaks the IDAT checksum, header intact
+	ico := icoBytes(pngBytes(t, 16, 16))
+
+	// The complete files are accepted, so each rejection below is due to the
+	// damage and nothing else.
+	write(t, dir, "ok.png", big)
+	write(t, dir, "ok.jpg", jb.Bytes())
+	write(t, dir, "ok.gif", gb.Bytes())
+	write(t, dir, "anim.gif", ab.Bytes())
+	write(t, dir, "ok.ico", ico)
+	for _, name := range []string{"ok.png", "ok.jpg", "ok.gif", "anim.gif"} {
+		if _, err := compileWith(dir, name, ""); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	if _, err := compileWith(dir, "", "ok.ico"); err != nil {
+		t.Fatalf("ok.ico: %v", err)
+	}
+
+	write(t, dir, "cut.png", big[:len(big)/2])
+	write(t, dir, "corrupt.png", corrupt)
+	write(t, dir, "cut.jpg", jb.Bytes()[:jb.Len()/2])
+	write(t, dir, "cut.gif", gb.Bytes()[:gb.Len()-8])
+	write(t, dir, "cutanim.gif", ab.Bytes()[:ab.Len()-12]) // first frame intact, last one cut
+	write(t, dir, "notrailer.gif", gb.Bytes()[:gb.Len()-1])
+	for _, name := range []string{"cut.png", "corrupt.png", "cut.jpg", "cut.gif", "cutanim.gif", "notrailer.gif"} {
+		_, err := compileWith(dir, name, "")
+		if err == nil {
+			t.Errorf("%s accepted", name)
+		} else if !strings.Contains(err.Error(), name) {
+			t.Errorf("%s: error does not name the file: %v", name, err)
+		}
+	}
+	write(t, dir, "cut.ico", ico[:len(ico)-10])
+	write(t, dir, "headeronly.ico", []byte{0, 0, 1, 0, 1, 0, 16, 16, 0, 0, 1, 0, 32, 0, 0, 0, 0, 0, 22, 0, 0, 0})
+	write(t, dir, "dircut.ico", []byte{0, 0, 1, 0, 9, 0, 16, 16})
+	for _, name := range []string{"cut.ico", "headeronly.ico", "dircut.ico"} {
+		if _, err := compileWith(dir, "", name); err == nil {
+			t.Errorf("%s accepted", name)
+		}
 	}
 }
 
@@ -321,6 +389,15 @@ func TestSVGValidation(t *testing.T) {
 		"trailing garbage":  `<svg` + ns + `/><`,
 		"expression":        `<svg` + ns + `><rect style="width:expression(alert(1))"/></svg>`,
 		"uppercase handler": `<svg` + ns + `><rect ONCLICK="x()"/></svg>`,
+		// M5.2: references the earlier checks did not see.
+		"xml-stylesheet":      `<?xml-stylesheet href="https://evil.example/x.css" type="text/css"?><svg` + ns + `/>`,
+		"other instruction":   `<svg` + ns + `><?php echo 1 ?></svg>`,
+		"marker url":          `<svg` + ns + `><path marker-start="url(https://evil.example/m.svg#a)"/></svg>`,
+		"cursor url":          `<svg` + ns + `><rect cursor="url(https://evil.example/c.cur), auto"/></svg>`,
+		"escaped url":         `<svg` + ns + `><style>rect{fill:\75rl(https://evil.example/x)}</style></svg>`,
+		"escaped import":      `<svg` + ns + `><style>@\69mport 'https://evil.example/x.css';</style></svg>`,
+		"escaped attr":        `<svg` + ns + `><rect style="fill:u\rl(https://evil.example/x)"/></svg>`,
+		"xlink external href": `<svg` + ns + ` xmlns:xlink="http://www.w3.org/1999/xlink"><use xlink:href="https://evil.example/x.svg#a"/></svg>`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, _, err := validateSVG([]byte(doc)); err == nil {
@@ -330,6 +407,17 @@ func TestSVGValidation(t *testing.T) {
 	}
 	if w, h, err := validateSVG([]byte(goodSVG)); err != nil || w != 120 || h != 40 {
 		t.Fatalf("good svg: %d %d %v", w, h, err)
+	}
+	// Ordinary exported files stay accepted: XML declaration, a DOCTYPE without
+	// entities, same-document references and text containing a backslash.
+	for name, doc := range map[string]string{
+		"declaration and doctype": `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg` + ns + ` viewBox="0 0 10 10"><rect width="10" height="10"/></svg>`,
+		"fragment references":     `<svg` + ns + ` xmlns:xlink="http://www.w3.org/1999/xlink"><defs><clipPath id="c"><rect/></clipPath><path id="p"/></defs><use xlink:href="#p" clip-path="url(#c)" marker-end="url( '#c' )"/></svg>`,
+		"backslash in text":       `<svg` + ns + `><text>C:\logo</text><title>a\b</title></svg>`,
+	} {
+		if _, _, err := validateSVG([]byte(doc)); err != nil {
+			t.Errorf("%s rejected: %v", name, err)
+		}
 	}
 	if w, h, err := validateSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" width="64px" height="16"/>`)); err != nil || w != 64 || h != 16 {
 		t.Fatalf("width/height: %d %d %v", w, h, err)

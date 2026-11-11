@@ -438,6 +438,50 @@ cp configs/config.example.yaml configs/config.yaml
 
 Then set each backend's `url` to the OpenBGPD `bgplgd` HTTP API address reachable from the application. Backend URLs are configured exclusively through YAML; requests cannot supply or override them. `default_backend` can be `all` or an enabled backend ID. Startup validates the listen address, backend IDs, URLs and every limit. Every `looking_glass` setting is optional and falls back to the defaults above, so configurations written for earlier versions keep working; note that explicit older values (for example `query_timeout: 10s` and `max_response_bytes: 16777216`) are honoured and will turn large searches into partial results; remove those lines to adopt the new defaults. The optional `community_definitions` section (disabled by default) is described under Community definitions above; the optional `theme` section is described under Themes. Use `--config /path/to/config.yaml`; the default is `/etc/hextet-lg/config.yaml`.
 
+**Compatibility.** The v1.0.0 example configuration loads unchanged and comes up with every newer disclosure setting in its safe position (Raw JSON off, RTR validator addresses hidden, metrics off, enrichment off); `server.title` still names the site when `site.name` is absent. Intentional behaviour changes since v1.0.0 that an existing deployment can notice:
+
+- A Route Explorer URL that repeats `backend`, `view` or `output` is rejected with HTTP 400 (the first value used to win silently). URLs the application emits never repeat a parameter.
+- A backend that answers with an HTTP redirect is reported as failed; redirects are never followed. Configure the final bgplgd URL.
+- `/static/` no longer lists the embedded files, and unknown names under it are 404.
+- Branding images are decoded completely at startup: a truncated or corrupt PNG, JPEG or GIF, an ICO whose directory points outside the file, or an SVG with an `<?xml-stylesheet?>` instruction, an external `url()` in any attribute or an escaped CSS reference now fails startup with the file name. Files that were complete and self-contained are unaffected.
+- In `output=plain` (and the HTML text views) control characters inside backend values are shown as spaces.
+
+## Security model and deployment
+
+What an anonymous visitor can reach, and what stands between them and everything else. The M5.2 audit that verified this section is described in [docs/TESTING.md](docs/TESTING.md).
+
+| Boundary | What is trusted | What the application does |
+|---|---|---|
+| Browser input | nothing | Query string only (GET/HEAD; other methods are 405). URL, query, parameter-count and header limits are enforced before routing. Every filter is validated and canonicalized by `internal/bgp/query.go` before a backend is contacted; unknown and repeated parameters are rejected with HTTP 400, never ignored. `backend` is matched against configured IDs and can never be an address. Error pages name the problem, not the input; all output goes through `html/template`. |
+| OpenBGPD responses | structure, not content | Decoded as data with size, memory and time bounds; malformed, truncated or oversized answers are *partial* or *failed*, never a crash and never "no routes". All backend text is escaped in HTML; in `text/plain` output control characters are replaced by spaces, so a value cannot forge a status line or carry terminal escape sequences. The backend client **never follows redirects**: a 3xx answer is a failed backend, so a backend cannot point the application at another address. Only `GET /rib`, `/neighbors`, `/summary` and `/rtr` are ever requested. |
+| Operator configuration | trusted, but validated | Strict YAML (unknown keys, wrong types and multiple documents fail startup). Backend URLs must be absolute `http`/`https` without credentials, query or fragment. Operator text is plain text; colors are strict `#RRGGBB`; assets are checked by content. A misspelled privacy setting is an error, not a silent default. |
+| DNS answers (optional enrichment) | nothing | PTR names are restricted to host-name characters; ASN descriptions are escaped. Lookups are asynchronous, limited to values on a rendered page, deduplicated, bounded per page, per service (`max_concurrent`) and by a fixed queue, and negative results are cached. The status endpoints read the cache only and cannot start a lookup. |
+| Branding files | trusted source, validated content | Fixed URLs with no path parameter; see [docs/BRANDING.md](docs/BRANDING.md). |
+| Reverse-proxy headers | nothing | `X-Forwarded-*`, `Forwarded`, `X-Real-IP` and similar are never read. |
+| Logs and metrics | operators only | No query strings, addresses, headers or backend URLs are logged; `/metrics` exists only on the separate management listener. |
+
+**Defaults that withhold information.** `display.raw_json: false` (no Raw JSON control and no embedded payload anywhere; there is no raw-data endpoint), `features.rtr_session_addresses: false` (no validator address, port or local address in HTML, attributes, enrichment requests or logs), `features.extended_communities: false`, `metrics.enabled: false`, DNS enrichment off, no route exclusions (add them under `route_visibility`; they apply before retention, caching, counting, pagination, raw JSON and enrichment).
+
+**Response headers.** Every response carries `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'` (no `unsafe-inline`, no `unsafe-eval`; HTMX runs with `allowEval` and `allowScriptTags` off), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY` and a `Permissions-Policy`. SVG branding assets get a stricter sandboxing policy. The application sets no cookies and has no CORS policy. `Strict-Transport-Security` is deliberately not sent: the application does not know whether TLS is in front of it, so the TLS-terminating proxy must add it.
+
+**Static files.** `/static/<name>` serves the embedded files by exact name; the directory itself and unknown names are 404 (no listing). Each file has a strong `ETag`; the fingerprinted URLs that pages link (`?v=<fingerprint>`) are `Cache-Control: public, max-age=31536000, immutable`, any other URL is `no-cache`. HTML pages and the status endpoints are never marked cacheable.
+
+### Behind a reverse proxy
+
+The application serves plain HTTP and is meant to sit behind a TLS-terminating reverse proxy or tunnel. It needs no proxy-specific configuration because it never builds an absolute URL: redirects, `HX-Push-Url`, pagination, navigation and asset links are all path-only, and *Copy link* copies the browser's own address. Requirements for the proxy:
+
+- Forward the path and query string unchanged, at the site root (serving under a sub-path is not supported). `Host` may be rewritten or preserved; it is not used.
+- Pass `HX-Request` and `HX-History-Restore-Request` request headers and the `HX-Push-Url` response header through unchanged, and do not cache HTML (responses vary on `HX-Request`). Static and branding assets may be cached; they carry validators.
+- Do not strip or replace the security headers; add `Strict-Transport-Security` at the proxy.
+- No WebSocket, SSE or HTTP upgrade is used. Allow at least the backend `query_timeout` (30 s by default) before the first response byte.
+- Probe `/healthz` (liveness) or `/readyz` (503 once shutdown has begun); both are exempt from rate limiting.
+- **Rate limiting:** the limiter keys on the direct TCP peer and ignores forwarded headers, so a visitor cannot evade it by sending `X-Forwarded-For`, and all visitors behind one proxy share that proxy's allowance (by default 1 live request per second with a burst of 8). Rate-limit per client at the proxy, and raise `server.live_rate_*` / `server.rate_*` to the aggregate you want the instance to accept. There is no trusted-proxy setting.
+- Publish only the proxy. Do not expose the application port (or the metrics listener) directly alongside it, which would bypass the proxy's TLS and per-client limits; bind the Compose port to a loopback or internal address where the proxy runs on the same host (for example `127.0.0.1:8080:8080` in a local `compose.override.yaml`).
+
+### IPv4 and IPv6 at the ingress
+
+Public dual-stack access is a property of the ingress: publish A and AAAA records for the proxy and let it listen on both families. The hop from the proxy to the application, and from the application to bgplgd, can be IPv4-only (the default Docker bridge network is); no container needs IPv6 connectivity for IPv6 visitors to be served, and IPv6 routes, prefixes and neighbors are displayed regardless of how the page was reached. `server.listen` accepts either family: `0.0.0.0:8080` listens on all addresses (Go binds a dual-stack socket where the host allows it), `[::1]:8080` or `127.0.0.1:8080` restrict it. The client's address family is neither logged nor used.
+
 ## Docker deployment
 
 For a minimal OpenBGPD collector and `bgplgd` backend deployment, see [docs/OPENBGPD.md](docs/OPENBGPD.md).
@@ -474,6 +518,8 @@ To use community definitions, add `community_definitions: {enabled: true, direct
 
 Size the container using the measurements and limitations above; set a deployment-specific hard memory limit only with sufficient headroom, and lower `max_retained_bytes`/`max_concurrent_queries` on small hosts. To validate a different configuration without touching `configs/config.yaml`, use a Compose override file that replaces the config bind mount.
 
+The container needs no writable storage: the root filesystem is read-only, the configuration, branding and community-definition mounts are read-only, and the only writable paths are the 8 MiB `/tmp` tmpfs from `compose.yaml` (which the application does not use) and Docker's default `/dev/shm`. It runs as UID/GID 10001 with all capabilities dropped and `no-new-privileges`. Mounted files must be readable by that UID (mode `0644`, or owned by 10001); an unreadable or invalid configuration, a missing branding file or a truncated image stops the container at startup with a one-line reason in the log, and with `restart: unless-stopped` Docker will keep retrying, so check `docker compose logs` after a configuration change. `docker compose stop` sends SIGTERM: in-flight requests finish (up to `shutdown_grace`) and the process exits 0. Optional ASN cache persistence is the one feature that needs a writable volume (`asn_enrichment.cache.path`).
+
 OpenBGPD is not bundled. `localhost:9099` inside the Hextet LG container means that container itself. If OpenBGPD runs in a separate Compose project, attach both services to a shared user-defined Docker network and use the backend service name and port, such as `http://openbgpd:9099`, or configure another reachable address. Keep `bgplgd` reachable only from trusted application networks.
 
 ## Releases and versions
@@ -507,14 +553,16 @@ go build ./cmd/hextet-lg
 
 Requires the Go version declared in `go.mod` (1.24 or newer). Release tooling: `make docker` (local image), `goreleaser check` (`make release-check`) and `make snapshot` (local release build into `dist/`, no credentials, nothing published). CI (`.github/workflows/ci.yaml`) runs the checks above plus the image, Compose and GoReleaser snapshot validation on every pull request and push to `main`.
 
-Tests use `httptest` fixtures and do not require a live OpenBGPD process. Dependencies use normal Go module metadata and are not vendored. Opt-in headless-Chromium regression tests and an opt-in, read-only live OpenBGPD compatibility check are described in [docs/TESTING.md](docs/TESTING.md); without their environment variables they are skipped, never reported as passing.
+`node --test internal/web/testdata/*.test.js` runs the client-script unit tests. Tests use `httptest` fixtures and do not require a live OpenBGPD process. Dependencies use normal Go module metadata and are not vendored. Opt-in headless-Chromium regression tests and an opt-in, read-only live OpenBGPD compatibility check are described in [docs/TESTING.md](docs/TESTING.md); without their environment variables they are skipped, never reported as passing.
 
 ## Known limitations
 
 - **OpenBGPD API.** bgplgd offers no pagination, result limit or streaming contract; HTML paging slices a fully decoded answer. Its filters are the ones listed above only; there is no AS-path or customer-cone search, and none is emulated locally.
 - A query that exceeds `query_timeout`, `max_response_bytes` or `max_retained_bytes` returns a clearly identified **partial** result; not every DFZ-sized query can complete within the default 30 seconds.
 - bgplgd cannot distinguish "bgpd returned nothing" from "no matches" when it emits a valid empty document (for example for a neighbor address that does not exist); such answers are reported as complete with zero routes. Rejected queries that produce an *empty body* are reported as failures.
-- Extended-community syntax is validated by OpenBGPD, not by this application.
+- Extended-community syntax is validated by OpenBGPD, not by this application (which only bounds it to 255 printable ASCII characters and sends it as one encoded parameter); the search type is off by default.
+- There is no trusted-proxy setting: behind a reverse proxy the built-in rate limiter sees one peer, so per-client limiting belongs at the proxy (see *Behind a reverse proxy*). Serving under a URL sub-path is not supported. The application does not terminate TLS and does not send `Strict-Transport-Security`.
+- Deployment validation (M5.2) used isolated containers, mock backends, a local TLS-terminating HAProxy and loopback addresses of both families; public dual-stack reachability, a real CDN or tunnel in front, and sustained production load were not exercised.
 - Metrics and log records are in-process only: counters reset on restart, and logs are as durable as the container log driver. There is no tracing and no bundled dashboard or alert rules.
 - The footer's page generation time is server-side only and is read before the footer is written, so it excludes the footer itself, network time and browser rendering; HTMX history restoration displays the original request's figure.
 - Browser Back/Forward re-queries the backends (through the result cache) instead of restoring a snapshot; results are always live queries.

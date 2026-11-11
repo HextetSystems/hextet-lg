@@ -108,9 +108,26 @@ Software identity (Hextet LG: binary, module, metrics, headers, the default foot
 
 A bounded per-peer token bucket precedes handlers; forwarded identity headers are ignored. Request sizes and parameter counts are checked before routing. Response security headers apply globally and embedded scripts are external assets. `/healthz` is independent of backends; `/readyz` becomes unavailable on shutdown. Shutdown (`Handler.Shutdown`, used by `main`) stops admission, drains HTTP requests for a bounded grace period, then closes the remaining connections, which cancels their request contexts and with them every shared backend query nobody still waits for, and drops cache references. Each response write also carries a 15-second deadline, so a client that stops reading releases its renderer slot and result lease on its own. A single periodic worker expires idle limiter buckets and stops on shutdown.
 
+## Security boundaries (M5.2)
+
+```text
+browser ──(GET/HEAD, query string only)──► protect ► guard ► mux ► handlers ──(GET, fixed paths, no redirects)──► bgplgd
+   ▲            untrusted                    limits, rate, headers     validate ► canonicalize        semi-trusted data
+   └── html/template (escaped) · text/plain (control characters neutralized) · path-only URLs
+operator YAML + branding files ──(strict decode, validated once at startup, immutable)──► Handler
+system resolver ◄──(bounded, asynchronous, visible values only)── ASN / PTR services ──► separate caches ──► cache-only status endpoints
+```
+
+- **Inbound.** `guard` bounds the request target, query and parameter count, parses the query strictly, rejects unknown or repeated parameters on the fixed-parameter pages and applies the per-peer rate limit, all before a handler runs; the Route Explorer handler rejects unknown parameters and repeated controls itself, and `bgp.ParseQuery`/`Normalize` validate every filter. Nothing derived from `Host`, `X-Forwarded-*` or any other request header reaches a URL, a log line, a cache key or the limiter key, so the application is indifferent to what proxy is in front of it and cannot be steered by a forged header.
+- **Outbound.** A `bgp.Client` is constructed per configured backend and its URL is fixed for the life of the process. Requests are `GET` to four fixed paths with `net/url`-encoded parameters. `http.Client.CheckRedirect` returns `http.ErrUseLastResponse`, so a 3xx is an ordinary non-2xx failure and no address outside the configuration is ever contacted on a backend's say-so. Context deadlines, the bounded reader and the streaming decoder limit time and memory; a hostile or broken answer becomes `partial`/`failed`.
+- **Rendering.** HTML is produced only by `html/template`. Raw JSON (when `display.raw_json` is on) is element text inside `<pre>`; when off, the `rawJSONOn` guard keeps the templates from emitting the disclosure or the payload at all. RTR rows are built by `rtrRows`, which copies addresses only when `features.rtr_session_addresses` is on, so with the default there is no value for a template, tooltip or enrichment hook to leak. Plaintext values pass through `plainSafe`.
+- **Visibility.** The exclusion policy runs in the stream sink, before a route is counted, reserved, retained, cached, paginated or offered to enrichment; everything downstream only ever sees visible routes.
+- **Static and branding assets.** Both are in-memory byte slices fixed at startup, addressed by a closed set of names (`assetVer` keys; three branding URLs), with content fingerprints as validators. No request path or parameter is ever joined to a file-system path.
+- **Process.** Non-root, no writable storage needed, no temporary files; `Handler.Close` stops the limiter worker, the cache timers and both enrichment services, and a test asserts the goroutine count returns to its baseline.
+
 ## Deployment separation
 
-Standalone development uses the Git-ignored `configs/config.yaml` on port 7000. Compose mounts the separate Git-ignored `configs/config.docker.yaml` read-only and listens on port 8080. Both files contain private operator configuration and are excluded from the build context; the Docker file must be readable by the non-root container. The default 40-second application shutdown grace fits within the Compose 45-second stop grace; a longer configured grace requires a corresponding Compose adjustment.
+Standalone development uses the Git-ignored `configs/config.yaml` on port 7000. Compose mounts the separate Git-ignored `configs/config.docker.yaml` read-only and listens on port 8080. Both files contain private operator configuration and are excluded from the build context; the Docker file must be readable by the non-root container. TLS, per-client rate limiting and public IPv4/IPv6 reachability belong to the reverse proxy in front of the container; the hop to the application may be plain HTTP over IPv4 (README, "Behind a reverse proxy"). The default 40-second application shutdown grace fits within the Compose 45-second stop grace; a longer configured grace requires a corresponding Compose adjustment.
 
 
 ## Observability (M3.2)

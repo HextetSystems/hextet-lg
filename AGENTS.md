@@ -5,7 +5,7 @@
 - Use the standard module `github.com/HextetSystems/hextet-lg`; keep dependencies in `go.mod`/`go.sum` and do not add vendoring or `go.work`.
 - Keep dependencies small. Prefer Go standard library packages for HTTP, URL handling, JSON, templates, and validation.
 - Run `gofmt` on Go files and validate with `go vet ./...` and `go test ./...`.
-- Also run `go test -race ./...` and `node --test internal/web/testdata/*.test.js`. Browser regression (`HEXTET_LG_BROWSER=1`, `NODE_PATH` to a Playwright install) and the live check (`HEXTET_LG_LIVE=1`) are opt-in, read-only and documented in `docs/TESTING.md`; skipped tests are never reported as passing. Never commit real backend responses: sanitize fixtures to documentation addresses and private ASNs.
+- Also run `go test -race ./...` and `node --test internal/web/testdata/*.test.js`. The browser suites (`HEXTET_LG_BROWSER=1`, `NODE_PATH` to a Playwright install kept outside the repository, by default `~/.cache/hextet-lg-browser/node_modules`; `go test ./internal/web -run Browser` runs `TestBrowserRegression` and `TestBrowserSecurity`) and the live check (`HEXTET_LG_LIVE=1`) are opt-in, read-only and documented in `docs/TESTING.md`; never add Playwright or a `node_modules` directory to the repository or hard-code a user path; skipped tests are never reported as passing. Never commit real backend responses: sanitize fixtures to documentation addresses and private ASNs.
 
 ## Project layout
 
@@ -60,7 +60,7 @@
 
 ## Milestones
 
-- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) and M4.5.1 (configurable themes) are in scope by explicit request; M4.6 (next-hop PTR enrichment) and M4.7 (BGP neighbor and RPKI RTR session visibility) and M4.8 (page generation timing) and M4.8.1 (compact Route Explorer layout and dynamic page titles) and M4.8.2 (mobile usability, route presentation and configurable columns) and M4.9 (generic operator branding and deployment identity) and M5.1 (live OpenBGPD integration and regression testing) are in scope by explicit request; do not begin M5.2 or later without an explicit request.
+- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) and M4.5.1 (configurable themes) are in scope by explicit request; M4.6 (next-hop PTR enrichment) and M4.7 (BGP neighbor and RPKI RTR session visibility) and M4.8 (page generation timing) and M4.8.1 (compact Route Explorer layout and dynamic page titles) and M4.8.2 (mobile usability, route presentation and configurable columns) and M4.9 (generic operator branding and deployment identity) and M5.1 (live OpenBGPD integration and regression testing) and M5.2 (security and deployment validation) are in scope by explicit request; do not begin M5.3 or later without an explicit request.
 
 ## Public URLs
 
@@ -101,6 +101,16 @@
 - `display.route_columns` (neighbor false, neighbor_format name|ip|both, rpki true, aspa true) is presentation only: it must not change the backend request, route parsing, cache keys, filters or visibility. A hidden column's value stays in Route details; header, cells and the details colspan must stay aligned for every combination.
 - Neighbor names reuse the M4.6 PTR service (cache, workers, TTLs, dedup, `/ptr-status`); never add a resolver or cache. They share the per-page budget, are scheduled after next hops and only while the Neighbor column is visible with `name`/`both`. The hostname is display text only: links, identity and keys use the backend-supplied address and backend ID.
 - Browser history restores from the server (`historyCacheSize:0`), never from HTMX DOM snapshots, so the form always matches the canonical URL. A history restore that returns non-2xx/3xx (a rejected search, HTTP 400) is handled by the `htmx:historyCacheMissLoadError` reload in `app.js`; never mask the status to make restoring work. Search-form and theme handlers must stay delegated or be rebound on `htmx:historyRestore`.
+
+## Security boundaries
+
+- Browser input, backend responses, DNS answers and forwarded headers are untrusted; operator configuration is trusted but strictly validated (README, "Security model and deployment"). Keep the M5.2 regression tests (`m52_test.go`, `m52_browser_test.go`, `testdata/browser/security.js`) passing; do not weaken the CSP (no `unsafe-inline`, `unsafe-eval`, wildcards or external origins) to accommodate a change or a test.
+- The backend client never follows redirects (`noRedirect` in `internal/bgp/client.go`) and requests only `GET /rib`, `/neighbors`, `/summary`, `/rtr` on the configured base URL. Do not add a proxy, raw-data or debug endpoint to the public mux.
+- Static files are served by exact embedded name through `staticAsset` (no directory listing; fingerprint ETag; immutable only under the current `?v=`); link them with `assetURL`. Do not reintroduce a bare `http.FileServer`.
+- Unknown and repeated public parameters are rejected (filters in `bgp.ParseQuery`, `backend`/`view`/`output` in the index handler, everything on the other pages in `guard`), never first-wins. Error responses describe the problem without echoing input as markup.
+- Backend text in `text/plain` output goes through `plainSafe` (control characters become spaces). HTML output relies on `html/template`; never build markup by concatenation or mark backend, DNS or operator text as trusted HTML.
+- Emit only path-only URLs (redirects, `HX-Push-Url`, links, assets); never derive a URL, scheme or client identity from `Host` or forwarded headers. There is no trusted-proxy setting; do not add one without an explicit request.
+- Branding rasters are fully decoded at startup (`internal/site/asset.go`, standard library only); keep the size and dimension checks ahead of the decode.
 
 ## Public deployment controls
 

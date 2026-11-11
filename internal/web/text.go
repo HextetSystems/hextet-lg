@@ -16,8 +16,34 @@ func val(s string) string {
 	if s == "" {
 		return "—"
 	}
-	return s
+	return plainSafe(s)
 }
+
+// plainSafe keeps backend text on its own line and inert in a terminal:
+// control characters (including newlines and escape) become spaces, so a
+// value can neither forge a status line of the plaintext output nor carry
+// terminal escape sequences. Ordinary values are returned unchanged without
+// allocating.
+func plainSafe(s string) string {
+	clean := true
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; c < 0x20 || c >= 0x7f {
+			clean = false
+			break
+		}
+	}
+	if clean {
+		return s
+	}
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) || r == utf8.RuneError {
+			return ' '
+		}
+		return r
+	}, s)
+}
+
+func plainJoin(v []string) string { return plainSafe(strings.Join(v, " ")) }
 
 func num(n *int64) string {
 	if n == nil {
@@ -134,13 +160,13 @@ func writeDetail(w io.Writer, r bgp.Route) {
 		fmt.Fprintln(w, "  Selected: best")
 	}
 	if len(r.Communities) > 0 {
-		fmt.Fprintf(w, "  Communities: %s\n", strings.Join(r.Communities, " "))
+		fmt.Fprintf(w, "  Communities: %s\n", plainJoin(r.Communities))
 	}
 	if len(r.ExtCommunities) > 0 {
-		fmt.Fprintf(w, "  Extended communities: %s\n", strings.Join(r.ExtCommunities, " "))
+		fmt.Fprintf(w, "  Extended communities: %s\n", plainJoin(r.ExtCommunities))
 	}
 	if len(r.LargeCommunities) > 0 {
-		fmt.Fprintf(w, "  Large communities: %s\n", strings.Join(r.LargeCommunities, " "))
+		fmt.Fprintf(w, "  Large communities: %s\n", plainJoin(r.LargeCommunities))
 	}
 	fmt.Fprintln(w)
 }

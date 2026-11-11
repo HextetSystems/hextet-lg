@@ -102,8 +102,15 @@ func NewClient(base string, timeout time.Duration, maxBytes int64) (*Client, err
 	}
 	// No http.Client.Timeout: the per-query context deadline covers headers and
 	// the streamed body, and lets us tell a timeout from other failures.
-	return &Client{BaseURL: u, HTTP: &http.Client{}, Timeout: timeout, MaxResponseBytes: maxBytes, MaxRetainedBytes: DefaultMaxRetainedBytes}, nil
+	return &Client{BaseURL: u, HTTP: &http.Client{CheckRedirect: noRedirect}, Timeout: timeout, MaxResponseBytes: maxBytes, MaxRetainedBytes: DefaultMaxRetainedBytes}, nil
 }
+
+// noRedirect keeps every request on the configured backend. bgplgd never
+// redirects, and following one would let a backend (or anything answering in
+// its place) point this application at an address the operator did not
+// configure and have that response rendered. The 3xx answer is returned as it
+// is and handled like any other non-2xx status.
+func noRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 func (c *Client) endpointURL(path string, params url.Values) string {
 	u := *c.BaseURL
@@ -164,6 +171,8 @@ func (c *Client) SearchWithReservation(ctx context.Context, q Query, reserve fun
 		switch {
 		case resp.StatusCode == http.StatusNotFound:
 			res.Detail = fmt.Sprintf("Backend does not provide %s (HTTP 404); this bgplgd version may not support the endpoint", "/rib")
+		case resp.StatusCode >= 300 && resp.StatusCode < 400:
+			res.Detail = fmt.Sprintf("Backend answered with a redirect (HTTP %d), which is never followed; check the configured backend URL", resp.StatusCode)
 		case resp.StatusCode >= 400 && resp.StatusCode < 500:
 			res.Detail = fmt.Sprintf("Backend rejected the query (HTTP %d)", resp.StatusCode)
 		default:

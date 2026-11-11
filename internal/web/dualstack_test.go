@@ -214,7 +214,7 @@ func TestMixedFamilyPaginationAndPartialResults(t *testing.T) {
 	if !strings.Contains(p1, "2001:db8:1::/48") || !strings.Contains(p1, "10.0.0.0/24") {
 		t.Fatal("page 1 lacks one family")
 	}
-	plain := get(h, base+"&view=text&output=plain")
+	plain := get(h, strings.Replace(base, "view=table", "view=text", 1)+"&output=plain")
 	if plain.Header().Get("X-Hextet-LG-Completeness") != "partial" || strings.Count(plain.Body.String(), "2001:db8:") < 150 {
 		t.Fatalf("plain partial: %s", plain.Header().Get("X-Hextet-LG-Backends"))
 	}
