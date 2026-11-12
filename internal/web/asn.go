@@ -107,6 +107,10 @@ func (h *Handler) scheduleASNs(p *Page) {
 				}
 			}
 		}
+	} else if p.Active == "map" {
+		for _, node := range p.Map.Nodes {
+			add(node.ASN)
+		}
 	} else if p.Active == "neighbors" || p.Active == "summary" {
 		for _, result := range p.Results {
 			for _, n := range result.Overview.Neighbors {

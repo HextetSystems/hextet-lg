@@ -117,6 +117,7 @@ type Page struct {
 	Groups                []FormGroup
 	// Cols is the route table's column layout (display.route_columns).
 	Cols RouteCols
+	Map  RouteMap
 
 	// Started is when request handling began (zero when unknown); the footer
 	// computes the page generation time from it when it is rendered.
@@ -197,27 +198,32 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 	h.queue = make(chan struct{}, cfg.LookingGlass.MaxQueuedQueries)
 	h.limiter = newRateLimiter(cfg.Server)
 	h.templates, err = template.New("root").Funcs(template.FuncMap{
-		"themeDefault":  func() string { return h.theme.Default },
-		"assetURL":      h.assetURL,
-		"site":          func() *site.Site { return h.site },
-		"siteAsset":     siteAssetURL,
-		"hasFooter":     func() bool { return len(h.site.Footer) > 0 },
-		"asnTitle":      h.asnTitle,
-		"ptrKey":        h.ptrKey,
-		"ptrTitle":      h.ptrTitle,
-		"asnEnabled":    func(s string) bool { return h.asn != nil && parseASN(s) != 0 },
-		"asnPath":       h.pathParts,
-		"featureBGP":    h.cfg.Features.BGPNeighborsEnabled,
-		"featureRTR":    h.cfg.Features.RTRSessionsEnabled,
-		"timingEnabled": h.cfg.Features.PageTimingEnabled,
-		"pageTiming":    pageTiming,
-		"neighborURL":   neighborURL,
-		"neighborTitle": neighborTitle,
-		"neighborCell":  h.neighborCell,
-		"rawJSONOn":     func() bool { return h.cfg.Display.RawJSON },
-		"searchURL":     searchURL,
-		"age":           FormatAge,
-		"formatRoutes":  formatRoutes,
+		"themeDefault":        func() string { return h.theme.Default },
+		"assetURL":            h.assetURL,
+		"site":                func() *site.Site { return h.site },
+		"siteAsset":           siteAssetURL,
+		"hasFooter":           func() bool { return len(h.site.Footer) > 0 },
+		"asnTitle":            h.asnTitle,
+		"ptrKey":              h.ptrKey,
+		"ptrTitle":            h.ptrTitle,
+		"asnEnabled":          func(s string) bool { return h.asn != nil && parseASN(s) != 0 },
+		"asnPath":             h.pathParts,
+		"featureBGP":          h.cfg.Features.BGPNeighborsEnabled,
+		"featureRTR":          h.cfg.Features.RTRSessionsEnabled,
+		"timingEnabled":       h.cfg.Features.PageTimingEnabled,
+		"pageTiming":          pageTiming,
+		"neighborURL":         neighborURL,
+		"neighborTitle":       neighborTitle,
+		"neighborCell":        h.neighborCell,
+		"routeMapURL":         h.routeMapURL,
+		"routeMapAdd":         routeMapAdd,
+		"routeMapLabel":       routeMapLabel,
+		"routeMapTime":        routeMapTime,
+		"routeMapDisplayTime": routeMapDisplayTime,
+		"rawJSONOn":           func() bool { return h.cfg.Display.RawJSON },
+		"searchURL":           searchURL,
+		"age":                 FormatAge,
+		"formatRoutes":        formatRoutes,
 		"human": func(s string) string {
 			if s == "" {
 				return "—"
@@ -309,6 +315,9 @@ func (h *Handler) Routes() http.Handler {
 	}
 	if h.cfg.Features.RTRSessionsEnabled() {
 		mux.HandleFunc("GET /rtr", h.overview)
+	}
+	if h.cfg.Features.BGPMapsEnabled() {
+		mux.HandleFunc("GET /map", h.routeMap)
 	}
 	mux.HandleFunc("GET /communities", h.communityPage)
 	mux.HandleFunc("GET /asn-status", h.asnStatus)

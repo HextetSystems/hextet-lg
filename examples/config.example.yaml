@@ -218,6 +218,7 @@ backends:
 # other (disabling one never disables the other). A disabled view has no
 # navigation link and its URL answers 404.
 #   bgp_neighbors: the BGP session pages /neighbors and /summary (default true)
+#   bgp_maps:      show BGP path map links and the /map page (default true)
 #   rtr_sessions:  the RPKI-to-Router session page /rtr (default true). It needs
 #                  a bgplgd that provides /rtr (present in OpenBGPD 8.2 to 9.3); a backend
 #                  without it is reported as "unsupported", never as "no
@@ -238,6 +239,7 @@ features:
   large_communities: true
   extended_communities: false
   bgp_neighbors: true
+  bgp_maps: true
   rtr_sessions: true
   rtr_session_addresses: false
   page_timing: true

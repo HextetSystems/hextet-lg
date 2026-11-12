@@ -185,6 +185,10 @@ func (h *Handler) guard(next http.Handler) http.Handler {
 		switch r.URL.Path {
 		case "/":
 			allowed = knownParams
+		case "/map":
+			allowed["prefix"] = true
+			allowed["backend"] = true
+			allowed["data"] = true
 		case "/neighbors", "/summary", "/rtr":
 			allowed["backend"] = true
 		case "/communities":
@@ -192,7 +196,7 @@ func (h *Handler) guard(next http.Handler) http.Handler {
 			allowed["q"] = true
 			allowed["category"] = true
 		}
-		if allowed != nil && (r.URL.Path == "/" || r.URL.Path == "/neighbors" || r.URL.Path == "/summary" || r.URL.Path == "/rtr" || r.URL.Path == "/communities") {
+		if allowed != nil && (r.URL.Path == "/" || r.URL.Path == "/map" || r.URL.Path == "/neighbors" || r.URL.Path == "/summary" || r.URL.Path == "/rtr" || r.URL.Path == "/communities") {
 			for k, v := range vals {
 				if len(v) != 1 && r.URL.Path != "/" {
 					requestError(w, r, http.StatusBadRequest, "Repeated query parameter.")

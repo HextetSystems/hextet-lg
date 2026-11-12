@@ -51,7 +51,7 @@ document.body.addEventListener('htmx:afterRequest',function(e){if(e.target.id!==
     g.nodes.forEach(n=>{const id=n.dataset[g.key],name=data&&data[id];if(!n.isConnected||typeof name!=='string'||!name)return;
     // A neighbor label (data-ptr-format) shows the name in place; its tooltip always carries name and address. Everything else only gets a tooltip.
     const fmt=g.key==='ptr'?n.dataset.ptrFormat:'';
-    if(fmt==='name'||fmt==='both'){n.title=name+' ('+id+')';n.textContent=fmt==='both'?n.title:name}else n.title=name});
+    if(fmt==='name'||fmt==='both'){n.title=name+' ('+id+')';n.textContent=fmt==='both'?n.title:name}else if(g.key==='asn'&&n.dataset.asnLabel==='true'){n.title=name+' (AS'+id+')';const chars=Array.from(name);n.textContent=chars.length>24?chars.slice(0,21).join('')+'…':name}else n.title=name});
    }).catch(()=>{}));
    Promise.all(work).then(()=>{if(current===generation && ++attempts<24 && groups.some(g=>g.nodes.some(n=>n.isConnected && !n.title)))setTimeout(poll,1500)});
   }

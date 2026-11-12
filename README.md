@@ -71,19 +71,22 @@ theme:
 
 ## Views and shareable URLs
 
-The Route Explorer (`/`) runs native, server-side OpenBGPD queries. Neighbor Explorer (`/neighbors`) shows live BGP session rows and summary counts per backend, and RTR Sessions (`/rtr`) shows the RPKI-to-Router sessions between each backend and its validators; each can be switched off independently (see [Session visibility](#session-visibility)). Community Explorer (`/communities`) is an embedded local reference and remains available if backends are down.
+The Route Explorer (`/`) runs native, server-side OpenBGPD queries. A prefix with multiple paths on the current results page can open a BGP path map (`/map`) for that backend. Neighbor Explorer (`/neighbors`) shows live BGP session rows and summary counts per backend, and RTR Sessions (`/rtr`) shows the RPKI-to-Router sessions between each backend and its validators; each can be switched off independently (see [Session visibility](#session-visibility)). Community Explorer (`/communities`) is an embedded local reference and remains available if backends are down.
 
 Every view is a bookmarkable GET URL. Shared links are **live queries, not snapshots**: re-opening one runs the query again and the routes may have changed. If the short-lived result cache is enabled (see below), a result may be up to `cache_ttl` old and is labelled as cached. URLs never contain backend addresses; `backend` is a stable configured ID or `all`.
 
 | Page | Parameters |
 |---|---|
 | `/` | search filters (below), `backend`, `view=table\|text\|detail`, `page`, `output=plain` |
+| `/map` | `prefix`, `backend`, bounded encoded `data` from a current results page |
 | `/neighbors`, `/rtr` | `backend` |
 | `/communities` | `q`, `category` |
 
 Simple searches keep their original form: `/?type=prefix\|asn\|large-community&q=...&backend=...&view=...`. Prefix searches with a scope flag also use `type` and `q`. Other compound searches name each filter, for example `/?as=15169&large-community=395089%3A0%3A6&af=ipv6&best=1&backend=all&view=table&page=2`. The application emits parameters in a canonical order (filters in the order of the table below, then `backend`, `view`, `page`); both forms are accepted as input and mixed. A form submission that carries empty fields is redirected once to the canonical URL, and HTMX updates push the canonical URL into browser history. Back/forward and fresh-session opening work without any stored state, and ordinary navigation works without JavaScript.
 
 Unknown parameters, repeated parameters (there are no OR lists), invalid values and mutually exclusive combinations are rejected with an explanation; filters are never silently dropped. HTML and plaintext responses return HTTP 400; HTMX swaps the error fragment into the page.
+
+The BGP path map is a local SVG view of the routes for one prefix and backend that are already present on the current results page. The map link appears only when that page contains multiple paths for the prefix. The selected best path is labeled and highlighted; ASN names use the optional existing ASN enrichment service. A map URL records when its route data was fetched, and the map page offers a new-tab link to refresh that prefix. `features.bgp_maps` controls map links and `/map` (default `true`); when disabled, the links are hidden and `/map` returns 404. To keep links bounded, a map link is omitted when its URL would exceed 4 KiB or the configured request limits.
 
 ## Route Explorer layout and page titles
 

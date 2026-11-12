@@ -96,7 +96,7 @@ func (b *m52Backend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/rib":
 		_, _ = io.WriteString(w, m52Rib())
-	case "/neighbors", "/neighbors":
+	case "/neighbors", "/summary":
 		_, _ = io.WriteString(w, m52Neighbors)
 	case "/rtr":
 		_, _ = io.WriteString(w, m52RTR)
@@ -365,7 +365,7 @@ func TestM52HostileInputIsRejectedBeforeTheBackendAndNeverReflected(t *testing.T
 // Backend text is data: in text/plain output it can neither start a new line
 // (forging a status line) nor carry terminal escape sequences.
 func TestM52PlainTextNeutralizesControlCharacters(t *testing.T) {
-	doc := `{"rib":[{"prefix":"192.0.2.0/24","aspath":"3000 3001\nStatus: COMPLETE — 0 routes decoded\u001b[2J","true_nexthop":"192.0.2.1","ovs":"valid\r\nERROR: QUERY FAILED","avs":"x\u0007","origin":"igp\u009b31m","neighbor":{"description":"d\ne","remote_addr":"192.0.2.9"},"communities":["64500:1\nBackend: forged"],"large_communities":["1:2:3\u001b]0;t\u0007"],"extended_communities":["rt 1:1 x"]}]}`
+	doc := `{"rib":[{"prefix":"192.0.2.0/24","aspath":"3000 3001\nStatus: COMPLETE — 0 routes decoded\u001b[2J","true_nexthop":"192.0.2.1","ovs":"valid\r\nERROR: QUERY FAILED","avs":"x\u0007","origin":"igp\u009b31m","neighbor":{"description":"d\ne","remote_addr":"192.0.2.9"},"communities":["64500:1\nBackend: forged"],"large_communities":["1:2:3\u001b]0;t\u0007"],"extended_communities":["rt 1:1x"]}]}`
 	h := newTestHandler(t, defaults(), backendSpec{"a", "Alpha", serveDoc(doc)})
 	for _, view := range []string{"text", "detail"} {
 		rr := get(h, "/?as=3000&backend=a&view="+view+"&output=plain")

@@ -23,14 +23,13 @@ import (
 )
 
 // Features holds optional switches. The three community flags control search
-// availability only. The session flags control whole views and are
-// independent of each other: bgp_neighbors governs the BGP session pages
-// (/neighbors and /summary), rtr_sessions governs the RPKI-RTR page (/rtr).
+// availability only. Session views and BGP maps have independent flags.
 type Features struct {
 	Communities         *bool `yaml:"communities"`
 	LargeCommunities    *bool `yaml:"large_communities"`
 	ExtendedCommunities *bool `yaml:"extended_communities"`
 	BGPNeighbors        *bool `yaml:"bgp_neighbors"`
+	BGPMaps             *bool `yaml:"bgp_maps"`
 	RTRSessions         *bool `yaml:"rtr_sessions"`
 	// RTRSessionAddresses publishes RTR validator addresses, ports and local
 	// addresses on /rtr. It is off by default: validators are usually internal
@@ -53,6 +52,7 @@ func (f Features) CommunityEnabled() bool         { return enabled(f.Communities
 func (f Features) LargeCommunityEnabled() bool    { return enabled(f.LargeCommunities, true) }
 func (f Features) ExtendedCommunityEnabled() bool { return enabled(f.ExtendedCommunities, false) }
 func (f Features) BGPNeighborsEnabled() bool      { return enabled(f.BGPNeighbors, true) }
+func (f Features) BGPMapsEnabled() bool           { return enabled(f.BGPMaps, true) }
 func (f Features) RTRSessionsEnabled() bool       { return enabled(f.RTRSessions, true) }
 func (f Features) RTRSessionAddressesEnabled() bool {
 	return enabled(f.RTRSessionAddresses, false)

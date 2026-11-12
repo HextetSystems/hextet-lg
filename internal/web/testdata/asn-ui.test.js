@@ -19,6 +19,16 @@ test('batch updates duplicate ASNs while preserving text and links',async()=>{
  h.requests[0].resolve({ok:true,json:async()=>({'13335':'Cloudflare','174':'Cogent'})});await settle();
  assert.equal(a.title,'Cloudflare');assert.equal(b.title,'Cloudflare');assert.equal(c.title,'Cogent');assert.equal(a.textContent,'13335');assert.equal(a.href,'/?type=asn&q=13335');
 });
+test('map ASN labels show cached names while retaining ASN identity in the tooltip',async()=>{
+ const a=node('64500');a.dataset.asnLabel='true';const h=harness([a]);h.docEvents.DOMContentLoaded();h.tick();
+ h.requests[0].resolve({ok:true,json:async()=>({'64500':'Example Transit'})});await settle();
+ assert.equal(a.textContent,'Example Transit');assert.equal(a.title,'Example Transit (AS64500)');
+});
+test('long map ASN names are shortened to fit their graph node while the full name stays in the tooltip',async()=>{
+ const a=node('64500');a.dataset.asnLabel='true';const h=harness([a]);h.docEvents.DOMContentLoaded();h.tick();
+ const name='Example Transit Organization Name';h.requests[0].resolve({ok:true,json:async()=>({'64500':name})});await settle();
+ assert.equal(a.textContent,'Example Transit Organ…');assert.equal(a.title,name+' (AS64500)');
+});
 test('HTMX navigation ignores old responses and detached elements',async()=>{
  const old=node('13335');const h=harness([old]);h.docEvents.DOMContentLoaded();h.tick();const fresh=node('15169');old.isConnected=false;h.setNodes([fresh]);h.bodyEvents['htmx:afterSwap']();h.tick();
  h.requests[0].resolve({ok:true,json:async()=>({'13335':'stale'})});h.requests[1].resolve({ok:true,json:async()=>({'15169':'new'})});await settle();assert.equal(old.title,'');assert.equal(fresh.title,'new');

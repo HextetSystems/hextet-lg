@@ -404,7 +404,14 @@ func TestM44ExampleDefinitionsComeFromTextFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	files := map[string]string{"as395089.txt": string(data)}
-	h := newDefsHandler(t, files, nil, routeBackend(m44Route))
+	cfg, closeAll := testConfig(defaults(), routeBackend(m44Route))
+	t.Cleanup(closeAll)
+	cfg.CommunityDefinitions = config.CommunityDefinitions{Enabled: true, Directory: writeDefs(t, files)}
+	h, err := NewHandler(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(h.Close)
 	defs := h.defs.Definitions()
 	if len(defs) != 30 {
 		t.Fatalf("loaded %d definitions, want 30", len(defs))
@@ -414,11 +421,11 @@ func TestM44ExampleDefinitionsComeFromTextFile(t *testing.T) {
 			t.Errorf("definition source is not derived from its text file: %+v", d)
 		}
 	}
-	page := get(h, "/communities?category=AS395089").Body.String()
+	page := get(h.Routes(), "/communities?category=AS395089").Body.String()
 	if !strings.Contains(page, "Peering routes") || !strings.Contains(page, "as395089.txt") || strings.Contains(page, "Status / evidence") {
 		t.Error("Explorer did not render the text-file definitions as expected")
 	}
-	if body := get(h, routeQuery).Body.String(); !strings.Contains(body, `title="Peering routes" href="/?type=large-community&amp;q=395089%3A0%3A8`) {
+	if body := get(h.Routes(), routeQuery).Body.String(); !strings.Contains(body, `title="Peering routes" href="/?type=large-community&amp;q=395089%3A0%3A8`) {
 		t.Error("text-file definition not used for the route tooltip")
 	}
 }

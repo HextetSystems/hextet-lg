@@ -61,6 +61,20 @@ button:hover{background:var(--color-accent-hover)}
 nav button,button[data-copy],button[data-copy-link]{background:var(--color-surface);color:var(--color-text);border-color:var(--color-border-control)}
 nav button:hover,button[data-copy]:hover,button[data-copy-link]:hover{background:var(--color-surface-hover)}
 .copy-fallback{position:fixed;left:-10000px;top:0;opacity:0;pointer-events:none}
+.map-link{display:inline-flex;vertical-align:middle;padding:.1rem;border-radius:0.25rem;color:var(--color-accent-text)}
+.map-link svg{width:1rem;height:1rem;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.route-map-panel{overflow-x:auto}
+.route-map{display:block;width:100%;min-width:700px;height:auto;margin:auto}
+.route-map .map-edge{stroke:var(--color-border-control);stroke-width:2}
+.route-map .map-edge.map-best{stroke:var(--color-accent-text);stroke-width:3}
+.route-map marker path{fill:var(--color-border-control)}
+.route-map marker .map-arrow-best{fill:var(--color-accent-text)}
+.route-map .map-node,.route-map .map-diamond{fill:var(--color-surface);stroke:var(--color-border-control);stroke-width:1.5}
+.route-map .map-node.map-best,.route-map .map-diamond.map-best{fill:var(--color-accent-subtle);stroke:var(--color-accent-text);stroke-width:2}
+.route-map text{fill:var(--color-text);font:12px sans-serif}
+.route-map text.map-best{fill:var(--color-accent-text);font-weight:700}
+.route-map .map-best-label{fill:var(--color-accent-text);font-size:10px;font-weight:700}
+.map-legend{margin:0 0 .75rem;color:var(--color-text-muted)}
 nav button{height:30px;padding:0 10px}
 .search-tools button{height:26px;padding:0 9px;font-weight:600;font-size:12px}
 select:disabled,input:disabled,button:disabled{background:var(--color-surface-alt);color:var(--color-text-muted);border:1px dashed var(--color-border-control);cursor:not-allowed}
