@@ -92,6 +92,7 @@ release:
   draft: false
 
 changelog:
+  use: git
   sort: asc
   filters:
     exclude:

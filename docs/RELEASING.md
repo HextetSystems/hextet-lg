@@ -4,7 +4,7 @@ Releases are produced by **GoReleaser Community Edition** (`.goreleaser.yaml`) a
 
 ## Versioning
 
-Versions are [Semantic Versions](https://semver.org) and **Git tags are the only source of the build version**: `vMAJOR.MINOR.PATCH` for a stable release, `vMAJOR.MINOR.PATCH-rc.1` (any `-prerelease` suffix) for a prerelease. The changelog's release headings do not set the build version.
+Versions are [Semantic Versions](https://semver.org) and **Git tags are the only source of the build version**: `vMAJOR.MINOR.PATCH` for a stable release, `vMAJOR.MINOR.PATCH-rc.1` (any `-prerelease` suffix) for a prerelease. GoReleaser generates release notes from Git commits since the previous tag using the sorting and filters in `.goreleaser.yaml`. The manually maintained `CHANGELOG.md` is informational and is not a release gate.
 
 | Build | How | `hextet-lg version` | Image |
 |---|---|---|---|
@@ -79,7 +79,7 @@ Labels: `org.opencontainers.image.{title,description,source,url,documentation,li
 
 1. `validate-tag`: the tag must be `vMAJOR.MINOR.PATCH[-prerelease]` and its commit must be reachable from `main`.
 2. `ci`: the full CI workflow runs on the tagged commit.
-3. `release` (needs both): checkout at the tag, Go, Buildx, `docker/login-action` to `ghcr.io` with the built-in `GITHUB_TOKEN`, `goreleaser release --clean`, then the digest of the pushed manifest list is read back with `docker buildx imagetools inspect`, written to the job summary and attached to the GitHub Release as `image-digests.txt`.
+3. `release` (needs both): checkout at the tag, Go, Buildx, `docker/login-action` to `ghcr.io` with the built-in `GITHUB_TOKEN`, `goreleaser release --clean` (including generated release notes), then the digest of the pushed manifest list is read back with `docker buildx imagetools inspect`, written to the job summary and attached to the GitHub Release as `image-digests.txt`.
 
 Permissions are `contents: read` for the workflow; only the `release` job gets `contents: write` and `packages: write`. No personal access tokens are used. Pull requests cannot reach the release workflow, and because `release` needs `ci`, a failing test cannot produce a release. Third-party actions are pinned to commit SHAs (version in the trailing comment); update them deliberately (Dependabot is configured for this).
 
@@ -91,7 +91,7 @@ git tag -s vX.Y.Z -m "Hextet LG vX.Y.Z"     # annotated and signed
 git push origin vX.Y.Z                       # starts the release workflow
 ```
 
-Use `-rc.N` for candidates; their release notes use the corresponding base version section in `CHANGELOG.md`. To retract a bad release: delete the GitHub Release and the tag, publish a new patch version. Do not re-push an existing version tag; consumers pinned by digest are unaffected, those on the tag are not.
+Use `-rc.N` for candidates; GoReleaser generates their release notes from commits since the preceding tag, just like stable releases. To retract a bad release: delete the GitHub Release and the tag, publish a new patch version. Do not re-push an existing version tag; consumers pinned by digest are unaffected, those on the tag are not.
 
 ### GitHub-side settings (one-time)
 
