@@ -4,7 +4,7 @@ Hextet LG supplies a read-only web interface for the `openbgpd/openbgpd` Docker 
 
 ## Docker Compose
 
-You need Docker Engine with the Compose plugin and a `bgplgd` API reachable from the Hextet LG container.
+You need Docker Engine with the Compose plugin and a `bgplgd` API reachable from the Hextet LG container. The repository's [application Compose example](https://github.com/HextetSystems/hextet-lg/blob/main/examples/compose.yaml) uses the published image; the root `compose.yaml` is for building and running from a source checkout.
 
 ```sh
 mkdir -p configs
@@ -14,11 +14,12 @@ test -e configs/config.docker.yaml || cp examples/config.example.yaml configs/co
 Edit `configs/config.docker.yaml` and set each backend URL to an address reachable from the container. Then start Hextet LG:
 
 ```sh
-docker compose config -q
-docker compose up -d --build
+docker compose -f examples/compose.yaml config -q
+docker compose -f examples/compose.yaml pull
+docker compose -f examples/compose.yaml up -d
 ```
 
-The application listens on port 8080. Open <http://localhost:8080>. Compose mounts the runtime configuration read-only and runs the application as a non-root user.
+The sample binds the application to localhost on port 8080. Open <http://localhost:8080>. It mounts the runtime configuration read-only and runs the application as a non-root user. Backend URLs must be reachable from the container; if OpenBGPD runs in another Compose project, use a shared Docker network or another reachable address.
 
 For production, use a released image pinned by digest and follow the [upgrade and rollback guide](https://github.com/HextetSystems/hextet-lg/blob/main/docs/RELEASING.md).
 

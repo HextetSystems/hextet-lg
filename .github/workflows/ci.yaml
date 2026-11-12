@@ -133,8 +133,8 @@ jobs:
           if tar tzf hextet-lg_*_linux_amd64.tar.gz | grep -E '(^|/)config(\.docker)?\.yaml$'; then
             echo "runtime configuration must never be packaged"; exit 1
           fi
-          if tar tzf hextet-lg_*_linux_amd64.tar.gz | grep -E '^(ARCHITECTURE\.md|docs/(RELEASING|TESTING|SESSION_VISIBILITY|PTR_ENRICHMENT)\.md)$'; then
-            echo "project reference documents must not be packaged"; exit 1
+          if tar tzf hextet-lg_*_linux_amd64.tar.gz | grep -E '^(ARCHITECTURE\.md|examples/compose\.yaml|docs/(RELEASING|TESTING|SESSION_VISIBILITY|PTR_ENRICHMENT)\.md)$'; then
+            echo "project reference documents and the Compose example must not be packaged"; exit 1
           fi
           mkdir x && tar xzf hextet-lg_*_linux_amd64.tar.gz -C x && ./x/hextet-lg version
           test -f x/INSTALL.md || { echo "INSTALL.md missing from release archive"; exit 1; }
