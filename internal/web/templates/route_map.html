@@ -2,11 +2,11 @@
 <section class="intro">
   <p class="eyebrow">ROUTE EXPLORER</p>
   <h1>BGP path map</h1>
-  <p class="lead">{{.Map.Prefix}} · backend {{.Map.Backend}} · {{.Map.PathCount}} paths from the current results page</p>
+  <p class="lead">{{.Map.Prefix}} · backend {{.Map.Backend}} · {{.Map.PathCount}} paths from the current results page · Route data fetched at <time datetime="{{routeMapTime .Map.FetchedAt}}">{{routeMapDisplayTime .Map.FetchedAt}}</time></p>
 </section>
-<p class="map-actions"><a href="/">Back to routes</a> · <a href="{{searchURL "prefix" .Map.Prefix .Map.Backend}}" target="_blank" rel="noopener">Refresh this prefix in a new tab</a></p>
+<p><a href="/">Back to routes</a></p>
 <section class="panel route-map-panel">
-  <p class="map-legend">Route data fetched at <time datetime="{{routeMapTime .Map.FetchedAt}}">{{routeMapDisplayTime .Map.FetchedAt}}</time>. {{if .Map.HasBest}}The selected best path is labeled <strong>BEST</strong> and highlighted.{{else}}The backend did not mark a selected best path.{{end}} Nodes shared by paths are shown once; arrows point toward the destination prefix.</p>
+  <p class="map-legend">{{if .Map.HasBest}}The selected best path is labeled <strong>BEST</strong> and highlighted.{{else}}The backend did not mark a selected best path.{{end}} Nodes shared by paths are shown once; arrows point toward the destination prefix.</p>
   <svg class="route-map" viewBox="0 0 {{.Map.Width}} {{.Map.Height}}" role="img" aria-labelledby="map-title map-description">
     <title id="map-title">Paths to {{.Map.Prefix}}</title>
     <desc id="map-description">{{.Map.PathCount}} directed BGP paths converge on {{.Map.Prefix}}.</desc>

@@ -43,7 +43,7 @@ func TestRouteMapLinkAndPageUseCurrentBackendPaths(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("map page status %d: %s", rr.Code, rr.Body.String())
 	}
-	for _, want := range []string{"BGP path map", "203.0.113.0/24", "peer-a", "peer-b", "AS64500", "AS64501", "AS64496", `class="map-best-label"`, ">BEST</text>", "Route data fetched at", "UTC", "Refresh this prefix in a new tab"} {
+	for _, want := range []string{"BGP path map", "203.0.113.0/24", "peer-a", "peer-b", "AS64500", "AS64501", "AS64496", `class="map-best-label"`, ">BEST</text>", "Route data fetched at", "UTC"} {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Errorf("map missing %q", want)
 		}
@@ -51,19 +51,16 @@ func TestRouteMapLinkAndPageUseCurrentBackendPaths(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), `datetime="`+routeMapTime(payload.FetchedAt)+`"`) {
 		t.Error("displayed fetch time does not match the timestamp carried in the map URL")
 	}
+	legendAt := strings.Index(rr.Body.String(), `class="map-legend"`)
+	timeAt := strings.Index(rr.Body.String(), `datetime="`+routeMapTime(payload.FetchedAt)+`"`)
+	if timeAt < 0 || legendAt >= 0 && timeAt > legendAt {
+		t.Error("fetch timestamp should appear with the prefix details above the graph")
+	}
 	if got := strings.Count(rr.Body.String(), ">AS64496</text>"); got != 1 {
 		t.Errorf("shared ASN node rendered %d times, want once", got)
 	}
 	if got := strings.Count(rr.Body.String(), `<line class="map-edge`); got != 5 {
 		t.Errorf("graph has %d edges, want 5 with the shared tail merged", got)
-	}
-	refresh := regexp.MustCompile(`<a href="([^"]+)" target="_blank" rel="noopener">Refresh this prefix in a new tab</a>`).FindStringSubmatch(rr.Body.String())
-	if len(refresh) != 2 {
-		t.Fatal("new-tab prefix refresh link missing")
-	}
-	refreshURL, err := url.Parse(html.UnescapeString(refresh[1]))
-	if err != nil || refreshURL.Path != "/" || refreshURL.Query().Get("type") != "prefix" || refreshURL.Query().Get("q") != "203.0.113.0/24" || refreshURL.Query().Get("backend") != "a" {
-		t.Fatalf("refresh link is not a path-only prefix query for the same backend: %q", refresh[1])
 	}
 }
 
