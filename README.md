@@ -1,6 +1,6 @@
 # Hextet LG
 
-Hextet LG is a read-only web looking glass for one or more OpenBGPD `bgplgd` APIs. It provides IPv4 and IPv6 route searches, BGP neighbor and RTR session views, and shareable search URLs in a server-rendered web interface. OpenBGPD is deployed separately.
+Hextet LG supplies a read-only web interface for the `openbgpd/openbgpd` Docker image, replacing the CGI looking-glass frontend that the image does not include. It queries the image's `bgplgd` HTTP API and presents IPv4 and IPv6 routes, BGP neighbors, and RTR sessions. Hextet LG and OpenBGPD run separately.
 
 ## Features
 

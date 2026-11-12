@@ -1,6 +1,6 @@
 # Install Hextet LG
 
-Hextet LG connects to an existing OpenBGPD `bgplgd` HTTP API. It does not install or manage OpenBGPD. The complete, documented application configuration is [`examples/config.example.yaml`](examples/config.example.yaml).
+Hextet LG supplies a read-only web interface for the `openbgpd/openbgpd` Docker image, replacing the CGI looking-glass frontend that the image does not include. It connects to the image's `bgplgd` HTTP API; it does not install or manage OpenBGPD. The complete, documented application configuration is [`examples/config.example.yaml`](examples/config.example.yaml).
 
 ## Docker Compose
 

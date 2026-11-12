@@ -1,6 +1,6 @@
 # Architecture
 
-Hextet LG is a read-only Go web application for viewing routes and session information from configured OpenBGPD `bgplgd` APIs. It runs as one process, serves an embedded web interface, and stores route results only in bounded in-memory caches. OpenBGPD is configured and operated separately.
+Hextet LG replaces the CGI looking-glass frontend not included in the `openbgpd/openbgpd` Docker image. It is a read-only Go application that queries the image's `bgplgd` API to show routes and session information. Hextet LG and OpenBGPD run separately; route results stay in bounded in-memory caches.
 
 ## Components
 
