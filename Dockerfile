@@ -36,7 +36,7 @@ COPY ${TARGETPLATFORM}/hextet-lg /out/hextet-lg
 
 FROM ${BINARY_SOURCE} AS binary
 
-FROM alpine:3.21
+FROM alpine:3.24
 ARG VERSION=dev
 ARG REVISION=unknown
 ARG CREATED=unknown
