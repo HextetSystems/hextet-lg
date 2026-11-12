@@ -189,6 +189,7 @@ func (h *Handler) guard(next http.Handler) http.Handler {
 			allowed["prefix"] = true
 			allowed["backend"] = true
 			allowed["data"] = true
+			allowed["layout"] = true
 		case "/neighbors", "/summary", "/rtr":
 			allowed["backend"] = true
 		case "/communities":

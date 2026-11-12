@@ -220,6 +220,7 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 		"routeMapLabel":       routeMapLabel,
 		"routeMapTime":        routeMapTime,
 		"routeMapDisplayTime": routeMapDisplayTime,
+		"routeMapView":        routeMapView,
 		"rawJSONOn":           func() bool { return h.cfg.Display.RawJSON },
 		"searchURL":           searchURL,
 		"age":                 FormatAge,

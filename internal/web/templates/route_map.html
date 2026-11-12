@@ -1,33 +1,37 @@
+{{define "routeMapSVG"}}
+<svg class="route-map route-map-{{.Class}}" width="{{.Width}}" height="{{.Height}}" viewBox="0 0 {{.Width}} {{.Height}}" role="img" aria-labelledby="{{.TitleID}}-title {{.TitleID}}-description">
+  <title id="{{.TitleID}}-title">Paths to {{.Prefix}}</title>
+  <desc id="{{.TitleID}}-description">{{.PathCount}} directed BGP paths converge on {{.Prefix}}.</desc>
+  <defs>
+    <marker id="{{.TitleID}}-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M0 0L8 4L0 8z"/></marker>
+    <marker id="{{.TitleID}}-arrow-best" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth"><path class="map-arrow-best" d="M0 0L8 4L0 8z"/></marker>
+  </defs>
+  {{range .Edges}}
+  <line class="map-edge{{if .Best}} map-best{{end}}" x1="{{.X1}}" y1="{{.Y1}}" x2="{{.X2}}" y2="{{.Y2}}" marker-end="url(#{{$.TitleID}}-arrow{{if .Best}}-best{{end}})"/>
+  {{if .StartBest}}<text class="map-best-label" x="{{routeMapAdd .X1 8}}" y="{{routeMapAdd .Y1 -10}}">BEST</text>{{end}}
+  {{end}}
+  {{range .Nodes}}
+  <g class="map-vertex{{if .Best}} map-best{{end}}">
+    {{if eq .Kind "destination"}}
+    <path class="map-diamond map-destination{{if .Best}} map-best{{end}}" d="M{{.X}} {{routeMapAdd .Y -30}}L{{routeMapAdd .X 100}} {{.Y}}L{{.X}} {{routeMapAdd .Y 30}}L{{routeMapAdd .X -100}} {{.Y}}Z"/>
+    {{else}}
+    <rect class="map-node {{.Kind}}{{if .Best}} map-best{{end}}" x="{{routeMapAdd .X -90}}" y="{{routeMapAdd .Y -24}}" width="180" height="48" rx="6"/>
+    {{end}}
+    <text class="map-label {{.Kind}}{{if .Best}} map-best{{end}}" x="{{.X}}" y="{{routeMapAdd .Y 4}}" text-anchor="middle"{{if and (eq .Kind "asn") $.ASNEnabled .Enrich}} data-asn="{{.ASN}}" data-asn-label="true"{{else if .ASN}} title="AS{{.ASN}}"{{else if .Label}} title="{{.Label}}"{{end}}>{{if .ASN}}AS{{.ASN}}{{else}}{{routeMapLabel .Label}}{{end}}</text>
+  </g>
+  {{end}}
+</svg>
+{{end}}
 {{template "header" .}}
 <section class="intro">
   <p class="eyebrow">ROUTE EXPLORER</p>
   <h1>BGP path map</h1>
   <p class="lead">{{.Map.Prefix}} · backend {{.Map.Backend}} · {{.Map.PathCount}} paths from the current results page · Route data fetched at <time datetime="{{routeMapTime .Map.FetchedAt}}">{{routeMapDisplayTime .Map.FetchedAt}}</time></p>
 </section>
-<p><a href="/">Back to routes</a></p>
-<section class="panel route-map-panel">
-  <p class="map-legend">{{if .Map.HasBest}}The selected best path is labeled <strong>BEST</strong> and highlighted.{{else}}The backend did not mark a selected best path.{{end}} Nodes shared by paths are shown once; arrows point toward the destination prefix.</p>
-  <svg class="route-map" viewBox="0 0 {{.Map.Width}} {{.Map.Height}}" role="img" aria-labelledby="map-title map-description">
-    <title id="map-title">Paths to {{.Map.Prefix}}</title>
-    <desc id="map-description">{{.Map.PathCount}} directed BGP paths converge on {{.Map.Prefix}}.</desc>
-    <defs>
-      <marker id="map-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M0 0L8 4L0 8z"/></marker>
-      <marker id="map-arrow-best" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth"><path class="map-arrow-best" d="M0 0L8 4L0 8z"/></marker>
-    </defs>
-    {{range .Map.Edges}}
-    <line class="map-edge{{if .Best}} map-best{{end}}" x1="{{.X1}}" y1="{{.Y1}}" x2="{{.X2}}" y2="{{.Y2}}" marker-end="url(#{{if .Best}}map-arrow-best{{else}}map-arrow{{end}})"/>
-    {{if .StartBest}}<text class="map-best-label" x="{{routeMapAdd .X1 8}}" y="{{routeMapAdd .Y1 -10}}">BEST</text>{{end}}
-    {{end}}
-    {{range .Map.Nodes}}
-    <g class="map-vertex{{if .Best}} map-best{{end}}">
-      {{if eq .Kind "destination"}}
-      <path class="map-diamond map-destination{{if .Best}} map-best{{end}}" d="M{{.X}} {{routeMapAdd .Y -30}}L{{routeMapAdd .X 100}} {{.Y}}L{{.X}} {{routeMapAdd .Y 30}}L{{routeMapAdd .X -100}} {{.Y}}Z"/>
-      {{else}}
-      <rect class="map-node {{.Kind}}{{if .Best}} map-best{{end}}" x="{{routeMapAdd .X -90}}" y="{{routeMapAdd .Y -24}}" width="180" height="48" rx="6"/>
-      {{end}}
-      <text class="map-label {{.Kind}}{{if .Best}} map-best{{end}}" x="{{.X}}" y="{{routeMapAdd .Y 4}}" text-anchor="middle"{{if and (eq .Kind "asn") $.Map.ASNEnabled .Enrich}} data-asn="{{.ASN}}" data-asn-label="true"{{else if .ASN}} title="AS{{.ASN}}"{{else if .Label}} title="{{.Label}}"{{end}}>{{if .ASN}}AS{{.ASN}}{{else}}{{routeMapLabel .Label}}{{end}}</text>
-    </g>
-    {{end}}
-  </svg>
+<p><a href="/">Back to routes</a> · <a class="map-layout-toggle" href="{{.Map.LayoutURL}}">{{.Map.LayoutLabel}}</a></p>
+<section class="panel route-map-panel{{if .Map.Horizontal}} horizontal-map{{end}}">
+  {{template "routeMapSVG" (routeMapView .Map false)}}
+  {{template "routeMapSVG" (routeMapView .Map true)}}
 </section>
+<p class="map-legend">{{if .Map.HasBest}}The selected best path is labeled <strong>BEST</strong> and highlighted.{{else}}The backend did not mark a selected best path.{{end}} Nodes shared by paths are shown once; arrows point toward the destination prefix.</p>
 {{template "footer" .}}

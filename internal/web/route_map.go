@@ -17,6 +17,7 @@ import (
 )
 
 const maxRouteMapURL = 4096
+const routeMapLayoutQueryBytes = len("&layout=horizontal")
 
 type routeMapPayload struct {
 	FetchedAt time.Time      `json:"t"`
@@ -30,25 +31,39 @@ type routeMapPath struct {
 }
 
 type RouteMap struct {
-	Prefix     string
-	Backend    string
-	FetchedAt  time.Time
-	Nodes      []RouteMapNode
-	Edges      []RouteMapEdge
-	PathCount  int
-	Width      int
-	Height     int
-	ASNEnabled bool
-	HasBest    bool
+	Prefix         string
+	Backend        string
+	FetchedAt      time.Time
+	Nodes          []RouteMapNode
+	Edges          []RouteMapEdge
+	PathCount      int
+	Width          int
+	Height         int
+	VerticalWidth  int
+	VerticalHeight int
+	ASNEnabled     bool
+	HasBest        bool
+	Horizontal     bool
+	LayoutURL      string
+	LayoutLabel    string
 }
 type RouteMapNode struct {
 	ID, Label, ASN, Kind string
-	X, Y                 int
+	X, Y, VX, VY         int
 	Best, Enrich         bool
 }
 type RouteMapEdge struct {
-	X1, Y1, X2, Y2  int
-	Best, StartBest bool
+	X1, Y1, X2, Y2     int
+	VX1, VY1, VX2, VY2 int
+	Best, StartBest    bool
+}
+
+type RouteMapView struct {
+	Class, Prefix, TitleID   string
+	Nodes                    []RouteMapNode
+	Edges                    []RouteMapEdge
+	PathCount, Width, Height int
+	ASNEnabled, HasBest      bool
 }
 
 func (h *Handler) routeMapURL(rows []bgp.Route, backend, prefix string, fetchedAt time.Time) string {
@@ -84,7 +99,7 @@ func (h *Handler) routeMapURL(rows []bgp.Route, backend, prefix string, fetchedA
 	if maxQuery <= 0 {
 		maxQuery = 6144
 	}
-	if len(u) > maxRouteMapURL || len(u) > maxURL || len(strings.TrimPrefix(u, "/map?")) > maxQuery {
+	if len(u)+routeMapLayoutQueryBytes > maxRouteMapURL || len(u)+routeMapLayoutQueryBytes > maxURL || len(strings.TrimPrefix(u, "/map?"))+routeMapLayoutQueryBytes > maxQuery {
 		return ""
 	}
 	return u
@@ -92,7 +107,12 @@ func (h *Handler) routeMapURL(rows []bgp.Route, backend, prefix string, fetchedA
 
 func (h *Handler) routeMap(w http.ResponseWriter, r *http.Request) {
 	values := r.URL.Query()
-	if len(values) != 3 || len(values["prefix"]) != 1 || len(values["backend"]) != 1 || len(values["data"]) != 1 {
+	if (len(values) != 3 && len(values) != 4) || len(values["prefix"]) != 1 || len(values["backend"]) != 1 || len(values["data"]) != 1 {
+		requestError(w, r, 400, "Invalid map request.")
+		return
+	}
+	layout := values.Get("layout")
+	if len(values["layout"]) > 1 || (layout != "" && layout != "horizontal") || (layout == "" && len(values) == 4) {
 		requestError(w, r, 400, "Invalid map request.")
 		return
 	}
@@ -145,6 +165,15 @@ func (h *Handler) routeMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	model.FetchedAt = payload.FetchedAt.UTC()
+	model.Horizontal = layout == "horizontal"
+	model.LayoutLabel = "Show horizontal map"
+	if model.Horizontal {
+		model.LayoutLabel = "Show vertical map"
+		values.Del("layout")
+	} else {
+		values.Set("layout", "horizontal")
+	}
+	model.LayoutURL = "/map?" + values.Encode()
 	h.scheduleASNs(&Page{Active: "map", Map: model})
 	page := Page{Active: "map", Title: h.sessionTitle("BGP path map", backend), Map: model, Started: requestStart(r)}
 	if name := h.backendTitleName(backend); name != "" {
@@ -160,6 +189,29 @@ func routeMapTime(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) 
 
 func routeMapDisplayTime(t time.Time) string {
 	return t.UTC().Format("2006-01-02 15:04:05 UTC")
+}
+
+func routeMapView(model RouteMap, vertical bool) RouteMapView {
+	view := RouteMapView{
+		Class: "horizontal", Prefix: model.Prefix, TitleID: "map-horizontal",
+		PathCount: model.PathCount, Width: model.Width, Height: model.Height,
+		ASNEnabled: model.ASNEnabled, HasBest: model.HasBest,
+		Nodes: append([]RouteMapNode(nil), model.Nodes...),
+		Edges: append([]RouteMapEdge(nil), model.Edges...),
+	}
+	if !vertical {
+		return view
+	}
+	view.Class, view.TitleID = "vertical", "map-vertical"
+	view.Width, view.Height = model.VerticalWidth, model.VerticalHeight
+	for i := range view.Nodes {
+		view.Nodes[i].X, view.Nodes[i].Y = view.Nodes[i].VX, view.Nodes[i].VY
+	}
+	for i := range view.Edges {
+		view.Edges[i].X1, view.Edges[i].Y1 = view.Edges[i].VX1, view.Edges[i].VY1
+		view.Edges[i].X2, view.Edges[i].Y2 = view.Edges[i].VX2, view.Edges[i].VY2
+	}
+	return view
 }
 
 func buildRouteMap(prefix, backend string, paths []routeMapPath, asnEnabled bool) (RouteMap, bool) {
@@ -268,11 +320,13 @@ func buildRouteMap(prefix, backend string, paths []routeMapPath, asnEnabled bool
 		return model, false
 	}
 	model.Width = 240 + (maxLayer+1)*230
+	model.VerticalHeight = 140 + maxLayer*230
 	for key, n := range nodes {
 		layer := layersByNode[key]
 		n.X = 120 + layer*230
 	}
 	model.Height = max(180, (len(paths)+1)*100)
+	model.VerticalWidth = model.Height + 120
 	model.HasBest = false
 	for key, n := range nodes {
 		model.HasBest = model.HasBest || n.Best
@@ -281,6 +335,7 @@ func buildRouteMap(prefix, backend string, paths []routeMapPath, asnEnabled bool
 			avg += y
 		}
 		n.Y = avg*100/len(lanes[key]) + 60
+		n.VX, n.VY = n.Y+120, n.X-60
 	}
 	// Keep a node near the lanes of the paths that use it. Shared tails meet
 	// at the same ASN without flattening distinct branches into one row.
@@ -299,7 +354,10 @@ func buildRouteMap(prefix, backend string, paths []routeMapPath, asnEnabled bool
 		if b.Kind == "destination" {
 			endInset = 105 // stop before the wider destination diamond
 		}
-		model.Edges = append(model.Edges, RouteMapEdge{X1: a.X + 95, Y1: a.Y, X2: b.X - endInset, Y2: b.Y, Best: flags.best, StartBest: flags.startBest})
+		edge := RouteMapEdge{X1: a.X + 95, Y1: a.Y, X2: b.X - endInset, Y2: b.Y, Best: flags.best, StartBest: flags.startBest}
+		edge.VX1, edge.VY1 = edge.Y1+120, edge.X1-60
+		edge.VX2, edge.VY2 = edge.Y2+120, edge.X2-60
+		model.Edges = append(model.Edges, edge)
 	}
 	sort.Slice(model.Edges, func(i, j int) bool {
 		if model.Edges[i].X1 == model.Edges[j].X1 {
