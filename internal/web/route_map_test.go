@@ -104,7 +104,7 @@ func TestRouteMapFeatureCanBeDisabled(t *testing.T) {
 	}
 }
 
-func TestRouteMapEscapesLabelsAndUsesASNEnrichment(t *testing.T) {
+func TestRouteMapEscapesLabelsWithoutSchedulingCallerSuppliedASNEnrichment(t *testing.T) {
 	release := make(chan struct{})
 	close(release)
 	calls := make(chan string, 4)
@@ -127,12 +127,12 @@ func TestRouteMapEscapesLabelsAndUsesASNEnrichment(t *testing.T) {
 		t.Fatal("peer label was not escaped in SVG")
 	}
 	if !strings.Contains(rr.Body.String(), `data-asn="13335" data-asn-label="true"`) {
-		t.Fatal("ASN node is not marked for configured enrichment")
+		t.Fatal("ASN node label is not available for configured enrichment")
 	}
 	select {
 	case <-calls:
-	case <-time.After(time.Second):
-		t.Fatal("map did not schedule ASN lookups")
+		t.Fatal("caller-supplied map data scheduled an ASN lookup")
+	case <-time.After(50 * time.Millisecond):
 	}
 }
 

@@ -174,7 +174,6 @@ func (h *Handler) routeMap(w http.ResponseWriter, r *http.Request) {
 		values.Set("layout", "horizontal")
 	}
 	model.LayoutURL = "/map?" + values.Encode()
-	h.scheduleASNs(&Page{Active: "map", Map: model})
 	page := Page{Active: "map", Title: h.sessionTitle("BGP path map", backend), Map: model, Started: requestStart(r)}
 	if name := h.backendTitleName(backend); name != "" {
 		page.Title = h.sessionTitle("BGP path map @ "+name, "")
