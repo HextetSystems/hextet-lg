@@ -124,6 +124,6 @@ site:
     logo: logo.png
 ```
 
-## Migrating from the Hextet defaults
+## Configuration compatibility
 
-Earlier versions hard-coded the header ("HEXTET / NETWORK OPERATIONS") and footer ("Hextet Systems · AS395089"). They are gone. A deployment that wants an identity must now say so, for example `site.operator`, `site.asn` and `site.name`; a configuration with only `server.title` keeps its title, and gets the generic subtitle and footer.
+Deployment identity comes from the optional `site` settings. Configure `site.operator`, `site.asn` and `site.name` when those values should appear; a configuration with only `server.title` keeps its title and uses the generic subtitle and footer.

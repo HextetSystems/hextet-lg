@@ -4,20 +4,20 @@ Releases are produced by **GoReleaser Community Edition** (`.goreleaser.yaml`) a
 
 ## Versioning
 
-Versions are [Semantic Versions](https://semver.org) and **Git tags are the only source of the build version**: `vMAJOR.MINOR.PATCH` for a stable release, `vMAJOR.MINOR.PATCH-rc.1` (any `-prerelease` suffix) for a prerelease. The changelog's release headings do not set the build version. A `v1.0.0` tag is only a version number; it does not by itself declare the project production-stable.
+Versions are [Semantic Versions](https://semver.org) and **Git tags are the only source of the build version**: `vMAJOR.MINOR.PATCH` for a stable release, `vMAJOR.MINOR.PATCH-rc.1` (any `-prerelease` suffix) for a prerelease. The changelog's release headings do not set the build version.
 
 | Build | How | `hextet-lg version` | Image |
 |---|---|---|---|
 | Development | `go build`, `go run`, `make build` | `dev`, with the commit and time Go embeds when built inside a Git checkout (`-dirty` if modified), else `unknown` | – |
 | Local image | `docker compose build`, `make docker` | `dev` with the commit passed by `make docker` | `hextet-lg:local` (mutable, never a release) |
 | Snapshot | `make snapshot` / `goreleaser release --snapshot --clean` | snapshot version derived from the current Git state | local only; no image is pushed |
-| Prerelease | tag `v1.1.0-rc.1` | `v1.1.0-rc.1` | `:v1.1.0-rc.1`, `:sha-<commit>`; **never** `:latest`; GitHub Release marked *pre-release* |
-| Stable | tag `v1.1.0` | `v1.1.0` | `:v1.1.0`, `:sha-<commit>`, `:latest` |
+| Prerelease | tag `vX.Y.Z-rc.1` | `vX.Y.Z-rc.1` | matching version and `:sha-<commit>`; **never** `:latest`; GitHub Release marked *pre-release* |
+| Stable | tag `vX.Y.Z` | `vX.Y.Z` | matching version, `:sha-<commit>`, `:latest` |
 
 `hextet-lg version` prints:
 
 ```text
-hextet-lg v1.1.0
+hextet-lg vX.Y.Z
 commit: abc1234
 built: 2026-11-10T00:00:00Z
 go: go1.27.3
@@ -44,7 +44,7 @@ hextet-lg_<version>_linux_arm64.tar.gz
 checksums.txt                        # SHA-256, verify with: cd dist && sha256sum -c checksums.txt
 ```
 
-Snapshot mode also asks Buildx to assemble the multi-architecture image locally; it does not push it. Each release executable embeds the example YAML, printable with `hextet-lg --print-config`; archives also include `examples/config.example.yaml` beside the binary, plus `README.md`, `ARCHITECTURE.md`, `docs/RELEASING.md`, the listed operator guides, community examples and any `LICENSE*` file. Runtime configuration is never packaged: the archive file list is an explicit allow-list. `<version>` is GoReleaser's version without the `v` (`v1.1.0` → `hextet-lg_1.1.0_linux_amd64.tar.gz`). `dist/` is ignored by Git.
+Snapshot mode also asks Buildx to assemble the multi-architecture image locally; it does not push it. Each release executable embeds the example YAML, printable with `hextet-lg --print-config`; archives also include `examples/config.example.yaml` beside the binary, plus `README.md`, `ARCHITECTURE.md`, `docs/RELEASING.md`, the listed operator guides, community examples and any `LICENSE*` file. Runtime configuration is never packaged: the archive file list is an explicit allow-list. The archive version omits the leading `v` (for example, `vX.Y.Z` becomes `hextet-lg_X.Y.Z_linux_amd64.tar.gz`). `dist/` is ignored by Git.
 
 Binaries are static (`CGO_ENABLED=0`, `-trimpath`) for linux/amd64 and linux/arm64. Version, commit and build time are injected by GoReleaser with linker flags (`internal/version`).
 The build date is an input, so builds with different dates are not expected to be byte-identical. Compare checksums from the same published release rather than assuming independently timed builds match.
@@ -56,11 +56,11 @@ One `Dockerfile` defines the runtime image (Alpine, UID/GID 10001, no capabiliti
 * `compiled` (default): built from source, cross-compiled on the build host (no QEMU), used by Compose, `make docker` and CI.
 * `prebuilt`: copies the binary GoReleaser already built, so the published image contains the **same executable** that is in the release archive. Only `.goreleaser.yaml` selects it.
 
-GoReleaser's `dockers_v2` drives Buildx to build and push **one multi-architecture manifest list per tag**, so `…:v1.1.0` pulls the right architecture on amd64 and arm64 hosts. No separate manifest step exists; the workflow only provides Buildx, the registry login and, afterwards, records the digest.
+GoReleaser's `dockers_v2` drives Buildx to build and push **one multi-architecture manifest list per tag**, so a version tag pulls the right architecture on amd64 and arm64 hosts. No separate manifest step exists; the workflow only provides Buildx, the registry login and, afterwards, records the digest.
 
 | Tag | Meaning | Mutable? |
 |---|---|---|
-| `ghcr.io/hextetsystems/hextet-lg:v1.1.0` | release | treat as stable, but a registry tag can be re-pushed |
+| `ghcr.io/hextetsystems/hextet-lg:vX.Y.Z` | release | treat as stable, but a registry tag can be re-pushed |
 | `…:sha-<7 hex>` | the exact commit | built once per commit |
 | `…:latest` | newest **stable** release | moves; never use for production or rollback |
 | `…@sha256:<digest>` | one exact manifest | **immutable; use this in production** |
@@ -83,20 +83,12 @@ Labels: `org.opencontainers.image.{title,description,source,url,documentation,li
 
 Permissions are `contents: read` for the workflow; only the `release` job gets `contents: write` and `packages: write`. No personal access tokens are used. Pull requests cannot reach the release workflow, and because `release` needs `ci`, a failing test cannot produce a release. Third-party actions are pinned to commit SHAs (version in the trailing comment); update them deliberately (Dependabot is configured for this).
 
-### v1.1.0 operator checklist (unreleased)
-
-- Review the complete staged and unstaged diff and the validation report, then commit the reviewed changes and ensure the release commit is on `main`.
-- Confirm the intended version is `v1.1.0` and review its `CHANGELOG.md` section. The `v1.0.0` tag is an ancestor of `main`, so GoReleaser can derive the next version as `v1.1.0`. This line has intentionally squashed history: only one commit appears since that tag, and its message is not a feature summary. The release workflow extracts the tagged version's section from `CHANGELOG.md` and passes it to GoReleaser as the release notes. Create and push the signed tag only after review; the tag triggers CI, the GitHub Release and GHCR publication.
-- Before deployment, preserve and verify the current immutable image reference and rollback procedure. Deploy the reviewed release by its published digest using the procedure below.
-- Check `/healthz` and `/readyz`, OpenBGPD connectivity and RTR session visibility. Confirm Raw JSON and RTR validator addresses remain hidden unless deliberately enabled.
-- Verify public IPv4 and IPv6 access and TLS and HSTS at the reverse proxy. These are deployment checks, not claims about the public ingress.
-
 ### Cutting a release (maintainer)
 
 ```sh
 git switch main && git pull --ff-only
-git tag -s v1.1.0 -m "Hextet LG v1.1.0"     # annotated and signed
-git push origin v1.1.0                       # starts the release workflow
+git tag -s vX.Y.Z -m "Hextet LG vX.Y.Z"     # annotated and signed
+git push origin vX.Y.Z                       # starts the release workflow
 ```
 
 Use `-rc.N` for candidates; their release notes use the corresponding base version section in `CHANGELOG.md`. To retract a bad release: delete the GitHub Release and the tag, publish a new patch version. Do not re-push an existing version tag; consumers pinned by digest are unaffected, those on the tag are not.
@@ -106,7 +98,6 @@ Use `-rc.N` for candidates; their release notes use the corresponding base versi
 * **Actions → General → Workflow permissions**: the workflows declare their own permissions; leaving the default read-only is fine.
 * **Packages**: the first push creates the `hextet-lg` package. It is linked to the repository through the `org.opencontainers.image.source` label. A new package may be **private**; set its visibility to *Public* (Package settings → Danger Zone) so hosts can pull without credentials, and check that the repository has *Write* access under *Manage Actions access*.
 * **Rulesets**: protect `main` (pull requests, required checks *Go checks*, *Docker image and Compose*, *GoReleaser configuration and snapshot*) and restrict who can create `v*` tags.
-* GHCR and GitHub Release publishing are exercised only by the real workflow; none of it has been run from this repository yet.
 
 ## Deployment
 
@@ -116,7 +107,7 @@ Download and verify the archive, install the binary, create the configuration fr
 
 ```sh
 sha256sum -c --ignore-missing checksums.txt
-tar xzf hextet-lg_0.2.0_linux_amd64.tar.gz
+tar xzf hextet-lg_<version>_linux_amd64.tar.gz
 cp examples/config.example.yaml /etc/hextet-lg/config.yaml   # then set backend URLs
 ./hextet-lg version
 ./hextet-lg --config /etc/hextet-lg/config.yaml
@@ -132,7 +123,7 @@ The process logs JSON to stderr and shuts down gracefully on SIGTERM/SIGINT (`se
 HEXTET_LG_IMAGE=ghcr.io/hextetsystems/hextet-lg@sha256:<digest> docker compose up -d --no-build --pull never
 ```
 
-Find the digest in the release's `image-digests.txt`, the workflow summary, or with `docker buildx imagetools inspect ghcr.io/hextetsystems/hextet-lg:v1.1.0`.
+Find the digest in the release's `image-digests.txt`, the workflow summary, or with `docker buildx imagetools inspect ghcr.io/hextetsystems/hextet-lg:<version-tag>`.
 
 ### Upgrade and rollback
 

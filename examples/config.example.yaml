@@ -203,7 +203,7 @@ looking_glass:
 backends:
   - id: local
     name: "Local OpenBGPD"
-    location: "Winnipeg"
+    location: "Example region"
     url: "http://openbgpd.example.invalid:9099"
     enabled: true
     # Optional per-backend override of looking_glass.query_timeout, e.g. for a
@@ -217,11 +217,12 @@ backends:
 # bgp_neighbors and rtr_sessions switch whole views and are independent of each
 # other (disabling one never disables the other). A disabled view has no
 # navigation link and its URL answers 404.
-#   bgp_neighbors: the BGP session pages /neighbors and /summary (default true)
+#   bgp_neighbors: the BGP Neighbors page /neighbors (default true); session
+#                  counts come from the backend /summary endpoint.
 #   bgp_maps:      show BGP path map links and the /map page (default true)
 #   rtr_sessions:  the RPKI-to-Router session page /rtr (default true). It needs
-#                  a bgplgd that provides /rtr (present in OpenBGPD 8.2 to 9.3); a backend
-#                  without it is reported as "unsupported", never as "no
+#                  a bgplgd that provides /rtr; a backend without it is
+#                  reported as "unsupported", never as "no
 #                  sessions", and never prevents startup.
 #   rtr_session_addresses: show RTR validator addresses, ports and local
 #                  addresses on /rtr (default false). By default validators are

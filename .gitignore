@@ -37,6 +37,9 @@ __pycache__/
 /.gocache/
 /tmp/
 /scratch/
+/.agents/
+/.aws/
+/.codex/
 /.claude/
 .idea/
 .vscode/

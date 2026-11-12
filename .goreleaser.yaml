@@ -40,6 +40,10 @@ archives:
       - src: README.md
       - src: ARCHITECTURE.md
       - src: docs/RELEASING.md
+      - src: docs/SECURITY.md
+      - src: docs/BRANDING.md
+      - src: docs/OPENBGPD.md
+      - src: docs/TESTING.md
       - src: docs/COMMUNITIES.md
       - src: docs/THEMING.md
       - src: docs/PTR_ENRICHMENT.md
@@ -66,7 +70,7 @@ dockers_v2:
       - linux/amd64
       - linux/arm64
     tags:
-      # Exact release: v0.1.0 (snapshots use their snapshot version instead).
+      # Exact release tag (snapshots use their snapshot version instead).
       - '{{ if .IsSnapshot }}{{ .Version }}{{ else }}{{ .Tag }}{{ end }}'
       # Exact build: sha-<commit>.
       - "sha-{{ .ShortCommit }}"

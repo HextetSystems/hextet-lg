@@ -2,6 +2,10 @@
 
 Hextet LG is a read-only web looking glass for one or more OpenBGPD `bgplgd` HTTP APIs. It is a Go application with Go HTML templates, HTMX form updates, and embedded frontend assets. It has no database or other persistent service.
 
+Install a Linux amd64 or arm64 binary from [GitHub Releases](https://github.com/HextetSystems/hextet-lg/releases), or use the multi-architecture image at `ghcr.io/hextetsystems/hextet-lg`. Start with [`examples/config.example.yaml`](examples/config.example.yaml), configure one or more reachable bgplgd backends, and follow [Docker deployment](#docker-deployment) or [local development](#local-development). OpenBGPD and bgplgd are managed separately; Hextet LG does not bundle them.
+
+The application uses bgplgd's JSON HTTP API, including `/rib` and `/neighbors`; the Neighbors page also uses the backend `/summary` endpoint for session counts. RTR display uses `/rtr` when available and reports unsupported otherwise. The committed OpenBGPD 9.3 fixtures cover the API response shapes used by the regression suite; optional fields can vary by OpenBGPD release.
+
 The software is **Hextet LG**; the looking glass you deploy is yours. Site name, subtitle, operator, AS number, website, contact, logo, favicon and footer note are configurable (see [Site identity and branding](#site-identity-and-branding)); without configuration the site is operator-neutral.
 
 ## Search options
@@ -82,7 +86,7 @@ Every view is a bookmarkable GET URL. Shared links are **live queries, not snaps
 | `/neighbors`, `/rtr` | `backend` |
 | `/communities` | `q`, `category` |
 
-Simple searches keep their original form: `/?type=prefix\|asn\|large-community&q=...&backend=...&view=...`. Prefix searches with a scope flag also use `type` and `q`. Other compound searches name each filter, for example `/?as=15169&large-community=395089%3A0%3A6&af=ipv6&best=1&backend=all&view=table&page=2`. The application emits parameters in a canonical order (filters in the order of the table below, then `backend`, `view`, `page`); both forms are accepted as input and mixed. A form submission that carries empty fields is redirected once to the canonical URL, and HTMX updates push the canonical URL into browser history. Back/forward and fresh-session opening work without any stored state, and ordinary navigation works without JavaScript.
+Simple searches keep their original form: `/?type=prefix\|asn\|large-community&q=...&backend=...&view=...`. Prefix searches with a scope flag also use `type` and `q`. Other compound searches name each filter, for example `/?as=15169&large-community=64500%3A0%3A6&af=ipv6&best=1&backend=all&view=table&page=2`. The application emits parameters in a canonical order (filters in the order of the table below, then `backend`, `view`, `page`); both forms are accepted as input and mixed. A form submission that carries empty fields is redirected once to the canonical URL, and HTMX updates push the canonical URL into browser history. Back/forward and fresh-session opening work without any stored state, and ordinary navigation works without JavaScript.
 
 Unknown parameters, repeated parameters (there are no OR lists), invalid values and mutually exclusive combinations are rejected with an explanation; filters are never silently dropped. HTML and plaintext responses return HTTP 400; HTMX swaps the error fragment into the page.
 
@@ -109,8 +113,8 @@ Every HTML page has a title of the form `<subject> · <site name>`; the site nam
 |---|---|
 | `/` without a search | `Route Explorer` |
 | Prefix or address | the normalized value, e.g. `192.0.2.0/24`, `2001:db8::/32` |
-| Source ASN | `AS395611` |
-| Large community | `395089:5:2` |
+| Source ASN | `AS64500` |
+| Large community | `64500:5:2` |
 | Standard / extended community | `Community 65000:100`, `Extended community rt 65000:1` |
 | Neighbor / peer group | `Neighbor 192.0.2.1`, `Peer group transit` |
 | Several filters | the first primary filter above plus `+N filters`; prefix modes read `(more specifics)` / `(covering prefixes)`; filters without a primary one read `Route search (N filters)` |
@@ -132,7 +136,7 @@ The route table is one piece of markup that adapts to the available width throug
 | 700 px and below | Phone: each route becomes a compact card. The prefix (with `BEST`), origin ASN, RPKI and ASPA state (labelled text, not colour only), next hop and a two-line AS path are visible; neighbor, local preference, MED and age move into the expanded details together with the full AS path. |
 | 520 px and below | Backend and search type share a row, the view selector shares one with **Search**. Below 360 px controls stack and the details grid has one column. |
 
-Each route has one details row holding two independent native `<details>` disclosures on the same line: **Route details** and, only when enabled, **Raw JSON**. Either, both or neither can be open; opening one never opens the other. While both are collapsed the row is exactly as tall as the former single "Route details" row. An expanded disclosure takes the full width and the other one moves below it. The Neighbors and Summary pages use the same pair (**Neighbor details** and **Raw JSON**).
+Each route has one details row holding two independent native `<details>` disclosures on the same line: **Route details** and, only when enabled, **Raw JSON**. Either, both or neither can be open; opening one never opens the other. While both are collapsed the row stays compact. An expanded disclosure takes the full width and the other one moves below it. The Neighbors page uses the same pair (**Neighbor details** and **Raw JSON**).
 
 ### Display configuration
 
@@ -154,7 +158,7 @@ The optional `display` section is presentation only: it never changes the OpenBG
 
 Back and Forward re-render the page from the server using the canonical URL (`historyCacheSize` is 0, so HTMX never restores a DOM snapshot, whose form values are stale). The search box, search type, backend, view, advanced filters, title and results therefore always agree with the URL, exactly as after a reload. Backend queries are subject to the normal result cache. Search controls and the theme button are wired through delegated listeners so they keep working after the page body is replaced.
 
-**Rejected searches in history.** A rejected search (HTTP 400) is a legitimate history entry. HTMX 2 swaps a history-restore response only for status 200-399, so going Back or Forward to such an entry used to change the URL and leave the previous page. `app.js` now handles `htmx:historyCacheMissLoadError` by reloading the current URL as an ordinary navigation: the server still answers 400 (never masked), and the browser shows the error page with the form, title and footer exactly as a reload does. Covered by the browser regression and `testdata/history.test.js`.
+**Rejected searches in history.** Rejected searches remain HTTP 400 history entries. When browser history reaches one, the application reloads the URL so the server-rendered error page and search form are shown with the original status. This behavior is covered by the browser regression and `testdata/history.test.js`.
 
 ## Page generation timing
 
@@ -204,11 +208,11 @@ OpenBGPD answers a query that bgpctl rejects (for example a malformed `ext-commu
 
 ### IPv4 and IPv6
 
-Both families are supported everywhere and treated identically. Without `af`, no family restriction is applied and OpenBGPD returns IPv4 and IPv6 routes together (on the reference backend, `as=15169` returns 1,068 IPv4 + 146 IPv6 = 1,214 routes; `af=ipv4`/`af=ipv6` select the halves natively). Prefix and neighbor addresses are validated with `net/netip` and canonicalized (IPv6 compressed, lower-case; host bits preserved) so equivalent spellings share one cache entry and one URL; IPv4-mapped IPv6 addresses and zones are rejected in prefix searches. A route's family comes from its **prefix**, never from its next hop or neighbor: an IPv6 route may have an IPv4 next hop (RFC 8950) and either family of neighbor (the reference backend carries IPv6 routes over an IPv4 session). The UI displays `exit_nexthop` as the route next hop; it omits `true_nexthop`, which can be an internal forwarding address. The `valid` field is shown as route qualification, separate from RPKI and ASPA. Qualification reflects OpenBGPD's routing state and can depend on a reachable default route; a backend without an IPv6 default route may report IPv6 routes as unqualified. Unmodelled attributes remain available in Raw JSON when that opt-in display is enabled.
+Both families are supported everywhere and treated identically. Without `af`, no family restriction is applied and OpenBGPD returns IPv4 and IPv6 routes together (`af=ipv4` and `af=ipv6` select a family natively). Prefix and neighbor addresses are validated with `net/netip` and canonicalized (IPv6 compressed, lower-case; host bits preserved) so equivalent spellings share one cache entry and one URL; IPv4-mapped IPv6 addresses and zones are rejected in prefix searches. A route's family comes from its **prefix**, never from its next hop or neighbor: an IPv6 route may have an IPv4 next hop (RFC 8950) and either family of neighbor. The UI displays `exit_nexthop` as the route next hop; it omits `true_nexthop`, which can be an internal forwarding address. The `valid` field is shown as route qualification, separate from RPKI and ASPA. Qualification reflects OpenBGPD's routing state and can depend on a reachable default route; a backend without an IPv6 default route may report IPv6 routes as unqualified. Unmodelled attributes remain available in Raw JSON when that opt-in display is enabled.
 
 ## Large responses, streaming and partial results
 
-A DFZ-sized answer is an expected operating condition. For example, the Large Community search `395089:0:8` on the reference backend returns 112 MiB / 179,243 routes (IPv4 + IPv6) in about 9 seconds.
+Large responses are an expected operating condition. Query size and latency depend on the backend and filter; the configured response, retention, and time limits can produce clearly labelled partial results.
 
 - **Streaming decode.** The response is decoded incrementally with `encoding/json.Decoder` as it arrives. The first complete route is available after ~0.1 s. The raw body is never buffered whole and only a compacted copy of each route's JSON is retained.
 - **Completion is explicit and per backend**: `complete`, `partial` or `failed`, with a reason (`timeout`, `response_limit`, `memory_limit`, `capacity`, `connection_closed`, `invalid_json`, `backend_error`, `canceled`, `busy`).
@@ -234,13 +238,13 @@ All are configurable in `looking_glass` (defaults shown):
 | `max_concurrent_backends` | 4 | backend fan-out within one request |
 | `cache_ttl` / `cache_max_bytes` | 20s / 256 MiB | see below; `cache_ttl: 0s` disables the cache |
 
-128 MiB of JSON does not need 128 MiB of RAM: it needs more. Measured on the reference backend, 112 MiB of JSON decoded to about 250 MiB of retained routes, and the container's cgroup peak was 446 MiB because Go's collector needs headroom. `max_retained_bytes` therefore bounds retention separately from the byte limit, and the process sets a soft Go memory limit from the configured budgets (`max_concurrent_queries × max_retained_bytes + cache_max_bytes`, plus slack) unless `GOMEMLIMIT` is set. Plan container memory for roughly that budget; with the defaults, a single large query peaked around 450 MiB. Lower the limits for smaller hosts.
+128 MiB of JSON does not need 128 MiB of RAM: it needs more. `max_retained_bytes` therefore bounds retention separately from the byte limit, and the process sets a soft Go memory limit from the configured budgets (`max_concurrent_queries × max_retained_bytes + cache_max_bytes`, plus slack) unless `GOMEMLIMIT` is set. Lower the limits for smaller hosts.
 
 ### Public deployment controls
 
 The default request-target limit is 8192 bytes, query-string limit 6144 bytes, parameter limit 64, and header limit 32768 bytes. The server has a 5s header read timeout, 15s request read timeout, 60s idle timeout, and 15s per-write deadline; there is no overall write deadline that cuts short a backend query. These limits permit IPv6 and compound searches. Header and URL limits and rates are configurable in `server` as shown in the example.
 
-Per-peer token buckets allow 10 inexpensive requests per second (burst 60), and 1 live request per second (burst 8). Live includes Route Explorer requests with parameters, neighbors and RTR sessions. Exhaustion returns 429 and `Retry-After`; liveness and readiness are exempt. The limiter holds at most 10,000 buckets and removes inactive entries after ten minutes using a periodic cleanup. It uses the direct TCP peer only and ignores all forwarded headers. Behind Cloudflare Tunnel or another proxy all users therefore share the proxy's allowance; configure rate limiting at the trusted ingress or size the limits for the aggregate. Do not expose an unauthenticated bypass around that ingress.
+Per-peer token buckets allow 10 inexpensive requests per second (burst 60), and 1 live request per second (burst 8). Live includes Route Explorer requests with parameters, neighbors and RTR sessions. Exhaustion returns 429 and `Retry-After`; liveness and readiness are exempt. The limiter holds at most 10,000 buckets and removes inactive entries after ten minutes using a periodic cleanup. It uses the direct TCP peer only and ignores all forwarded headers. Behind a reverse proxy all users therefore share the proxy's allowance; configure rate limiting at the trusted ingress or size the limits for the aggregate. Do not expose an unauthenticated bypass around that ingress.
 
 All route queries, including prefix searches, share `max_concurrent_queries` slots; `max_queued_queries` (16) bounds active and waiting work and `queue_wait` defaults to 2s. Identical queries share a flight and cached responses do not take a slot. A fully busy result returns 503 with `Retry-After`; retry later or increase capacity only after sizing memory. A partial response means one or more backends stopped early; check its reason and do not infer absence of routes. Limits are per process, not shared across replicas.
 
@@ -248,7 +252,7 @@ Security headers restrict scripts and styles to same-origin assets, deny framing
 
 **Memory sizing:** Each dataset has one reservation shared by its cache, flight and request owners; eviction drops only the cache reference, and the reservation remains until the last renderer finishes. Retention is reserved incrementally before appending each complete route. `cache_max_bytes` is a cache-eviction sublimit within `max_total_retained_bytes`, not an additional aggregate allowance. Summary and neighbor responses are limited to 1 MiB each, and reserve 128 MiB per selected backend until rendering completes. The work gate includes cache hits and slow writers; saturation returns 503 with `Retry-After`. Health and local documentation do not use this gate.
 
-The aggregate counter is an estimate of retained route objects plus fixed overview allowances; JSON decoder buffers, individual large JSON objects, formatting, Go heap fragmentation, garbage collection, network buffers and runtime memory are not precisely charged. It is neither a heap nor RSS limit. The runtime's derived `GOMEMLIMIT` is soft. Start with at least 2 GiB container memory for the default limits and measure representative traffic before production; this is an initial recommendation, not a measured ceiling. A single large query in the earlier implementation measured about 446 MiB cgroup peak; a local in-process mock smoke run (128 requests, 10,000 routes per result) observed 71.2 MiB peak process RSS and 51.0 MiB peak heap, but was short and is not sustained mixed-load container validation. Run `HEXTET_LOAD_TEST=1 go test ./internal/web -run TestMockLoad -v` to repeat it; this includes the test process and mock backend, not a container memory measurement. Set lower route, response, cache, aggregate and work limits together for smaller hosts, leaving substantial headroom, and enforce ingress concurrency and rate limits.
+The aggregate counter estimates retained route objects plus fixed overview allowances; decoder buffers, formatting, Go heap fragmentation, garbage collection, network buffers and runtime memory are not precisely charged. It is neither a heap nor RSS limit. The runtime's derived `GOMEMLIMIT` is soft. Size the container for the expected query mix and concurrency, measure representative traffic in the target environment, and leave substantial headroom. Lower route, response, cache, aggregate and work limits together for smaller hosts, and enforce ingress concurrency and rate limits.
 
 ### Cache admission for partial results
 
@@ -396,7 +400,7 @@ The HTML table, plaintext summary (`view=text`) and plaintext detail (`view=deta
 
 ```text
 WARNING: PARTIAL RESULTS
-Backend: Winnipeg (Home)
+Backend: Example LG
 Reason: Backend timeout after 30s
 Routes decoded: 42317
 Elapsed: 30.0s
@@ -421,15 +425,7 @@ With definitions loaded, communities in a route's expanded **Route details** sho
 
 Community Explorer (`/communities`) lists definitions from the loaded text files, with search and source filters (up to 1,000 matches per page) and a one-click search link for each exact definition whose search type is enabled. Rows show only the community, its description and its source file.
 
-The former built-in AS395089 reference has been moved out of the code into [`examples/communities/`](examples/communities) (`as395089.txt`, 30 definitions). Nothing loads it unless you configure the directory: a clean installation is operator-neutral. In Docker, mount the directory read-only at `/etc/hextet-lg/communities` (see [Docker deployment](#docker-deployment)).
-
-## Isolated container load exercise
-
-On Linux with Docker, `python3 scripts/container-load.py` starts a separate 2 GiB-limited container on loopback port 18080 and a mock backend on loopback port 19099. It refuses an occupied test port, uses an independently generated configuration containing only the mock address, disables the image health check, runs for 305 seconds, samples container memory, and removes the test container on exit. It sends concurrent shared and distinct route searches together with summary and neighbor requests. It does not use either operator configuration. Do not run it if those ports are needed by another service.
-
-`python3 scripts/container-stop.py [image]` is the matching stop-deadline check: it runs one more isolated, Compose-restricted container (loopback ports 18081 and 19098) with a hung shared query, a client that never reads and a very slow reader, sends Docker's normal stop with the 45-second grace, and fails if the container is killed (exit 137) instead of exiting cleanly within the deadline. The resource-recovery, cache-churn and shutdown tests live in `internal/web/closure_*_test.go`; run them with `go test -race ./internal/web`.
-
-A 305-second run with 10,000 mock routes per dataset and 24 client workers completed 85,367 HTTP 200 responses and 245 HTTP 503 responses, all with `Retry-After`; sampled container memory peaked at 359.9 MiB against a 2 GiB limit, and Docker reported no OOM kill. The samples rose initially and then fluctuated rather than growing monotonically. This workload does not represent a full DFZ result, does not measure Go heap or aggregate reservation peaks, and does not exercise slow/disconnected clients or prove the full shutdown matrix. The previous 446 MiB figure was from a single live large query, not this test. Further representative mixed-load and slow-client testing is needed before treating 2 GiB as a verified ceiling.
+The text files in [`examples/communities/`](examples/communities) are optional sample definitions, not defaults. Nothing loads them unless you configure the directory. In Docker, mount the directory read-only at `/etc/hextet-lg/communities` (see [Docker deployment](#docker-deployment)).
 
 ## Configuration
 
@@ -443,17 +439,11 @@ Release binaries also embed this same example. To write it to a file, run `hexte
 
 Then set each backend's `url` to the OpenBGPD `bgplgd` HTTP API address reachable from the application. Backend URLs are configured exclusively through YAML; requests cannot supply or override them. `default_backend` can be `all` or an enabled backend ID. Startup validates the listen address, backend IDs, URLs and every limit. Every `looking_glass` setting is optional and falls back to the defaults above, so configurations written for earlier versions keep working; note that explicit older values (for example `query_timeout: 10s` and `max_response_bytes: 16777216`) are honoured and will turn large searches into partial results; remove those lines to adopt the new defaults. The optional `community_definitions` section (disabled by default) is described under Community definitions above; the optional `theme` section is described under Themes. Use `--config /path/to/config.yaml`; the default is `/etc/hextet-lg/config.yaml`.
 
-**Compatibility.** The v1.0.0 example configuration loads unchanged and comes up with every newer disclosure setting in its safe position (Raw JSON off, RTR validator addresses hidden, metrics off, enrichment off); `server.title` still names the site when `site.name` is absent. Intentional behaviour changes since v1.0.0 that an existing deployment can notice:
-
-- A Route Explorer URL that repeats `backend`, `view` or `output` is rejected with HTTP 400 (the first value used to win silently). URLs the application emits never repeat a parameter.
-- A backend that answers with an HTTP redirect is reported as failed; redirects are never followed. Configure the final bgplgd URL.
-- `/static/` no longer lists the embedded files, and unknown names under it are 404.
-- Branding images are decoded completely at startup: a truncated or corrupt PNG, JPEG or GIF, an ICO whose directory points outside the file, or an SVG with an `<?xml-stylesheet?>` instruction, an external `url()` in any attribute or an escaped CSS reference now fails startup with the file name. Files that were complete and self-contained are unaffected.
-- In `output=plain` (and the HTML text views) control characters inside backend values are shown as spaces.
+**Compatibility.** Existing configurations continue to work with omitted optional settings using their documented defaults. Explicit values remain in effect, and `server.title` is supported when `site.name` is absent.
 
 ## Security model and deployment
 
-What an anonymous visitor can reach, and what stands between them and everything else. The M5.2 audit that verified this section is described in [docs/TESTING.md](docs/TESTING.md).
+What an anonymous visitor can reach, and what stands between them and everything else. See [Security and deployment](docs/SECURITY.md) for deployment requirements and the boundary between application controls and operator responsibilities.
 
 | Boundary | What is trusted | What the application does |
 |---|---|---|
@@ -509,14 +499,14 @@ HEXTET_LG_IMAGE=ghcr.io/hextetsystems/hextet-lg@sha256:<digest> docker compose u
 
 `hextet-lg:local` is a mutable tag and is **not** a rollback reference. Upgrades and rollbacks, which preserve the exact previously running image, are described in [docs/RELEASING.md](docs/RELEASING.md) and automated by `scripts/deploy.sh` (`status`, `upgrade <image>`, `rollback`, with `--dry-run`).
 
-For the suggested host layout, keep Compose files in `/srv/docker/compose/hextet-lg/` and place the Docker runtime file at `configs/config.docker.yaml` relative to that Compose project, or adjust the Compose bind mount to your chosen local config path.
+For a simple per-user host layout, keep the Compose project in `~/docker-compose/hextet-lg/` and place `configs/config.docker.yaml` relative to `compose.yaml`, or adjust the Compose bind mount to your chosen local config path. Relative bind-mount paths resolve from the Compose file's directory.
 
 To use community definitions, add `community_definitions: {enabled: true, directory: /etc/hextet-lg/communities}` to `configs/config.docker.yaml` and mount the directory read-only next to the configuration (the files must be readable by UID 10001; no write access, port or other restriction changes):
 
 ```yaml
     volumes:
       - ./configs/config.docker.yaml:/etc/hextet-lg/config.yaml:ro
-      - /srv/docker/data/hextet-lg/communities:/etc/hextet-lg/communities:ro
+      - ./communities:/etc/hextet-lg/communities:ro
 ```
 
 `compose.yaml` carries this as a commented example, because a bind mount of a missing host directory would be created empty by Docker. If the directory is configured but absent, the container exits at startup. Restart the container after editing definition files.
@@ -560,6 +550,8 @@ Requires the Go version declared in `go.mod` (1.26 or newer). Release tooling: `
 
 `node --test internal/web/testdata/*.test.js` runs the client-script unit tests. Tests use `httptest` fixtures and do not require a live OpenBGPD process. Dependencies use normal Go module metadata and are not vendored. Opt-in headless-Chromium regression tests and an opt-in, read-only live OpenBGPD compatibility check are described in [docs/TESTING.md](docs/TESTING.md); without their environment variables they are skipped, never reported as passing.
 
+Contributions are welcome through pull requests. Run the Go and Node checks above before submitting changes. Hextet LG is licensed under the [BSD 2-Clause License](LICENSE).
+
 ## Known limitations
 
 - **OpenBGPD API.** bgplgd offers no pagination, result limit or streaming contract; HTML paging slices a fully decoded answer. Its filters are the ones listed above only; there is no AS-path or customer-cone search, and none is emulated locally.
@@ -567,20 +559,18 @@ Requires the Go version declared in `go.mod` (1.26 or newer). Release tooling: `
 - bgplgd cannot distinguish "bgpd returned nothing" from "no matches" when it emits a valid empty document (for example for a neighbor address that does not exist); such answers are reported as complete with zero routes. Rejected queries that produce an *empty body* are reported as failures.
 - Extended-community syntax is validated by OpenBGPD, not by this application (which only bounds it to 255 printable ASCII characters and sends it as one encoded parameter); the search type is off by default.
 - There is no trusted-proxy setting: behind a reverse proxy the built-in rate limiter sees one peer, so per-client limiting belongs at the proxy (see *Behind a reverse proxy*). Serving under a URL sub-path is not supported. The application does not terminate TLS and does not send `Strict-Transport-Security`.
-- Deployment validation (M5.2) used isolated containers, mock backends, a local TLS-terminating HAProxy and loopback addresses of both families; public dual-stack reachability, a real CDN or tunnel in front, and sustained production load were not exercised.
 - Metrics and log records are in-process only: counters reset on restart, and logs are as durable as the container log driver. There is no tracing and no bundled dashboard or alert rules.
 - The footer's page generation time is server-side only and is read before the footer is written, so it excludes the footer itself, network time and browser rendering; HTMX history restoration displays the original request's figure.
 - Browser Back/Forward re-queries the backends (through the result cache) instead of restoring a snapshot; results are always live queries.
 - On phones the Neighbors, RTR and Community Explorer tables keep their columns and scroll horizontally inside their own container rather than turning into cards; only the Route Explorer table is card-based.
 - Cached results can be up to `cache_ttl` old; disable with `cache_ttl: 0s` for strictly live results.
 - RTR sessions: OpenBGPD reports no record counts or last-synchronization time over `/rtr`, so none are shown; a bgplgd without `/rtr` is shown as unsupported. The raw backend JSON on the neighbor pages (off unless `display.raw_json` is enabled) contains fields not otherwise displayed (see [docs/SESSION_VISIBILITY.md](docs/SESSION_VISIBILITY.md)).
-- OpenBGPD versions may expose different optional fields. The Neighbors page combines session counts from `/summary` with detailed rows from `/neighbors`, independently for each backend.
+- OpenBGPD versions may expose different optional fields. The Neighbors page combines session counts from the backend `/summary` endpoint with detailed rows from `/neighbors`, independently for each backend. There is no public `/summary` page.
 - Community definitions are operator-supplied descriptions, not live verification. The loader is stricter than the NLNOG implementation (duplicates, unsupported tokens and leading-zero literals are startup errors), so some upstream files need editing; see [docs/COMMUNITIES.md](docs/COMMUNITIES.md). Extended-community definitions cover the numeric `label A[:B]` forms only, and the OpenBGPD well-known standard community names are mapped from knowledge of its output format, not verified against a live backend.
 - The embedded HTMX runtime is pinned at version 2.0.4. No external browser assets are required.
 - Absent route fields display as unknown or an em dash. RPKI OVS, ASPA AVS, and route qualification remain separate values.
 - Live route results depend on the separately managed OpenBGPD API.
 - Between 701 and about 900 px the nine-column route table scrolls inside its own container (the page does not scroll); the card layout starts at 700 px.
-- Integration coverage with a real OpenBGPD 9.3 backend was bounded and read-only (see [docs/TESTING.md](docs/TESTING.md)); IPv6 BGP neighbors, non-`unknown` ASPA results and community searches were not exercised live and rely on mock tests.
 
 ### Optional ASN registration descriptions
 
@@ -605,7 +595,7 @@ Persistence is optional and off by default. To enable it, set
 
 ```yaml
 volumes:
-  - /srv/docker/data/hextet-lg/asn-cache:/var/lib/hextet-lg
+  - ./asn-cache:/var/lib/hextet-lg
 ```
 
 The cache file is written atomically with restrictive permissions, periodically

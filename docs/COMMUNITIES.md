@@ -151,7 +151,7 @@ The `text` and `detail` views and `output=plain` are **not annotated**: their co
 
 ## Search is independent
 
-Definitions do not influence searching. A community is searchable by its raw value whether or not a description exists, search URLs and canonical forms are unchanged, the M4.2 `features.*` flags still govern which search types are accepted, route visibility exclusions still apply, and descriptions cannot be searched (the Community Explorer's own text filter is local to that page).
+Definitions do not influence searching. A community is searchable by its raw value whether or not a description exists, search URLs and canonical forms are unchanged, the `features.*` flags still govern which search types are accepted, route visibility exclusions still apply, and descriptions cannot be searched (the Community Explorer's own text filter is local to that page).
 
 ## Community Explorer
 
@@ -166,11 +166,11 @@ services:
   hextet-lg:
     volumes:
       - ./configs/config.docker.yaml:/etc/hextet-lg/config.yaml:ro
-      - /srv/docker/data/hextet-lg/communities:/etc/hextet-lg/communities:ro
+      - ./communities:/etc/hextet-lg/communities:ro
 ```
 
 with `community_definitions.enabled: true` and `directory: /etc/hextet-lg/communities` in `configs/config.docker.yaml`. The files must be readable by UID 10001 (mode 0644, directory 0755). If the directory is configured but absent, the container exits at startup (see the policy above).
 
 ## Example set
 
-[`examples/communities/`](../examples/communities) holds the AS395089 definitions migrated from the former built-in reference: `as395089.txt` (30 definitions). Copy it to your communities directory if you operate AS395089, or use it as a model. It is operator data, not a default: nothing is loaded unless you configure the directory.
+[`examples/communities/`](../examples/communities) contains optional sample definitions. Copy the files you want into your configured definitions directory; they are not loaded by default.

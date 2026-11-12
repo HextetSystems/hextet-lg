@@ -1,158 +1,55 @@
-# Repository guidance
+# Contributor guide
 
-## Go conventions
+Hextet LG is a read-only Go web application that presents routes and session information from configured OpenBGPD `bgplgd` HTTP APIs. The interface uses Go `html/template`, embedded CSS and JavaScript, and HTMX to enhance ordinary forms and links. It has no database or persistent route store. `ARCHITECTURE.md`, `README.md`, and the focused documents under `docs/` describe behavior in more detail; keep this guide general and current.
 
-- Use the standard module `github.com/HextetSystems/hextet-lg`; keep dependencies in `go.mod`/`go.sum` and do not add vendoring or `go.work`.
-- Keep dependencies small. Prefer Go standard library packages for HTTP, URL handling, JSON, templates, and validation.
-- Run `gofmt` on Go files and validate with `go vet ./...` and `go test ./...`.
-- Also run `go test -race ./...` and `node --test internal/web/testdata/*.test.js`. The browser suites (`HEXTET_LG_BROWSER=1`, `NODE_PATH` to a Playwright install kept outside the repository, by default `~/.cache/hextet-lg-browser/node_modules`; `go test ./internal/web -run Browser` runs `TestBrowserRegression` and `TestBrowserSecurity`) and the live check (`HEXTET_LG_LIVE=1`) are opt-in, read-only and documented in `docs/TESTING.md`; never add Playwright or a `node_modules` directory to the repository or hard-code a user path; skipped tests are never reported as passing. Never commit real backend responses: sanitize fixtures to documentation addresses and private ASNs.
+## Code organization
 
-## Project layout
+- `cmd/hextet-lg`: command-line entry point, configuration loading, and process lifecycle.
+- `internal/config`: YAML decoding, defaults, and startup validation.
+- `internal/bgp`: backend HTTP client, API types, route decoding, and query validation/canonicalization.
+- `internal/web`: HTTP handlers, presentation, templates, embedded assets, request controls, and enrichment integration.
+- `internal/{asn,ptr}`: optional bounded DNS enrichment services.
+- `internal/{communities,site,theme,visibility,obs,version}`: focused packages for community definitions, deployment identity and assets, theme generation, route visibility, observability, and build identity.
+- `internal/web/templates` and `internal/web/static`: page templates and frontend assets, embedded through `internal/web/embed.go`.
+- `internal/*/*_test.go` and `internal/web/testdata`: Go tests, browser test scripts, and sanitized backend fixtures.
+- `examples/`: sample runtime configuration and community data. `docs/`: user, operator, security, architecture, and testing guidance.
 
-- `cmd/hextet-lg`: CLI and process lifecycle.
-- `internal/config`: strict YAML decoding and startup validation.
-- `internal/bgp`: OpenBGPD HTTP transport types, native query construction, and client.
-- `internal/communities`: operator-supplied community definitions (legacy NLNOG text format): parser, matcher, loader. No web or BGP dependencies.
-- `internal/web`: handlers, embedded templates, and static assets. `sessions.go` builds the BGP neighbor and RTR presentation rows.
-- `internal/theme`: strict `#RRGGBB` theme configuration, deterministic token derivation, contrast audit and the generated stylesheet. No web or BGP dependencies.
-- `internal/site`: deployment identity (`site` section): validation, startup-loaded logo/favicon assets, footer items, built-in favicon. No web or BGP dependencies.
-- `internal/version`: build identity (link-time `Version`/`Commit`/`Date` with toolchain fallbacks).
-- `.goreleaser.yaml`, `.github/workflows`: release automation and CI. `scripts/deploy.sh`: upgrade/rollback wrapper. `docs/RELEASING.md`: release and deployment guide.
-- `examples/config.example.yaml`: complete, documented example YAML configuration; `examples/communities`: example community definitions (data, not defaults). `configs`: local runtime configuration, entirely ignored by Git. `docs/COMMUNITIES.md`: definitions guide. `docs/SESSION_VISIBILITY.md`: BGP neighbor and RTR session guide. `docs/BRANDING.md`: site identity, logo and favicon guide. `docs/TESTING.md`: deterministic, browser and live test layers.
+Keep functionality in the package that owns it. Keep backend transport models separate from presentation models, and avoid adding dependencies, layers, or generic abstractions without a clear need.
 
-## Frontend embedding
+## Go and web conventions
 
-- Keep templates and static assets beneath `internal/web`, beside `embed.go`.
-- Use package relative embed patterns such as `//go:embed templates/* static/*`.
-- Do not reference parent directories in `go:embed` patterns. Render with `html/template`; HTMX may enhance standard forms.
+- Use the module `github.com/HextetSystems/hextet-lg`. Prefer the Go standard library for HTTP, URL handling, JSON, templates, validation, and concurrency where practical. Keep dependencies small; do not add vendoring or `go.work`.
+- Format Go changes with `gofmt`. Follow existing error handling, context propagation, and package boundaries.
+- Validate addresses with `net/netip` and preserve IPv4 and IPv6 behavior throughout parsing, queries, display, and tests. Do not infer a route's family from its next hop.
+- Use the configured bgplgd client and its fixed supported endpoints. Backend URLs come only from validated configuration. Keep requests bounded by contexts/timeouts, response and retained-memory limits, and existing concurrency controls. Do not fetch a whole RIB for local filtering or add generic AS-path/customer-cone features.
+- Treat route results as read-only, per-backend data. Preserve completion and failure states; partial or failed responses must not look like complete empty results. Keep route validity, RPKI, and ASPA states distinct.
+- Render HTML with `html/template`; keep templates and assets under `internal/web`. Prefer progressive enhancement: ordinary navigation and forms should work without JavaScript, while HTMX may update results and history. Do not concatenate untrusted text into markup or weaken the Content Security Policy to support a feature.
+- Keep public URLs canonical and bookmarkable. Reject unknown or repeated parameters rather than silently selecting one. Serve static assets only through the existing exact-name embedded asset handler.
 
-## Backend API conventions
+## Security and resource boundaries
 
-- Use `GET /rib` with bgplgd's native filters, combined in one request built with `net/url`: `prefix`, `as` (source-AS lookup), `community`, `ext-community`, `large-community`, `neighbor`, `group`, `af`, `rib`, `ovs`, `avs`, `best`, `error`, `filtered`, `invalid`, `leaked`, `all`, `or-shorter`. `internal/bgp/query.go` is the single place that defines, validates and canonicalizes them.
-- Each filter takes one value; never send repeated parameters or treat them as OR. Reject (never silently drop) invalid values, unknown parameters and combinations bgplgd would silently resolve: `neighbor`/`group`, the route-state flags, and `all`/`or-shorter` are exclusive; `all`/`or-shorter` need `prefix`; reserved legacy `rib=in|out|local` values are rejected. Keep standard, extended and large communities distinct.
-- Do not implement generic AS-path matching, customer cones, or download a whole RIB for local filtering.
-- Support IPv4 and IPv6 identically: validate with `net/netip`, never restrict a query to IPv4 implicitly (send `af` only when requested), derive a route's family from its prefix (never from next hop or neighbor), and avoid fixed-width or IPv4-only assumptions.
-- Respect request contexts, configured timeouts, concurrency bounds, and response byte limits.
-- Keep API transport types separate from presentation models and preserve multiple routes per prefix.
-- Decode `/rib` responses as a stream (`encoding/json.Decoder`); never read the whole body into memory. Only a fully decoded route object may be kept, and a response is `complete` only after the whole document (including its closing delimiters and the absence of trailing data) validated. Interrupted queries keep their complete routes as `partial` with a reason; with no routes they are `failed`. Never present partial or failed results as complete or as "no matching routes", and keep each backend's status separate.
-- bgplgd answers a query bgpctl rejected with HTTP 200 and an empty body; treat that as a failure, not as an empty result.
-- Enforce the response-size limit while reading, bound retained decoded memory separately, and bound expensive (non-prefix) upstream queries across the whole instance. Never retry large interrupted queries.
-- The route result cache is the short-lived, memory-bounded in-process result cache (validated complete/partial results only, never failures); do not add Redis, a database, or persistent route storage, and never describe cached results as snapshots.
-- Apply the immutable startup-compiled route visibility policy before retaining or caching decoded routes; counts describe visible routes, while interruptions preserve their underlying completion status.
-- Keep route `valid`, RPKI `ovs`, and ASPA `avs` distinct.
-- Backend URLs come only from validated YAML configuration, never public request parameters.
+Browser input, backend responses, and DNS answers are untrusted. Validate and bound public input; escape backend, operator, and DNS text; do not expose arbitrary proxy, debug, raw-data, or backend-address controls. Never follow backend redirects. Avoid logging queries, addresses, credentials, headers, backend URLs, or response bodies; follow the existing `log/slog` conventions.
 
-## Configuration files
+Preserve bounded request parsing, rate limiting, response sizes, retained memory, concurrency, cache accounting, and graceful shutdown. Optional ASN and PTR enrichment is descriptive only: keep work asynchronous and bounded, use the existing services and caches, and keep status endpoints cache-only. Enabling DNS enrichment can disclose eligible ASNs or addresses to DNS operators; the feature remains optional and documented.
 
-- Commit `examples/config.example.yaml` as the complete, documented example configuration.
-- Keep the entire `configs/` directory local and ignored by Git; do not commit runtime backend addresses.
-- Operators create runtime configuration with `cp examples/config.example.yaml configs/config.yaml` and then set backend URLs.
-- Backend URLs are configured exclusively through validated YAML, never public request parameters.
-- `community_definitions` is optional and disabled by default (`enabled`, `directory`); keep it generic and document it in the example file. Docker mounts the directory read-only at `/etc/hextet-lg/communities`; no write access.
-- Every `looking_glass` setting is optional with a documented default (30s timeout, 128 MiB response, 256 MiB retained, 100 per page, 2 concurrent large queries, 20s cache); keep existing configurations working and document new settings in the example file. Backends may override `query_timeout`.
-- Standalone development uses `configs/config.yaml` on port 7000. Docker Compose uses the separate local `./configs/config.docker.yaml` on port 8080 and mounts it read-only at `/etc/hextet-lg/config.yaml`; the application loads that path in the container.
+Configuration is strict and validated at startup. Keep old configurations working when adding optional settings, document defaults in `examples/config.example.yaml`, and update the relevant operator documentation. Keep `configs/` local and ignored; never commit runtime backend addresses or real backend responses. Sanitize fixtures to documentation addresses and private ASNs.
 
-## Docker
+## Tests and documentation
 
-- Docker Compose is the primary deployment method; do not bundle OpenBGPD in this stack.
-- Keep runtime non-root, configuration read-only, root filesystem read-only where practical, and expose port 8080.
-- A different Compose project requires a shared Docker network or another reachable backend address; container localhost is not the host or peer service.
+Organize tests by package and feature/functionality, not by development milestone. Extend the closest existing tests and fixtures when behavior changes; add focused regression coverage for relevant success, invalid-input, security, IPv4/IPv6, and resource-limit cases. Update the relevant README or `docs/` page when user-visible behavior, configuration, security, or operations change. Do not add a test framework or other tooling without a demonstrated need.
 
-## Milestones
+The deterministic validation commands are documented in `docs/TESTING.md` and run in CI:
 
-- M3.1 and M3.2 are accepted and M3.3 (release engineering) and M4.1 (route visibility exclusions) and M4.2 (search configuration and UX) and M4.3 (neighbor navigation and compact route tables) and M4.4 (external BGP community definitions) and M4.5 (ASN name enrichment) and M4.5.1 (configurable themes) are in scope by explicit request; M4.6 (next-hop PTR enrichment) and M4.7 (BGP neighbor and RPKI RTR session visibility) and M4.8 (page generation timing) and M4.8.1 (compact Route Explorer layout and dynamic page titles) and M4.8.2 (mobile usability, route presentation and configurable columns) and M4.9 (generic operator branding and deployment identity) and M5.1 (live OpenBGPD integration and regression testing) and M5.2 (security and deployment validation) are in scope by explicit request; do not begin M5.3 or later without an explicit request.
+```sh
+go fmt ./...
+go vet ./...
+go test ./...
+go test -race ./...
+node --test internal/web/testdata/*.test.js
+```
 
-## Public URLs
+Browser and live OpenBGPD checks are opt-in; follow `docs/TESTING.md` for prerequisites and invocation. A skipped opt-in check is not a passing check. For a documentation-only change, use the validations appropriate to the change and report what was run.
 
-- Preserve bookmarkable GET URLs: `/` uses `type`+`q` (single prefix, source-AS or Large Community search) or the named filters above, plus `backend`, `view` and `page`; `/neighbors`, `/summary` and `/rtr` use `backend`; `/communities` uses `q` and `category`. Backend values are stable IDs or `all`, never addresses. Existing simple `type`/`q` URLs must keep working.
-- Emit canonical URLs: single-filter simple searches in the `type`/`q` form, compound searches with filters in the fixed order of `bgp.StringFilterKeys` then `bgp.FlagFilterKeys`, then `backend`, `view`, `page` (omitted for page 1). Redirect form noise (empty fields) once; for HTMX set `HX-Push-Url`; serve a full page for `HX-History-Restore-Request`.
-- Neighbor links use the backend-supplied address and source backend ID, without an inferred `af` or unrelated filters. Keep descriptions escaped and supplementary to the visible address.
-- Route views are `table`, `text`, and `detail`; `output=plain` requests text/plain for text views and returns all routes unless `page` is given. Plain responses carry `X-Hextet-LG-Completeness`, `X-Hextet-LG-Routes` and `X-Hextet-LG-Backends`, and use HTTP 400/404/502/503/504 only for invalid, out-of-range or fully failed requests (partial = 200 plus headers and an in-body warning). Links are live queries, not snapshots. Keep ordinary navigation functional without JavaScript and preserve HTMX history.
+## Change discipline
 
-## Communities
-
-- Community descriptions are operator data in the legacy NLNOG text format (`asN.txt`, `well-known.txt`), loaded once at startup from `community_definitions.directory` when `community_definitions.enabled` (default false). Never load ancillary metadata files. Never embed, default or fall back to any operator's definitions (the AS395089 set lives only in `examples/communities`), never download or refresh definitions, and never log definition contents.
-- The format is NLNOG-compatible: first-comma split, `#` comments, exact/range/`x` (one digit)/`nnn` (one or more digits) with `$N` substitutions for standard, large and extended communities. Never compile definition text as a regular expression; keep the bounded matcher. Precedence is exact, then smallest value space, then load order (well-known, ascending ASN, line); never depend on map iteration. Malformed, unsupported or duplicate definitions and any unreadable file fail startup with file and line; do not silently drop lines. See `docs/COMMUNITIES.md` before changing the grammar or its documented differences from upstream.
-- Definitions are presentation only. They must not change query construction, search, canonical URLs, the `features.*` flags, route visibility or caching, and must not be copied into retained `bgp.Route`, cache or flight data: look them up at render time from the immutable set. Tooltips are escaped native `title` attributes in the route-details HTML only; plaintext views and `output=plain` stay raw. Do not add description search.
-- Standard, extended and large communities stay separate kinds. The Community Explorer is generated only from loaded text definitions; its source category is derived from the source filename. Do not add status/evidence metadata columns or ancillary metadata-file support.
-
-## Session visibility
-
-- `features.bgp_neighbors` (`/neighbors`, `/summary`) and `features.rtr_sessions` (`/rtr`) default to true and are independent; a disabled view is not registered (404) and has no navigation link. The community flags still control search only. `features.rtr_session_addresses` defaults to false: never show RTR validator addresses, ports or local addresses, or raw RTR JSON, unless it is on.
-- Use only fields bgpctl really emits (`docs/SESSION_VISIBILITY.md` lists them with their source). RTR comes only from bgplgd `/rtr`; never add SSH, shell, control-socket access, CLI-text scraping or a substitute such as `/sets` or ROV results. `/summary` JSON has no counters; do not invent them.
-- Keep RTR outcomes distinct (`bgp.RTRState`: sessions, none, unsupported, unavailable, malformed). Never show "no sessions" unless the backend answered with a valid empty document. Absent values are dashes, never zero, and an established session without session ID and serial is not "good".
-- `rtr` is a fixed route and backend-operation label; an unsupported backend is a failed request with no failure reason. Do not add capability caches, per-session goroutines or polling. Sessions of different backends are never merged.
-
-## Page generation timing
-
-- `features.page_timing` (default true) only controls the footer display; HTTP metrics and the access log are never conditional on it. The start is `reqInfo.start` set by `protect`; the single read happens in the `pageTiming` template function at footer execution. Do not add a second clock, buffer HTML responses to obtain the figure, or put timing into JSON, CSV, `output=plain`, metrics or headers.
-- HTMX fragments carry the figure as a trailing `hx-swap-oob` element so it is replaced together with the results; keep it top-level, singular and absent from full pages. Omit the indicator (full page) or hide it (fragment) instead of showing an unmeasured value. History restoration may show the original request's figure.
-
-## Route Explorer layout and titles
-
-- Order: compact search panel (one control row, a secondary row with Advanced filters, query context, Copy link, Clear search), one status line per backend directly above its table, the unchanged table, the footer. Do not reintroduce a query-summary panel, per-backend heading cards, repeated counts or long explanatory paragraphs; explanations belong in the help popover or Advanced filters.
-- Controls keep real labels (visually hidden is fine), the `role="search"` form, collapsed Advanced filters (opened only by validation errors) and the active-filter count. The query context (`context` template) is outside `#results`: fragments replace it with `hx-swap-oob`, singular and top-level, like `#page-timing`; it never repeats the search box value. Backend outcomes are text, never colour only; backends are never merged and a failed one never hides another. The pager exists only for more than one page.
-- Every HTML page has exactly one `<title>`, `<subject> · <site>`, built only in `internal/web/title.go` (`siteName`, the resolved `site.name`, is the single suffix). Subjects come from the normalized query, never raw input; rejected requests are "Invalid search"; no query strings beyond the bounded canonical primary filter, no backend addresses, advanced filters only counted, user-derived text stripped and bounded. A fragment starts with `<title>` (HTMX applies it); a full page (including history restore) has it only in `<head>`. Add no client-side title code.
-
-## Mobile layout, display settings and history
-
-- The route table is one DOM: phones (up to 700 px) restyle the same `<tbody class="route">` rows as cards with CSS media queries. Do not add a second (mobile) markup variant, a viewport-detecting script or a second set of enrichment targets, IDs or Raw JSON payloads. Desktop row height with both disclosures collapsed must not grow.
-- Route details and Raw JSON are two independent native `<details>` in one `.disclosures` row (also on the neighbor pages). `display.raw_json` (default false) gates every Raw JSON presentation; when off, render nothing and embed no payload. Never add an endpoint that serves raw backend data. `bgp.Route.Raw` retention and accounting do not depend on the setting.
-- `display.route_columns` (neighbor false, neighbor_format name|ip|both, rpki true, aspa true) is presentation only: it must not change the backend request, route parsing, cache keys, filters or visibility. A hidden column's value stays in Route details; header, cells and the details colspan must stay aligned for every combination.
-- Neighbor names reuse the M4.6 PTR service (cache, workers, TTLs, dedup, `/ptr-status`); never add a resolver or cache. They share the per-page budget, are scheduled after next hops and only while the Neighbor column is visible with `name`/`both`. The hostname is display text only: links, identity and keys use the backend-supplied address and backend ID.
-- Browser history restores from the server (`historyCacheSize:0`), never from HTMX DOM snapshots, so the form always matches the canonical URL. A history restore that returns non-2xx/3xx (a rejected search, HTTP 400) is handled by the `htmx:historyCacheMissLoadError` reload in `app.js`; never mask the status to make restoring work. Search-form and theme handlers must stay delegated or be rebound on `htmx:historyRestore`.
-
-## Security boundaries
-
-- Browser input, backend responses, DNS answers and forwarded headers are untrusted; operator configuration is trusted but strictly validated (README, "Security model and deployment"). Keep the M5.2 regression tests (`http_security_test.go`, `browser_security_test.go`, `testdata/browser/security.js`) passing; do not weaken the CSP (no `unsafe-inline`, `unsafe-eval`, wildcards or external origins) to accommodate a change or a test.
-- The backend client never follows redirects (`noRedirect` in `internal/bgp/client.go`) and requests only `GET /rib`, `/neighbors`, `/summary`, `/rtr` on the configured base URL. Do not add a proxy, raw-data or debug endpoint to the public mux.
-- Static files are served by exact embedded name through `staticAsset` (no directory listing; fingerprint ETag; immutable only under the current `?v=`); link them with `assetURL`. Do not reintroduce a bare `http.FileServer`.
-- Unknown and repeated public parameters are rejected (filters in `bgp.ParseQuery`, `backend`/`view`/`output` in the index handler, everything on the other pages in `guard`), never first-wins. Error responses describe the problem without echoing input as markup.
-- Backend text in `text/plain` output goes through `plainSafe` (control characters become spaces). HTML output relies on `html/template`; never build markup by concatenation or mark backend, DNS or operator text as trusted HTML.
-- Emit only path-only URLs (redirects, `HX-Push-Url`, links, assets); never derive a URL, scheme or client identity from `Host` or forwarded headers. There is no trusted-proxy setting; do not add one without an explicit request.
-- Branding rasters are fully decoded at startup (`internal/site/asset.go`, standard library only); keep the size and dimension checks ahead of the decode.
-
-## Public deployment controls
-
-- Preserve bounded request parsing, direct-peer rate limiting, security headers, bounded route-query admission, liveness/readiness, and graceful shutdown. Never trust forwarded identity headers without explicitly configured trusted proxies.
-- Memory budgets are estimates, not RSS limits; each dataset must remain accounted for while any cache, flight, or renderer owns it. Document changes to operational defaults and preserve old configurations.
-
-## Observability
-
-- Log with `log/slog` (JSON default, `logging.level`/`logging.format`). Never log query strings, prefixes, ASNs, headers, credentials, client addresses, backend URLs or response bodies; log fixed route names and configured backend IDs only. Request IDs are generated, never accepted from clients.
-- Prometheus metrics are optional (`metrics.enabled`, default false) and served only by the separate `metrics.listen` listener (`Handler.MetricsHandler`, never in `Routes()`). Do not publish the metrics port in Compose, and do not rely on forwarded headers to protect it. Metric labels come only from fixed sets and configured backend IDs (plus the constant per-build labels of `hextet_lg_build_info`).
-- Resource, work-gate and cache metrics read the authoritative counters at scrape time (O(1)); do not add a second accounting or scan the cache per scrape.
-- Cache admission is decided from the typed `bgp.Reason` (`skipReason` in `internal/web/cache.go`), never from message text: partial results caused by `capacity`, `busy` or `canceled` are never cached. The per-query `memory_limit` and the aggregate `capacity` stay distinct reasons.
-- After the response header is committed, never call `http.Error`/`WriteHeader`; use `Handler.renderFailed`. Keep `server.shutdown_grace` below the Compose `stop_grace_period`.
-
-## Themes
-
-- Every UI color is a semantic CSS custom property defined by the generated `/static/theme.css`; `static/app.css` must contain no color literals, gradients or shadows, templates no inline styles (CSP `style-src 'self'`). Add a token to `internal/theme` rather than a literal.
-- Theme configuration accepts only strict `#RRGGBB`, never CSS text; generate CSS only from validated values, once at startup. Derived tokens are deterministic. Contrast shortfalls warn (below 3:1 for primary text fails startup); never silently replace operator colors. See `docs/THEMING.md`.
-- Status colors (route `valid`, RPKI `ovs`, ASPA `avs`, completeness, warnings) are fixed, distinct from the single accent, and always paired with a text label. Do not collapse them into the accent.
-- The visitor's choice lives only in `localStorage` key `theme` (`light`/`dark`); no cookies or server-side preference. `theme-init.js` stays a synchronous script in `<head>` after the stylesheets. Do not begin M5 without explicit authorization.
-
-## Site identity and branding
-
-- Hextet LG is the software identity (binary, module, repository, metrics, headers, default footer note); the deployment identity is the optional `site` section (`internal/site`, `docs/BRANDING.md`). Never hard-code an operator name, operator ASN or Hextet-specific text in templates, CSS or Go; defaults are generic ("BGP Looking Glass", no operator, no ASN, "Powered by Hextet LG").
-- `site.name` > legacy `server.title` (sanitized, never required) > default; there is one title path (`title.go`). A warning, not an error, when both differ.
-- Operator text is plain text: validated at startup, escaped by `html/template`, never HTML, Markdown or template syntax. `site.website` is an absolute http(s) URL, `site.contact` a plain email address, `site.asn` display metadata only: it must never reach a query, filter, backend identity, cache key or result processing.
-- Logo and favicon are local files named without a path inside `site.branding.directory`, opened through `os.Root`, validated by content and size at startup, held in memory and served only at `/branding/logo`, `/branding/favicon` and `/favicon.ico`. No upload endpoint, no external asset, no path parameter, no inline SVG. SVG is validated and served with a sandboxing CSP. The built-in favicon takes the theme accent; add no second palette.
-- Header and footer stay compact: the footer items come from `site.Footer` (no empty labels or stray separators), the page-timing element stays last, and desktop header height must not grow. Do not add a branding banner, framework or per-request file access.
-
-## Release engineering
-
-- GoReleaser Community Edition (`.goreleaser.yaml`, `version: 2`, `dockers_v2`) is the only release tool; do not add a parallel release script or a second image pipeline. Versions come from Git tags only; never store a version number in a file. Do not create tags, push, publish releases or images, or replace the running production container without explicit authorization.
-- One Dockerfile defines the runtime image; `BINARY_SOURCE` selects `compiled` (source) or `prebuilt` (GoReleaser). Keep it non-root (UID 10001), read-only-root compatible, with the `HEALTHCHECK` and no RUN step that would need emulation to build arm64.
-- `latest` exists only for stable (non-prerelease, non-snapshot) releases. Production and rollback use image digests or preserved immutable local tags, never `hextet-lg:local`. `scripts/deploy.sh` must keep validating before replacing, never touch `configs/`, never prune or delete images, and never act without an explicit subcommand and image.
-- Archives use an explicit file allow-list; runtime configuration (`configs/config.yaml`, `configs/config.docker.yaml`) is never packaged, committed or baked into an image. Pin third-party GitHub Actions to commit SHAs, keep workflow permissions least-privilege, and let only `release.yaml` publish (after `ci.yaml` passes).
-
-- Community feature flags control search only; never strip route attributes or hide the Community Explorer. Searches always use Loc-RIB; reject removed endpoint choices.
-
-## ASN enrichment
-
-- Optional Team Cymru DNS enrichment is descriptive only and separate from route results and shared flights. DNS work is asynchronous, bounded, and limited to visible ASNs. The cache-only status endpoint must never schedule lookups. Persistence is opt-in and requires a writable cache directory. Do not begin M5 without explicit authorization.
-
-## PTR enrichment
-
-- PTR lookups are optional, asynchronous and limited to next hops on visible route table pages. Keep the cache memory-only and separate from route and ASN data. The public status endpoint is cache-only. Preserve the shared ASN/PTR frontend lifecycle and do not perform forward confirmation. See `docs/PTR_ENRICHMENT.md`.
+Make focused changes that solve the requested problem with the smallest clear implementation. Preserve existing behavior unless the change calls for a behavior change; avoid unrelated cleanup, new frameworks, and speculative features. Review the diff for scope, formatting, security implications, and documentation accuracy. Do not stage, commit, tag, push, deploy, or publish unless explicitly instructed.

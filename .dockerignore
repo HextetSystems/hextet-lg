@@ -11,3 +11,7 @@ scripts
 .deploy-state
 compose*.yaml
 configs/
+.agents/
+.aws/
+.codex/
+.claude/

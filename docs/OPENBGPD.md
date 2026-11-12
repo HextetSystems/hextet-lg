@@ -1,40 +1,88 @@
 # OpenBGPD collector for Hextet LG
 
-This example runs the versioned `openbgpd/openbgpd:9.3` image as a collector and its bundled `bgplgd` API. OpenBGPD 9.3 is the current portable release. The container image entrypoint starts `bgpd`, `bgplgd -d`, and HAProxy together; `bgplgd` is not enabled by publishing port 9099 alone. HAProxy exposes the API on that port, and the image supplies the restricted control socket used by `bgplgd`.
+This example uses the `openbgpd/openbgpd:latest` image as a collector and its bundled `bgplgd` API. At the time of this update, `latest` resolves to OpenBGPD 9.3, and our compatibility coverage extends through 9.3. The tag can move as the upstream image is updated, so confirm compatibility when pulling a newer image. The container image entrypoint starts `bgpd`, `bgplgd -d`, and HAProxy together; `bgplgd` is not enabled by publishing port 9099 alone. HAProxy exposes the API on that port, and the image supplies the restricted control socket used by `bgplgd`.
+
+For complete syntax and version-specific behavior, consult the official OpenBSD [`bgpd.conf(5)` man page](https://man.openbsd.org/bgpd.conf).
 
 ## 1. Create the files
 
 ```sh
-sudo mkdir -p /srv/docker/compose/openbgpd /srv/docker/data/openbgpd
-cd /srv/docker/compose/openbgpd
-sudoedit /srv/docker/data/openbgpd/bgpd.conf
+mkdir -p ~/docker-compose/openbgpd/config
+cd ~/docker-compose/openbgpd
+${EDITOR:-vi} config/bgpd.conf
 ```
 
-Save this minimal `bgpd.conf` (replace every example ASN and address with values assigned to your network and peer):
+Save this collector-oriented `bgpd.conf`. Replace the example ASNs and addresses with values assigned to your network and peer, and remove optional sections you do not use:
 
 ```conf
-# EXAMPLE ONLY: replace with your assigned ASN and router ID.
+# EXAMPLE ONLY: use your assigned ASN and a unique router ID.
 AS 65000
 router-id 192.0.2.1
 
-# EXAMPLE ONLY: replace with the intended peer's address and ASN.
+# This host is a looking glass, not a forwarding router. Keep BGP-learned
+# routes in bgpd's RIB for the API without installing them in the kernel FIB.
+fib-update no
+
+# If this collector does not run an IGP or have static routes to the BGP
+# next hops it receives, allow nexthop validation through the system default
+# route. The host must have a suitable default route.
+nexthop qualify via default
+
+# Accept routes received from configured BGP neighbors. "any" is a filter
+# match; it does not create neighbors or open a session by itself.
+allow from any
+
+# Do not advertise routes to any neighbor. Keep this explicit for a read-only
+# looking glass; do not add a later, more specific "allow to" rule.
+deny to any
+
+# EXAMPLE ONLY: replace with the intended peer's address and remote ASN.
 neighbor 198.51.100.2 {
 	remote-as 65001
 	descr "example-peer"
+
+	# Enable the address families this peer should send to the collector.
+	# Replace or remove these to match the peer and your deployment.
+	announce IPv4 unicast
+	announce IPv6 unicast
+
+	# OPTIONAL: receive multiple paths for a prefix when the peer also
+	# supports and sends Add-Path. The default is no.
+	announce add-path recv yes
 }
 
-# Accept routes received from this peer.
-allow from 198.51.100.2
+# OPTIONAL: connect to RTR validators for RPKI data. This sample requests RTR
+# v2 for ASPA synchronization; remove min-version if you only need RTR sessions
+# or ROA origin validation. Use the configured validator port (default 323).
+# Descriptions appear on Hextet LG's /rtr page, so choose safe-to-publish text.
+rtr 192.0.2.100 {
+	descr "validator-a"
+	port 3323
+	min-version 2
+}
+
+# OPTIONAL: a second validator can provide another RTR data source.
+rtr 192.0.2.101 {
+	descr "validator-b"
+	port 3323
+	min-version 2
+}
+
+# The OpenBGPD container's bgplgd process uses this read-only control socket.
+# Keep the path in sync with the container image and retain "restricted".
+socket "/run/bgpd/bgpd.rsock" restricted
 ```
 
-The addresses above are documentation examples, not reachable infrastructure. Coordinate the local/remote ASNs, peer address, and any authentication or routing policy with the peer operator. This deliberately has no `allow to` rule, so it does not advertise routes.
+The addresses above are documentation examples, not reachable infrastructure. Coordinate the local and remote ASNs, peer address, address families, and any authentication or routing policy with the peer operator. `allow from any` accepts routes from configured neighbors; it does not configure a neighbor or permit outbound announcements. `deny to any` explicitly rejects outbound updates. OpenBGPD filters default to deny, and the last matching rule decides the result, so review the full filter order if you add other rules.
 
-Create `/srv/docker/compose/openbgpd/compose.yaml`:
+`fib-update no` prevents learned routes from being installed in the host's forwarding table; they remain in bgpd's RIB for `bgplgd` to query. `nexthop qualify via default` is useful when the collector has no IGP and should validate next hops through its system default route. `announce add-path recv yes` is optional: it can retain multiple received paths per prefix only when the peer also negotiates and sends Add-Path.
+
+Create `~/docker-compose/openbgpd/compose.yaml`:
 
 ```yaml
 services:
   openbgpd:
-    image: openbgpd/openbgpd:9.3
+    image: openbgpd/openbgpd:latest
     container_name: openbgpd
     restart: unless-stopped
     ports:
@@ -43,7 +91,7 @@ services:
       # interface address only when remote Hextet LG access is required.
       - "${OPENBGPD_API_BIND:-127.0.0.1}:9099:9099/tcp"
     volumes:
-      - /srv/docker/data/openbgpd:/etc/bgpd:ro
+      - ./config:/etc/bgpd:ro
     tmpfs:
       - /run/bgpd
 ```
@@ -51,12 +99,12 @@ services:
 Start it and check the container:
 
 ```sh
-cd /srv/docker/compose/openbgpd
+cd ~/docker-compose/openbgpd
 sudo docker compose up -d
 sudo docker compose ps
 ```
 
-The configuration directory is the persistent host data at `/srv/docker/data/openbgpd`; `/run/bgpd` is temporary runtime state for the control socket. The image starts the API stack automatically when its normal `bgpd` command runs. Do not override the image command or entrypoint for this setup.
+The `config/` directory beside `compose.yaml` is mounted into the container as `/etc/bgpd`; `/run/bgpd` is temporary container runtime state for the control socket. The image starts the API stack automatically when its normal `bgpd` command runs. Do not override the image command or entrypoint for this setup.
 
 ## 2. Check the peer and API
 
@@ -92,7 +140,9 @@ Replace `192.0.2.10` with the private host address reachable from Hextet LG. Set
 
 ## Optional: RTR/RPKI
 
-RTR is not required for BGP collection or the JSON API. To add origin validation later, run an RTR-speaking validator and add an `rtr 192.0.2.100` directive to `bgpd.conf` using the validator's actual address (and any required non-default port). Follow that validator's authentication and network guidance. The image also provides `/var/lib/rpki-client` for validated ROA payload files when using `rpki-client` output instead. Do not enable either until a validator is configured. When `rtr` is configured, Hextet LG's RTR Sessions page (`/rtr`) shows the session state reported by the same `bgplgd` API; a `descr` in the `rtr` block (`rtr 192.0.2.100 { descr "validator-a" }`) is what the page shows by default, since validator addresses are not published unless `features.rtr_session_addresses` is enabled. Choose a description that is safe to publish. See [SESSION_VISIBILITY.md](SESSION_VISIBILITY.md).
+RTR is not required for BGP collection or the JSON API. Configure one or more RTR-speaking validators if you want RPKI validation data. RTR v2 is not required for an RTR session or ROA origin validation; set `min-version 2` only when you need ASPA records synchronized, and ensure the validator supports v2. Set `port` to the validator's configured port (the RTR default is 323), and follow its authentication and network guidance. The image also provides `/var/lib/rpki-client` for validated ROA payload files when using `rpki-client` output instead.
+
+When `rtr` is configured, Hextet LG's RTR Sessions page (`/rtr`) shows the session state reported by the same `bgplgd` API. A `descr` in the `rtr` block is shown by default; validator addresses are not published unless `features.rtr_session_addresses` is enabled. Choose descriptions that are safe to publish. See [SESSION_VISIBILITY.md](SESSION_VISIBILITY.md).
 
 ## Network access
 

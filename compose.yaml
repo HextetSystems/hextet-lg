@@ -21,7 +21,7 @@ services:
       # deployment"; docs/COMMUNITIES.md). Enable community_definitions in the
       # configuration, then uncomment and adjust the host path. Read-only; the
       # files must be readable by UID 10001. Restart after editing them.
-      # - /srv/docker/data/hextet-lg/communities:/etc/hextet-lg/communities:ro
+      # - ./communities:/etc/hextet-lg/communities:ro
     stop_grace_period: 45s
     pids_limit: 128
     read_only: true
