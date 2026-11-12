@@ -16,7 +16,7 @@ func TestMultiBackendPartialFailureAndInterface(t *testing.T) {
 		if r.URL.Query().Get("as") != "15169" {
 			t.Errorf("expected native source-AS filter, got %s", r.URL.RawQuery)
 		}
-		_, _ = w.Write([]byte(`[{"prefix":"8.8.8.0/24","aspath":"15169","origin":"igp","true_nexthop":"192.0.2.1","neighbor":"peer-a","localpref":100,"ovs":"valid","avs":"valid","large_communities":["395089:0:6"]}]`))
+		_, _ = w.Write([]byte(`[{"prefix":"8.8.8.0/24","aspath":"15169","origin":"igp","true_nexthop":"192.0.2.1","exit_nexthop":"192.0.2.1","neighbor":"peer-a","localpref":100,"ovs":"valid","avs":"valid","large_communities":["395089:0:6"]}]`))
 	}))
 	defer good.Close()
 	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "backend failure", http.StatusBadGateway) }))

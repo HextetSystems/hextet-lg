@@ -2,7 +2,7 @@ Backend: Alpha (West)
 Status: COMPLETE — 3 routes decoded in 1.2s
 Flags: * = selected best (when reported); eligibility and validation are separate
 OVS: origin validation state; AVS: ASPA validation state
-  Prefix                                  Exit next hop                                LocalPref      MED OVS          AVS          AS path
+  Prefix                                  Exit next hop                           LocalPref      MED OVS          AVS          AS path
 * 192.0.2.0/24                            192.0.2.1                                    100        — valid        unknown      64500 15169
   192.0.2.0/24                            —                                              —        — —            —            64501 15169
   2001:db8::/32                           2001:db8::1                                    —        — —            —            64500 64501 64502 15169
@@ -11,6 +11,6 @@ Backend: Beta
 Status: COMPLETE — 1 route decoded in 0.3s
 Flags: * = selected best (when reported); eligibility and validation are separate
 OVS: origin validation state; AVS: ASPA validation state
-  Prefix                                  Exit next hop                                LocalPref      MED OVS          AVS          AS path
+  Prefix                                  Exit next hop                           LocalPref      MED OVS          AVS          AS path
   2001:db8::/32                           —                                              —        — —            —            15169
 

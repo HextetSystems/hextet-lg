@@ -132,7 +132,7 @@ func TestResourceRecoveryAfterMixedLoad(t *testing.T) {
 					target = fmt.Sprintf("/?as=%d&view=table", 65000+int(distinct.Add(1)))
 					slow = true
 				case 5:
-					target = "/summary"
+					target = "/neighbors"
 				case 6:
 					target = "/neighbors"
 				case 7: // client that disconnects after the first bytes

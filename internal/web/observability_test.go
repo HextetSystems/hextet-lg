@@ -385,7 +385,7 @@ func TestBackendTimeoutIsClassifiedAndCounted(t *testing.T) {
 
 func TestOverviewBackendFailureIsRecorded(t *testing.T) {
 	h, buf := newObsHandler(t, defaults(), "info", backendSpec{id: "a", name: "A", h: func(w http.ResponseWriter, r *http.Request) { http.Error(w, "no", 500) }})
-	get(h.Routes(), "/summary")
+	get(h.Routes(), "/neighbors")
 	wantMetric(t, h, 1, "hextet_lg_backend_failures_total", "backend", "a", "operation", "summary", "reason", "backend_error")
 	if find(buf.records(t), "backend query", "operation", "summary", "level", "WARN") == nil {
 		t.Fatalf("no warning: %s", buf.String())

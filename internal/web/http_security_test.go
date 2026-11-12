@@ -153,7 +153,7 @@ func TestM52SecurityHeadersOnEveryKindOfResponse(t *testing.T) {
 		{"GET", "/?type=prefix&q=192.0.2.0/24&view=text&output=plain", 200, "text/plain; charset=utf-8"},
 		{"GET", "/?type=prefix&q=%3Cscript%3E", 400, "text/html; charset=utf-8"},
 		{"GET", "/neighbors", 200, "text/html; charset=utf-8"},
-		{"GET", "/neighbors", 404, "text/plain; charset=utf-8"},
+		{"GET", "/summary", 404, "text/plain; charset=utf-8"},
 		{"GET", "/rtr", 200, "text/html; charset=utf-8"},
 		{"GET", "/rtr?x=1", 400, "text/html; charset=utf-8"},
 		{"GET", "/communities", 200, "text/html; charset=utf-8"},

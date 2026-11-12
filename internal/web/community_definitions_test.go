@@ -404,7 +404,8 @@ func TestM44ExampleDefinitionsComeFromTextFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	files := map[string]string{"as395089.txt": string(data)}
-	cfg, closeAll := testConfig(defaults(), routeBackend(m44Route))
+	doc := strings.Replace(m44Route, `"large_communities":[`, `"large_communities":["395089:0:8",`, 1)
+	cfg, closeAll := testConfig(defaults(), routeBackend(doc))
 	t.Cleanup(closeAll)
 	cfg.CommunityDefinitions = config.CommunityDefinitions{Enabled: true, Directory: writeDefs(t, files)}
 	h, err := NewHandler(cfg)
@@ -413,8 +414,8 @@ func TestM44ExampleDefinitionsComeFromTextFile(t *testing.T) {
 	}
 	t.Cleanup(h.Close)
 	defs := h.defs.Definitions()
-	if len(defs) != 30 {
-		t.Fatalf("loaded %d definitions, want 30", len(defs))
+	if len(defs) != 32 {
+		t.Fatalf("loaded %d definitions, want 32", len(defs))
 	}
 	for _, d := range defs {
 		if d.Source != "AS395089" || d.File != "as395089.txt" {

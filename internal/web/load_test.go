@@ -81,7 +81,7 @@ func TestMockLoad(t *testing.T) {
 				target := "/?as=64500&view=text&output=plain"
 				if phase == 1 {
 					if i%5 == 0 {
-						target = "/summary"
+						target = "/neighbors"
 					} else if i%5 == 1 {
 						target = "/neighbors"
 					} else if i%2 == 0 {

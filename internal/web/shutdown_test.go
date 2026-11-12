@@ -96,7 +96,7 @@ func TestStopAdmissionWakesWaiterAndIdleClose(t *testing.T) {
 	done := make(chan *httptest.ResponseRecorder, 1)
 	go func() {
 		w := httptest.NewRecorder()
-		if h.admitWork(w, httptest.NewRequest("GET", "/summary", nil)) {
+		if h.admitWork(w, httptest.NewRequest("GET", "/neighbors", nil)) {
 			h.work.release()
 		}
 		done <- w

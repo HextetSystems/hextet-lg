@@ -203,7 +203,7 @@ func TestHTTPDisconnectWhileWaitingForAdmission(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		req, _ := http.NewRequestWithContext(ctx, "GET", srv.URL+"/summary", nil)
+		req, _ := http.NewRequestWithContext(ctx, "GET", srv.URL+"/neighbors", nil)
 		res, err := http.DefaultClient.Do(req)
 		if err == nil {
 			res.Body.Close()

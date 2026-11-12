@@ -113,7 +113,7 @@ func assertNoNewAdmission(t *testing.T, h *Handler, g *gatedBackend) {
 	t.Helper()
 	waitFor(t, "shutdown to stop admission", 5*time.Second, h.stopping.Load, nil)
 	before := g.requests.Load()
-	for _, target := range []string{"/?as=64501&view=text&output=plain", "/?as=64500&view=table", "/summary", "/neighbors"} {
+	for _, target := range []string{"/?as=64501&view=text&output=plain", "/?as=64500&view=table", "/neighbors"} {
 		rr := httptest.NewRecorder()
 		h.Routes().ServeHTTP(rr, httptest.NewRequest("GET", target, nil))
 		if rr.Code != http.StatusServiceUnavailable || rr.Header().Get("Retry-After") == "" {
@@ -430,7 +430,7 @@ func TestShutdownManyBlockedWritersReleaseEverything(t *testing.T) {
 	waitFor(t, "writers to start", 5*time.Second, func() bool { return f.h.snapshot().Work >= 2 }, nil)
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go func() { defer wg.Done(); doGet(f.srv.URL + "/summary") }()
+	go func() { defer wg.Done(); doGet(f.srv.URL + "/neighbors") }()
 	r := receive(t, startShutdown(f.h, f.srv.Server, 500*time.Millisecond), "shutdown", 10*time.Second)
 	if !errors.Is(r.err, context.DeadlineExceeded) {
 		t.Fatalf("shutdown = %+v", r)

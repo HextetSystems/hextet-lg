@@ -19,6 +19,10 @@ func TestNeighborNavigationAndVisibility(t *testing.T) {
 	var aHits, bHits atomic.Int32
 	backend := func(hits *atomic.Int32) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/summary" {
+				fmt.Fprint(w, `{"neighbors":[]}`)
+				return
+			}
 			if r.URL.Path == "/neighbors" {
 				fmt.Fprint(w, `{"neighbors":[{"remote_addr":"192.0.2.1","description":"edge \"<script>" ,"remote_as":"64500"},{"remote_addr":"2001:DB8:ffff:1234:5678:abcd:ef01:2345"},{"description":"missing"},{"remote_addr":"bad-address"}]}`)
 				return

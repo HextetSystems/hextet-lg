@@ -179,7 +179,7 @@ func TestNeighborsIncludeSummaryCountsAndOmitAbsentCounters(t *testing.T) {
 	h := m47Handler(t, nil, backendSpec{"a", "Alpha", m47Backend(m47Neighbors, m47Summary, "")})
 	page := get(h, "/neighbors").Body.String()
 	mustContain(t, page, `Sessions reported`, `>2</strong><span>Sessions reported`, `>1</strong><span>Established`, `>1</strong><span>Other states`, `192.0.2.1`, `up 01:23:45`)
-	mustNotContain(t, page, `Prefixes received / sent`, `Messages received / sent`)
+	mustContain(t, page, `Prefixes received / sent`, `Messages received / sent`)
 	// The detail grid only exists when there is something to show.
 	mustContain(t, page, `<span>BGP ID</span>`)
 }

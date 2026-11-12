@@ -41,6 +41,10 @@ func TestASNPageNonblockingAndStatus(t *testing.T) {
 			fmt.Fprint(w, `{"neighbors":[{"remote_as":"15169","remote_addr":"192.0.2.1"}]}`)
 			return
 		}
+		if r.URL.Path == "/summary" {
+			fmt.Fprint(w, `{"neighbors":[{"remote_as":"15169","remote_addr":"192.0.2.1"}]}`)
+			return
+		}
 		if r.URL.Query().Get("prefix") != "8.8.8.0/24" {
 			t.Errorf("upstream query changed: %v", r.URL.Query())
 		}

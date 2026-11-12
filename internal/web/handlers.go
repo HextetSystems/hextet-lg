@@ -790,7 +790,7 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 			h.metrics.backendActive.WithLabelValues(b.ID).Dec()
 			elapsed := time.Since(start)
 			res.Duration = elapsed.Round(time.Millisecond).String()
-			if status == bgp.StatusFailed && reason != bgp.ReasonNone {
+			if status == bgp.StatusFailed && reason != bgp.ReasonNone && kind != "neighbors" {
 				lvl := slog.LevelWarn
 				if reason == bgp.ReasonCanceled {
 					lvl = slog.LevelInfo
@@ -801,7 +801,9 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 				}
 				h.log.LogAttrs(r.Context(), lvl, "backend query", attrs...)
 			}
-			h.recordBackend(b, kind, status, reason, elapsed)
+			if kind != "neighbors" {
+				h.recordBackend(b, kind, status, reason, elapsed)
+			}
 			results <- res
 		}(b)
 	}
@@ -825,14 +827,39 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 // queryOverview fetches the detailed neighbor rows and the independent
 // summary counts for one backend.
 func (h *Handler) queryOverview(ctx context.Context, b backendClient, res *BackendResult) (bgp.Status, bgp.Reason) {
-	data, err := b.client.Overview(ctx, "neighbors")
+	query := func(endpoint string) (bgp.Overview, error) {
+		start := time.Now()
+		data, err := b.client.Overview(ctx, endpoint)
+		elapsed := time.Since(start)
+		status, reason := bgp.StatusComplete, bgp.ReasonNone
+		if err != nil {
+			status, reason = bgp.StatusFailed, overviewReason(err)
+		}
+		h.recordBackend(b, endpoint, status, reason, elapsed)
+		if reason != bgp.ReasonNone {
+			level := slog.LevelWarn
+			if reason == bgp.ReasonCanceled {
+				level = slog.LevelInfo
+			}
+			h.log.LogAttrs(ctx, level, "backend query",
+				slog.String("request_id", requestID(ctx)),
+				slog.String("backend", b.ID),
+				slog.String("operation", endpoint),
+				slog.String("status", string(status)),
+				slog.String("reason", string(reason)),
+				slog.Float64("backend_duration_ms", float64(elapsed.Microseconds())/1000),
+			)
+		}
+		return data, err
+	}
+	data, err := query("neighbors")
 	res.Overview = data
 	if err != nil {
 		res.Error = "Backend unavailable: neighbor request failed or returned an invalid response."
 	} else {
 		res.Neighbors, res.ShowCounters = neighborRows(data.Neighbors)
 	}
-	summary, summaryErr := b.client.Overview(ctx, "summary")
+	summary, summaryErr := query("summary")
 	res.SessionSummary = summary
 	if summaryErr != nil {
 		res.SummaryError = "Backend unavailable: session summary request failed or returned an invalid response."
