@@ -93,12 +93,6 @@ git push origin vX.Y.Z                       # starts the release workflow
 
 Use `-rc.N` for candidates; GoReleaser generates their release notes from commits since the preceding tag, just like stable releases. To retract a bad release: delete the GitHub Release and the tag, publish a new patch version. Do not re-push an existing version tag; consumers pinned by digest are unaffected, those on the tag are not.
 
-### GitHub-side settings (one-time)
-
-* **Actions → General → Workflow permissions**: the workflows declare their own permissions; leaving the default read-only is fine.
-* **Packages**: the first push creates the `hextet-lg` package. It is linked to the repository through the `org.opencontainers.image.source` label. A new package may be **private**; set its visibility to *Public* (Package settings → Danger Zone) so hosts can pull without credentials, and check that the repository has *Write* access under *Manage Actions access*.
-* **Rulesets**: protect `main` (pull requests, required checks *Go checks*, *Docker image and Compose*, *GoReleaser configuration and snapshot*) and restrict who can create `v*` tags.
-
 ## Deployment
 
 ### Standalone
