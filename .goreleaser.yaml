@@ -38,16 +38,12 @@ archives:
     # committed example is included.
     files:
       - src: README.md
-      - src: ARCHITECTURE.md
-      - src: docs/RELEASING.md
+      - src: INSTALL.md
       - src: docs/SECURITY.md
       - src: docs/BRANDING.md
       - src: docs/OPENBGPD.md
-      - src: docs/TESTING.md
       - src: docs/COMMUNITIES.md
       - src: docs/THEMING.md
-      - src: docs/PTR_ENRICHMENT.md
-      - src: docs/SESSION_VISIBILITY.md
       - src: examples/config.example.yaml
       - src: examples/communities/*
       - src: LICENSE*
