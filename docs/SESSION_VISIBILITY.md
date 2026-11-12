@@ -4,7 +4,7 @@ This guide covers the two session views of Hextet LG, which are independent of e
 
 | View | URL | Switch | Default | Backend endpoint(s) |
 |---|---|---|---|---|
-| BGP neighbors and summary | `/neighbors`, `/summary` | `features.bgp_neighbors` | on | bgplgd `/neighbors`, `/summary` |
+| BGP neighbors and summary | `/neighbors` | `features.bgp_neighbors` | on | bgplgd `/neighbors` |
 | RPKI-to-Router (RTR) sessions | `/rtr` | `features.rtr_sessions` | on | bgplgd `/rtr` |
 
 RTR sessions are the connections between OpenBGPD and an RPKI validator (Routinator, rpki-client, StayRTR, and similar). They are not BGP neighbors and are never mixed into the neighbor tables.
@@ -15,7 +15,7 @@ Everything here is read from OpenBGPD's own `bgplgd` HTTP API through the backen
 
 ```yaml
 features:
-  bgp_neighbors: true          # /neighbors and /summary
+  bgp_neighbors: true          # /neighbors
   rtr_sessions: true           # /rtr
   rtr_session_addresses: false # publish validator addresses on /rtr
 ```
@@ -35,7 +35,7 @@ bgplgd maps each endpoint to a fixed `bgpctl -j` command:
 
 | Endpoint | bgpctl command | Used here |
 |---|---|---|
-| `/summary` | `show` | yes (basic session list) |
+| `/summary` | `show` | yes (counts on `/neighbors`) |
 | `/neighbors` | `show neighbor` | yes |
 | `/rtr` | `show rtr` | yes |
 | `/rib`, `/rib/in`, `/rib/out` | `show rib …` | route search (`/rib`) |
@@ -65,7 +65,7 @@ The restricted control socket that bgplgd uses permits `show rtr`, and the OpenB
 | RTR last successful synchronization | **No** | Not reported by `/rtr` |
 | RTR / validator metrics | **No** | `/metrics` has BGP peer and RDE metrics only, nothing for RTR |
 
-`/summary` (bgpctl `show`) returns only the basic fields in JSON: no counters, no errors, no session block. The summary page therefore has no counter columns. Text output of the same command does contain counters, but the JSON API does not.
+`/summary` (bgpctl `show`) returns only the basic fields in JSON: no counters, no errors, no session block. The Neighbors page shows the session counts above the neighbor table. Text output of the same command does contain counters, but the JSON API does not.
 
 ## BGP neighbor pages
 
@@ -107,14 +107,14 @@ There is no capability probe and no capability cache: the `/rtr` request itself 
 - **Validator addresses are not published by default.** `/rtr` identifies a validator by its `descr` from `bgpd.conf` (`rtr 192.0.2.100 { descr "validator-a" }`) or, if there is none, by `Validator N`. The remote address, port and local address appear only with `features.rtr_session_addresses: true`. Choose descriptions that are safe to publish: the description is shown as written. Validators are usually internal infrastructure; enable addresses only if you are comfortable publishing them.
 - The RTR page never shows raw backend JSON.
 - `show rtr` contains no authentication material (TCP MD5 secrets are not part of it), and the BGP details grid does not decode local addresses, ports or authentication methods.
-- **Raw JSON is opt-in.** The neighbor pages can offer the raw `/neighbors` and `/summary` JSON ("Raw JSON" per neighbor and "Raw backend response"), which includes fields this application does not otherwise display (for example the local session address and configuration flags). Since M4.8.2 it is rendered only when `display.raw_json: true` (default `false`); when off, no control is rendered and the payload is not embedded in the page. Enable it only for trusted deployments. `features.bgp_neighbors: false` still removes the pages entirely.
+- **Raw JSON is opt-in.** The Neighbors page can offer the raw `/neighbors` and `/summary` JSON ("Raw JSON" per neighbor and "Raw backend response"), which includes fields this application does not otherwise display (for example the local session address and configuration flags). Since M4.8.2 it is rendered only when `display.raw_json: true` (default `false`); when off, no control is rendered and the payload is not embedded in the page. Enable it only for trusted deployments. `features.bgp_neighbors: false` still removes the pages entirely.
 - All backend strings (descriptions, error text, shutdown messages, families) are escaped by `html/template`. RTR text is also stripped of control characters and truncated to 256 bytes before it is kept.
 - Backend URLs come only from the YAML. The only path requested for RTR is the fixed `/rtr`, without a query string.
 - Backend identities, query strings and addresses are never logged. Logs carry the configured backend ID, a fixed operation name (`rtr`, `neighbors`, `summary`) and, for RTR, a fixed `rtr_state` value.
 
 ## Metrics and logs
 
-`rtr` is a fixed value of the `operation` label on `hextet_lg_backend_*` and a fixed `route` label on `hextet_lg_http_*`. An unsupported backend is recorded as a failed request **without** a failure reason: it is a capability, not a fault, and it does not mark the backend unhealthy. Unavailable and malformed answers carry the normal bounded reasons (`timeout`, `canceled`, `backend_error`, `connection_closed`, `invalid_json`, `response_limit`). Requests to `/rtr` use the same live rate-limit bucket as `/neighbors` and `/summary`.
+`rtr` is a fixed value of the `operation` label on `hextet_lg_backend_*` and a fixed `route` label on `hextet_lg_http_*`. An unsupported backend is recorded as a failed request **without** a failure reason: it is a capability, not a fault, and it does not mark the backend unhealthy. Unavailable and malformed answers carry the normal bounded reasons (`timeout`, `canceled`, `backend_error`, `connection_closed`, `invalid_json`, `response_limit`). Requests to `/rtr` use the same live rate-limit bucket as `/neighbors`.
 
 ## Operational examples
 

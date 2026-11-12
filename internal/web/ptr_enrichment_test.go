@@ -30,7 +30,7 @@ func (m mockPTR) LookupAddr(ctx context.Context, s string) ([]string, error) {
 func TestPTRPageVisiblePriorityAndCache(t *testing.T) {
 	lg := defaults()
 	lg.PageSize = 2
-	doc := `{"rib":[{"prefix":"192.0.2.0/24","true_nexthop":"2001:db8::1","exit_nexthop":"10.0.0.1"},{"prefix":"2001:db8::/32","true_nexthop":"???","exit_nexthop":"192.0.2.1"},{"prefix":"203.0.113.0/24","true_nexthop":"192.0.2.99"}]}`
+	doc := `{"rib":[{"prefix":"192.0.2.0/24","true_nexthop":"172.18.0.1","exit_nexthop":"10.0.0.1"},{"prefix":"2001:db8::/32","true_nexthop":"172.18.0.2","exit_nexthop":"192.0.2.1"},{"prefix":"203.0.113.0/24","true_nexthop":"192.0.2.99","exit_nexthop":"192.0.2.99"}]}`
 	cfg, closeAll := testConfig(lg, backendSpec{"a", "Alpha", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("prefix") != "8.8.8.0/24" {
 			t.Error("upstream query changed")
@@ -59,16 +59,19 @@ func TestPTRPageVisiblePriorityAndCache(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("DNS blocked rendering")
 	}
-	for _, want := range []string{`data-ptr="2001:db8::1"`, `data-ptr="192.0.2.1"`, `data-ptr="10.0.0.1"`} {
+	for _, want := range []string{`data-ptr="10.0.0.1"`, `data-ptr="192.0.2.1"`} {
 		if !strings.Contains(body, want) {
 			t.Fatal(want)
 		}
+	}
+	if strings.Contains(body, "172.18.0.") {
+		t.Fatal("true next-hop address leaked into the default page")
 	}
 	if strings.Contains(body, `data-ptr="192.0.2.99"`) {
 		t.Fatal("off-page route rendered")
 	}
 	close(release)
-	for _, want := range []string{"2001:db8::1", "192.0.2.1"} {
+	for _, want := range []string{"10.0.0.1", "192.0.2.1"} {
 		select {
 		case got := <-calls:
 			if got != want {
@@ -94,7 +97,7 @@ func TestPTRPageVisiblePriorityAndCache(t *testing.T) {
 	if !strings.Contains(body, `title="Router.Example"`) {
 		t.Fatal("cached tooltip missing")
 	}
-	rr := get(routes, "/ptr-status?ip=2001%3Adb8%3A%3A1,192.0.2.1")
+	rr := get(routes, "/ptr-status?ip=10.0.0.1,192.0.2.1")
 	if rr.Code != 200 || !strings.Contains(rr.Body.String(), "Router.Example") {
 		t.Fatal(rr.Code, rr.Body.String())
 	}
@@ -109,14 +112,14 @@ func TestPTRPageVisiblePriorityAndCache(t *testing.T) {
 // construction, scheduling, cache and public status endpoint together.
 func TestPTRVisibilityIntegration(t *testing.T) {
 	const doc = `{"rib":[
-		{"prefix":"10.0.0.0/8","true_nexthop":"192.0.2.101"},
-		{"prefix":"172.16.1.0/24","true_nexthop":"192.0.2.102"},
-		{"prefix":"fd00:1::/48","true_nexthop":"2001:db8::101"},
-		{"prefix":"2001:db8:dead::/48","true_nexthop":"2001:db8::102"},
-		{"prefix":"10.1.0.0/16","true_nexthop":"192.0.2.1"},
-		{"prefix":"192.0.2.0/24","true_nexthop":"192.0.2.1"},
-		{"prefix":"2001:db8:abcd::/48","true_nexthop":"2001:db8::1"},
-		{"prefix":"172.16.2.0/24","true_nexthop":"192.0.2.1"}
+		{"prefix":"10.0.0.0/8","exit_nexthop":"192.0.2.101"},
+		{"prefix":"172.16.1.0/24","exit_nexthop":"192.0.2.102"},
+		{"prefix":"fd00:1::/48","exit_nexthop":"2001:db8::101"},
+		{"prefix":"2001:db8:dead::/48","exit_nexthop":"2001:db8::102"},
+		{"prefix":"10.1.0.0/16","exit_nexthop":"192.0.2.1"},
+		{"prefix":"192.0.2.0/24","exit_nexthop":"192.0.2.1"},
+		{"prefix":"2001:db8:abcd::/48","exit_nexthop":"2001:db8::1"},
+		{"prefix":"172.16.2.0/24","exit_nexthop":"192.0.2.1"}
 	]}`
 	cfg, closeAll := testConfig(defaults(), backendSpec{"a", "Alpha", serveDoc(doc)})
 	defer closeAll()

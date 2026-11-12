@@ -18,7 +18,7 @@
 - `internal/site`: deployment identity (`site` section): validation, startup-loaded logo/favicon assets, footer items, built-in favicon. No web or BGP dependencies.
 - `internal/version`: build identity (link-time `Version`/`Commit`/`Date` with toolchain fallbacks).
 - `.goreleaser.yaml`, `.github/workflows`: release automation and CI. `scripts/deploy.sh`: upgrade/rollback wrapper. `docs/RELEASING.md`: release and deployment guide.
-- `configs`: example YAML configuration. `examples/communities`: example community definitions (data, not defaults). `docs/COMMUNITIES.md`: definitions guide. `docs/SESSION_VISIBILITY.md`: BGP neighbor and RTR session guide. `docs/BRANDING.md`: site identity, logo and favicon guide. `docs/TESTING.md`: deterministic, browser and live test layers.
+- `examples/config.example.yaml`: complete, documented example YAML configuration; `examples/communities`: example community definitions (data, not defaults). `configs`: local runtime configuration, entirely ignored by Git. `docs/COMMUNITIES.md`: definitions guide. `docs/SESSION_VISIBILITY.md`: BGP neighbor and RTR session guide. `docs/BRANDING.md`: site identity, logo and favicon guide. `docs/TESTING.md`: deterministic, browser and live test layers.
 
 ## Frontend embedding
 
@@ -44,9 +44,9 @@
 
 ## Configuration files
 
-- Commit `configs/config.example.yaml` as the complete, documented example configuration.
-- Keep `configs/config.yaml` and `configs/config.docker.yaml` local and ignored by Git; do not commit runtime backend addresses.
-- Operators create runtime configuration with `cp configs/config.example.yaml configs/config.yaml` and then set backend URLs.
+- Commit `examples/config.example.yaml` as the complete, documented example configuration.
+- Keep the entire `configs/` directory local and ignored by Git; do not commit runtime backend addresses.
+- Operators create runtime configuration with `cp examples/config.example.yaml configs/config.yaml` and then set backend URLs.
 - Backend URLs are configured exclusively through validated YAML, never public request parameters.
 - `community_definitions` is optional and disabled by default (`enabled`, `directory`); keep it generic and document it in the example file. Docker mounts the directory read-only at `/etc/hextet-lg/communities`; no write access.
 - Every `looking_glass` setting is optional with a documented default (30s timeout, 128 MiB response, 256 MiB retained, 100 per page, 2 concurrent large queries, 20s cache); keep existing configurations working and document new settings in the example file. Backends may override `query_timeout`.
@@ -71,10 +71,10 @@
 
 ## Communities
 
-- Community descriptions are operator data in the legacy NLNOG text format (`asN.txt`, `well-known.txt`, optional `metadata.yaml`), loaded once at startup from `community_definitions.directory` when `community_definitions.enabled` (default false). Never embed, default or fall back to any operator's definitions (the AS395089 set lives only in `examples/communities`), never download or refresh definitions, and never log definition contents.
+- Community descriptions are operator data in the legacy NLNOG text format (`asN.txt`, `well-known.txt`), loaded once at startup from `community_definitions.directory` when `community_definitions.enabled` (default false). Never load ancillary metadata files. Never embed, default or fall back to any operator's definitions (the AS395089 set lives only in `examples/communities`), never download or refresh definitions, and never log definition contents.
 - The format is NLNOG-compatible: first-comma split, `#` comments, exact/range/`x` (one digit)/`nnn` (one or more digits) with `$N` substitutions for standard, large and extended communities. Never compile definition text as a regular expression; keep the bounded matcher. Precedence is exact, then smallest value space, then load order (well-known, ascending ASN, line); never depend on map iteration. Malformed, unsupported or duplicate definitions and any unreadable file fail startup with file and line; do not silently drop lines. See `docs/COMMUNITIES.md` before changing the grammar or its documented differences from upstream.
 - Definitions are presentation only. They must not change query construction, search, canonical URLs, the `features.*` flags, route visibility or caching, and must not be copied into retained `bgp.Route`, cache or flight data: look them up at render time from the immutable set. Tooltips are escaped native `title` attributes in the route-details HTML only; plaintext views and `output=plain` stay raw. Do not add description search.
-- Standard, extended and large communities stay separate kinds. The Community Explorer is generated from the loaded definitions plus the optional `metadata.yaml` (category, notes, status `implemented|documented|unresolved`, evidence), which never affects lookup. "Implemented" means present in the operator's configuration; do not invent meanings and do not claim live verification.
+- Standard, extended and large communities stay separate kinds. The Community Explorer is generated only from loaded text definitions; its source category is derived from the source filename. Do not add status/evidence metadata columns or ancillary metadata-file support.
 
 ## Session visibility
 

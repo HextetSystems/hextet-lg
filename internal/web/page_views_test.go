@@ -30,7 +30,7 @@ func TestM2Pages(t *testing.T) {
 	for _, tc := range []struct {
 		url   string
 		wants []string
-	}{{"/?type=prefix&q=8.8.8.8", []string{"BEST", "Route details", "395089%3A0%3A6", "Query failed"}}, {"/neighbors", []string{"192.0.2.1", "42", "&lt;script&gt;", "Backend unavailable"}}, {"/summary", []string{"Established", "Sessions reported", "Backend unavailable"}}, {"/communities?category=Route+classification&q=transit", []string{"No community definitions are configured", "No matching communities."}}} {
+	}{{"/?type=prefix&q=8.8.8.8", []string{"BEST", "Route details", "395089%3A0%3A6", "Query failed"}}, {"/neighbors", []string{"192.0.2.1", "42", "&lt;script&gt;", "Sessions reported", "Backend unavailable"}}, {"/communities?category=Route+classification&q=transit", []string{"No community definitions are configured", "No matching communities."}}} {
 		t.Run(tc.url, func(t *testing.T) {
 			rr := httptest.NewRecorder()
 			h.Routes().ServeHTTP(rr, httptest.NewRequest("GET", tc.url, nil))
@@ -64,7 +64,7 @@ func TestBookmarkAndPlainText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/?type=prefix&q=2001%3Adb8%3A%3A%2F32&backend=stable&view=table", "/?type=prefix&q=2001%3Adb8%3A%3A%2F32&backend=stable&view=text", "/?type=prefix&q=2001%3Adb8%3A%3A%2F32&backend=stable&view=detail&output=plain", "/neighbors?backend=stable", "/summary?backend=stable", "/communities?q=transit&category=Route+classification"} {
+	for _, path := range []string{"/?type=prefix&q=2001%3Adb8%3A%3A%2F32&backend=stable&view=table", "/?type=prefix&q=2001%3Adb8%3A%3A%2F32&backend=stable&view=text", "/?type=prefix&q=2001%3Adb8%3A%3A%2F32&backend=stable&view=detail&output=plain", "/neighbors?backend=stable", "/communities?q=transit&category=Route+classification"} {
 		rr := httptest.NewRecorder()
 		h.Routes().ServeHTTP(rr, httptest.NewRequest("GET", path, nil))
 		if rr.Code != 200 {

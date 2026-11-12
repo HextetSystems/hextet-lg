@@ -4,9 +4,7 @@ Prefix: 192.0.2.0/24
   Address family: IPv4
   AS path: 64500 15169
   Origin ASN: 15169
-  Next hop: 192.0.2.1
-  Exit next hop: —
-  True next hop: 192.0.2.1
+  Exit next hop: 192.0.2.1
   Neighbor: —
   Source: —
   Origin: —
@@ -37,9 +35,7 @@ Prefix: 192.0.2.0/24
   Address family: IPv4
   AS path: 64500 15169
   Origin ASN: 15169
-  Next hop: 192.0.2.1
-  Exit next hop: —
-  True next hop: 192.0.2.1
+  Exit next hop: 192.0.2.1
   Neighbor: —
   Source: —
   Origin: —
@@ -59,9 +55,7 @@ Prefix: 2001:db8::/32
   Address family: IPv6
   AS path: 64500 15169
   Origin ASN: —
-  Next hop: 2001:db8::1
   Exit next hop: 2001:db8::1
-  True next hop: —
   Neighbor: —
   Source: —
   Origin: —
@@ -89,9 +83,7 @@ Prefix: 192.0.2.0/24
   Address family: IPv4
   AS path: 64500 15169
   Origin ASN: 15169
-  Next hop: 192.0.2.1
-  Exit next hop: —
-  True next hop: 192.0.2.1
+  Exit next hop: 192.0.2.1
   Neighbor: —
   Source: —
   Origin: —
@@ -111,9 +103,7 @@ Prefix: 2001:db8::/32
   Address family: IPv6
   AS path: 64500 15169
   Origin ASN: —
-  Next hop: 2001:db8::1
   Exit next hop: 2001:db8::1
-  True next hop: —
   Neighbor: —
   Source: —
   Origin: —
@@ -141,9 +131,7 @@ Prefix: 192.0.2.0/24
   Address family: IPv4
   AS path: 64500 15169
   Origin ASN: 15169
-  Next hop: 192.0.2.1
-  Exit next hop: —
-  True next hop: 192.0.2.1
+  Exit next hop: 192.0.2.1
   Neighbor: —
   Source: —
   Origin: —
@@ -163,9 +151,7 @@ Prefix: 2001:db8::/32
   Address family: IPv6
   AS path: 64500 15169
   Origin ASN: —
-  Next hop: 2001:db8::1
   Exit next hop: 2001:db8::1
-  True next hop: —
   Neighbor: —
   Source: —
   Origin: —

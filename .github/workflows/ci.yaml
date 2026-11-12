@@ -79,7 +79,7 @@ jobs:
           docker run --rm hextet-lg:ci version
           docker run -d --name lg --read-only --cap-drop ALL --security-opt no-new-privileges:true \
             --tmpfs /tmp:size=8m,mode=1777 -p 127.0.0.1:18080:8080 \
-            -v "$PWD/configs/config.example.yaml:/etc/hextet-lg/config.yaml:ro" hextet-lg:ci
+            -v "$PWD/examples/config.example.yaml:/etc/hextet-lg/config.yaml:ro" hextet-lg:ci
           for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:18080/healthz >/dev/null; then break; fi
             sleep 1

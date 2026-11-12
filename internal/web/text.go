@@ -126,7 +126,7 @@ func writeSection(ctx context.Context, w *bufio.Writer, s Section, view string) 
 	if view == "text" {
 		fmt.Fprintln(w, "Flags: * = selected best (when reported); eligibility and validation are separate")
 		fmt.Fprintln(w, "OVS: origin validation state; AVS: ASPA validation state")
-		fmt.Fprintf(w, "%-1s %-*s %-*s %8s %8s %-12s %-12s %s\n", " ", pw, "Prefix", nw, "Next hop", "LocalPref", "MED", "OVS", "AVS", "AS path")
+		fmt.Fprintf(w, "%-1s %-*s %-*s %8s %8s %-12s %-12s %s\n", " ", pw, "Prefix", nw, "Exit next hop", "LocalPref", "MED", "OVS", "AVS", "AS path")
 	}
 	for i, rt := range s.Rows {
 		if i&511 == 0 {
@@ -152,9 +152,13 @@ func writeSection(ctx context.Context, w *bufio.Writer, s Section, view string) 
 }
 
 func writeDetail(w io.Writer, r bgp.Route) {
-	fmt.Fprintf(w, "Prefix: %s\n  Address family: %s\n  AS path: %s\n  Origin ASN: %s\n  Next hop: %s\n  Exit next hop: %s\n  True next hop: %s\n  Neighbor: %s\n  Source: %s\n  Origin: %s\n  Local preference: %s\n  MED: %s\n  Weight: %s\n  DMetric: %s\n  RPKI OVS: %s\n  ASPA AVS: %s\n  Last update: %s\n", val(r.Prefix), val(r.Family()), val(r.ASPath), val(r.OriginASN), val(r.NextHop()), val(r.ExitNexthop), val(r.TrueNexthop), val(r.Neighbor), val(r.Source), val(r.Origin), num(r.LocalPref), num(r.Metric), num(r.Weight), num(r.DMetric), val(r.OVS), val(r.AVS), val(r.LastUpdate))
+	fmt.Fprintf(w, "Prefix: %s\n  Address family: %s\n  AS path: %s\n  Origin ASN: %s\n  Exit next hop: %s\n  Neighbor: %s\n  Source: %s\n  Origin: %s\n  Local preference: %s\n  MED: %s\n  Weight: %s\n  DMetric: %s\n  RPKI OVS: %s\n  ASPA AVS: %s\n  Last update: %s\n", val(r.Prefix), val(r.Family()), val(r.ASPath), val(r.OriginASN), val(r.NextHop()), val(r.Neighbor), val(r.Source), val(r.Origin), num(r.LocalPref), num(r.Metric), num(r.Weight), num(r.DMetric), val(r.OVS), val(r.AVS), val(r.LastUpdate))
 	if r.Valid != nil {
-		fmt.Fprintf(w, "  Eligible: %t\n", *r.Valid)
+		qualification := "Unqualified"
+		if *r.Valid {
+			qualification = "Qualified"
+		}
+		fmt.Fprintf(w, "  Route qualification: %s\n", qualification)
 	}
 	if r.Best {
 		fmt.Fprintln(w, "  Selected: best")

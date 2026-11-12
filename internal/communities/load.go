@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
-
-	"gopkg.in/yaml.v3"
 )
 
 // Fixed resource bounds. They are generous for real-world files (the largest
@@ -20,8 +18,6 @@ import (
 const (
 	MaxDescriptionBytes = 512
 	MaxLineBytes        = 1024
-	// MetadataFile is the optional operator metadata file in the directory.
-	MetadataFile = "metadata.yaml"
 	// WellKnownFile holds definitions that belong to no operator (65535:...).
 	WellKnownFile = "well-known.txt"
 	maxProblems   = 20
@@ -30,7 +26,7 @@ const (
 // Limits bound what a directory may contain.
 type Limits struct {
 	MaxFiles       int   // definition files
-	MaxFileBytes   int64 // per definition or metadata file
+	MaxFileBytes   int64 // per definition file
 	MaxDefinitions int   // across all files
 }
 
@@ -81,11 +77,11 @@ func (p *problems) err() error {
 // Load reads every definition file in dir with DefaultLimits.
 func Load(dir string) (*Set, error) { return LoadDir(dir, DefaultLimits) }
 
-// LoadDir reads the asN.txt files and well-known.txt in dir, plus the optional
-// metadata.yaml, and compiles them. Any problem (missing or unreadable
-// directory or file, bad file name, malformed or duplicate definition,
-// exceeded limit, bad metadata) fails the whole load: it never returns a
-// partial definition set. An empty directory is valid and yields an empty Set.
+// LoadDir reads the asN.txt files and well-known.txt in dir and compiles them.
+// Any problem (missing or unreadable directory or file, bad file name,
+// malformed or duplicate definition, exceeded limit) fails the whole load:
+// it never returns a partial definition set. An empty directory is valid and
+// yields an empty Set.
 //
 // Files: "asN.txt" (N a canonical ASN) and "well-known.txt" are loaded; any
 // other file whose name starts with "as" and ends in ".txt" is an error (it is
@@ -113,15 +109,12 @@ func LoadDir(dir string, lim Limits) (*Set, error) {
 	}
 	var files []file
 	set := &Set{exact: map[exactKey]*entry{}, patterns: map[bucketKey][]*entry{}}
-	var hasMeta bool
 	for _, de := range des {
 		name := de.Name()
 		if de.IsDir() {
 			continue
 		}
 		switch {
-		case name == MetadataFile:
-			hasMeta = true
 		case name == WellKnownFile:
 			files = append(files, file{name: name})
 		case isASFile(name):
@@ -159,14 +152,6 @@ func LoadDir(dir string, lim Limits) (*Set, error) {
 		if len(set.defs) > lim.MaxDefinitions {
 			pr.add("%s: more than %d definitions in total", f.name, lim.MaxDefinitions)
 			return nil, pr.err()
-		}
-	}
-	if hasMeta {
-		data, err := readBounded(dir+string(os.PathSeparator)+MetadataFile, lim.MaxFileBytes)
-		if err != nil {
-			pr.add("%s: %v", MetadataFile, err)
-		} else {
-			applyMetadata(set, &pr, data)
 		}
 	}
 	if err := pr.err(); err != nil {
@@ -287,117 +272,4 @@ func (s *Set) register(pl parsedLine, file, source string, line int) {
 		bk.first = e.comps[0].lit
 	}
 	s.patterns[bk] = append(s.patterns[bk], e)
-}
-
-// metadataFile is the optional operator metadata. It carries what the legacy
-// text format cannot: a category, notes and an implementation status for the
-// Community Explorer. Entries are keyed by the canonical definition text
-// (for example "64500:400-499" or "soo 64500:nnn"). It never affects lookup.
-type metadataFile struct {
-	Source      string                   `yaml:"source"`
-	Communities map[string]metadataEntry `yaml:"communities"`
-}
-
-type metadataEntry struct {
-	Category     string `yaml:"category"`
-	Notes        string `yaml:"notes"`
-	Status       string `yaml:"status"`
-	Evidence     string `yaml:"evidence"`
-	EvidenceNote string `yaml:"evidence_note"`
-}
-
-const (
-	maxMetaField  = 500
-	maxMetaSource = 500
-)
-
-func applyMetadata(set *Set, pr *problems, data []byte) {
-	var m metadataFile
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	dec.KnownFields(true)
-	if err := dec.Decode(&m); err != nil && !errors.Is(err, io.EOF) {
-		pr.add("%s: %v", MetadataFile, err)
-		return
-	}
-	var extra any
-	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
-		pr.add("%s: multiple YAML documents are not supported", MetadataFile)
-		return
-	}
-	if err := checkMeta("source", m.Source, maxMetaSource); err != nil {
-		pr.add("%s: %v", MetadataFile, err)
-	}
-	set.MetadataSource = m.Source
-	index := make(map[exactKey]int, len(set.defs))
-	for i, d := range set.defs {
-		index[exactKey{d.Kind, d.Key}] = i
-	}
-	keys := make([]string, 0, len(m.Communities))
-	for k := range m.Communities {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		me := m.Communities[key]
-		if strings.Contains(key, ",") {
-			pr.add("%s: community %q: use the community without a description", MetadataFile, key)
-			continue
-		}
-		pl, err := parseLine(key+",x", 0)
-		if err != nil {
-			pr.add("%s: community %q: %v", MetadataFile, key, err)
-			continue
-		}
-		i, ok := index[exactKey{pl.e.kind, pl.key}]
-		if !ok {
-			pr.add("%s: community %q has metadata but no definition (keys use the canonical form of the definition)", MetadataFile, key)
-			continue
-		}
-		if pl.key != key {
-			pr.add("%s: community %q must be written in its canonical form %q", MetadataFile, key, pl.key)
-			continue
-		}
-		status, err := normalizeStatus(me.Status)
-		if err != nil {
-			pr.add("%s: community %q: %v", MetadataFile, key, err)
-			continue
-		}
-		bad := false
-		for _, f := range [...]struct{ name, v string }{{"category", me.Category}, {"notes", me.Notes}, {"evidence", me.Evidence}, {"evidence_note", me.EvidenceNote}} {
-			if err := checkMeta(f.name, f.v, maxMetaField); err != nil {
-				pr.add("%s: community %q: %v", MetadataFile, key, err)
-				bad = true
-			}
-		}
-		if bad {
-			continue
-		}
-		d := &set.defs[i]
-		d.Category, d.Notes, d.Status, d.Evidence, d.EvidenceNote = me.Category, me.Notes, status, me.Evidence, me.EvidenceNote
-		set.stats.MetadataEntries++
-	}
-}
-
-func checkMeta(name, v string, max int) error {
-	if len(v) > max {
-		return fmt.Errorf("%s is longer than %d bytes", name, max)
-	}
-	if err := checkText(v); err != nil {
-		return fmt.Errorf("%s: %w", name, err)
-	}
-	return nil
-}
-
-func normalizeStatus(s string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "":
-		return "", nil
-	case "implemented":
-		return StatusImplemented, nil
-	case "documented", "planned", "documented/planned":
-		return StatusDocumented, nil
-	case "unresolved":
-		return StatusUnresolved, nil
-	}
-	return "", fmt.Errorf("status %q must be implemented, documented or unresolved", s)
 }

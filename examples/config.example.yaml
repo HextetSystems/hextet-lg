@@ -1,7 +1,7 @@
 # Copy this file to configs/config.yaml and set each backend URL to the
 # OpenBGPD bgplgd HTTP API address reachable from the application.
 #
-#   cp configs/config.example.yaml configs/config.yaml
+#   cp examples/config.example.yaml configs/config.yaml
 #
 # For standalone development set server.listen to port 7000 in config.yaml.
 # Compose uses a separate ignored configs/config.docker.yaml with port 8080;
@@ -245,7 +245,7 @@ features:
 # Optional operator-supplied BGP community definitions (DISABLED by default).
 # Files use the legacy NLNOG looking glass text format, one asN.txt per ASN
 # ("64500:100,Learned from customer"; wildcards x, nnn, ranges 400-499 and $0
-# substitutions), plus an optional metadata.yaml for the Community Explorer.
+# substitutions). The Community Explorer shows the same text-file definitions.
 # See docs/COMMUNITIES.md and examples/communities/. They only enrich how routes
 # and the Community Explorer are displayed: searches, URLs and visibility are
 # unaffected. They are read once at startup, so restart after editing them.
@@ -282,6 +282,8 @@ display:
   # not. Enable only for trusted deployments. When false, no Raw JSON control
   # is rendered and the payload is not embedded in the page.
   raw_json: false
+  # Show the backend route qualification field in Route details (hidden by default).
+  route_qualification: false
   route_columns:
     # Neighbor column in the route table (hidden by default). The neighbor is
     # always available in Route details and in neighbor searches.

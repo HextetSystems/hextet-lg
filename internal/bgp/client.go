@@ -62,16 +62,10 @@ func (r Route) Family() string {
 	}
 }
 
-// NextHop prefers the resolved (true) next hop. bgpctl prints "???" when the
-// true next hop is unresolved; the exit next hop is more useful then.
+// NextHop returns the exit next hop, the route-facing address. The true next
+// hop can be an internal forwarding address from the backend.
 func (r Route) NextHop() string {
-	if r.TrueNexthop != "" && r.TrueNexthop != "???" {
-		return r.TrueNexthop
-	}
-	if r.ExitNexthop != "" {
-		return r.ExitNexthop
-	}
-	return r.TrueNexthop
+	return r.ExitNexthop
 }
 
 // DefaultMaxRetainedBytes bounds retained decoded routes when a Client does

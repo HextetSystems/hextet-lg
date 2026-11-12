@@ -22,19 +22,19 @@ func TestAdmissionRejectionsAreCountedAndLogged(t *testing.T) {
 	lg.MaxConcurrentWork, lg.MaxQueuedWork, lg.QueueWait = 1, 1, 20*time.Millisecond
 	h, buf := newObsHandler(t, lg, "info", backendSpec{id: "a", name: "A", h: serveDoc(`{}`)})
 	h.work.active <- struct{}{} // the only slot is busy
-	rr := get(h.Routes(), "/summary")
+	rr := get(h.Routes(), "/neighbors")
 	<-h.work.active
 	if rr.Code != 503 || rr.Header().Get("Retry-After") == "" {
 		t.Fatalf("status %d", rr.Code)
 	}
 	wantMetric(t, h, 1, "hextet_lg_work_gate_rejections_total", "reason", "wait_timeout")
-	wantMetric(t, h, 1, "hextet_lg_http_requests_total", "route", "summary", "status_class", "5xx")
+	wantMetric(t, h, 1, "hextet_lg_http_requests_total", "route", "neighbors", "status_class", "5xx")
 	if r := find(buf.records(t), "request", "status", 503); r == nil || r["level"] != "WARN" {
 		t.Fatalf("503 overload record: %v", r)
 	}
 
 	h.StopAdmission()
-	if rr := get(h.Routes(), "/summary"); rr.Code != 503 {
+	if rr := get(h.Routes(), "/neighbors"); rr.Code != 503 {
 		t.Fatalf("status %d", rr.Code)
 	}
 	wantMetric(t, h, 1, "hextet_lg_work_gate_rejections_total", "reason", "shutdown")
@@ -59,7 +59,7 @@ func (f *failWriter) Write(p []byte) (int, error) {
 // A write that fails after the response is committed must not be answered with
 // http.Error: no second WriteHeader, no error text mixed into the body.
 func TestWriteFailureAfterCommitDoesNotWriteHeaderAgain(t *testing.T) {
-	for _, target := range []string{"/", "/communities", "/summary", "/?q=10.0.0.0/24&type=prefix"} {
+	for _, target := range []string{"/", "/communities", "/neighbors", "/?q=10.0.0.0/24&type=prefix"} {
 		t.Run(target, func(t *testing.T) {
 			h, buf := newObsHandler(t, defaults(), "info", backendSpec{id: "a", name: "A", h: serveDoc(ribJSON(2, false))})
 			f := &failWriter{hdr: http.Header{}}

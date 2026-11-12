@@ -7,16 +7,20 @@ const vm = require('node:vm');
 const app = fs.readFileSync('internal/web/static/app.js', 'utf8');
 const source = app.split('// Copy buttons confirm')[1].split('// Search form behavior is delegated')[0];
 
-function harness({clipboard, status = {textContent: ''}, linkHref = 'https://lg.example/?type=prefix&q=192.0.2.1'} = {}) {
+function harness({clipboard, fallbackCopy = false, status = {textContent: ''}, linkHref = 'https://lg.example/?type=prefix&q=192.0.2.1'} = {}) {
   let click, timers = [];
   const els = {'route-text': {textContent: 'route output'}, 'copy-status': status};
-  const document = {addEventListener: (n, f) => { if (n === 'click') click = f; }, getElementById: id => els[id]};
+  let fallbackText = '';
+  const document = {addEventListener: (n, f) => { if (n === 'click') click = f; }, getElementById: id => els[id],
+    createElement: () => ({setAttribute() {}, select() {}, remove() {}}),
+    body: {appendChild: area => { fallbackText = area.value; }},
+    execCommand: command => command === 'copy' && fallbackCopy};
   const ctx = {document, navigator: clipboard === undefined ? {} : {clipboard}, location: {href: linkHref},
     setTimeout: f => { timers.push(f); return timers.length; }, clearTimeout: () => {}};
   vm.runInNewContext('(function(){' + '// Copy buttons confirm' + source + '})()', ctx);
   const button = (attrs, text) => ({dataset: {...attrs}, textContent: text, matches: s => s.split(',').some(x => {const m = x.trim().match(/^\[(data-[a-z-]+)\]$/); return m && Object.keys(attrs).some(k => 'data-' + k.replace(/[A-Z]/g, c => '-' + c.toLowerCase()) === m[1]);})});
   const press = b => click({target: {closest: () => b}});
-  return {press, button, timers, status};
+  return {press, button, timers, status, fallbackText: () => fallbackText};
 }
 const settle = async () => { for (let i = 0; i < 6; i++) await Promise.resolve(); };
 
@@ -60,6 +64,15 @@ test('without a clipboard API the button says so and keeps its label afterwards'
   assert.match(h.status.textContent, /not available/);
   h.timers.shift()();
   assert.equal(b.textContent, 'Copy link');
+});
+
+test('without the Clipboard API, a successful browser fallback copies the link', async () => {
+  const h = harness({fallbackCopy: true});
+  const b = h.button({copyLink: ''}, 'Copy link');
+  h.press(b); await settle();
+  assert.equal(b.textContent, 'Copied');
+  assert.equal(h.status.textContent, 'Link copied');
+  assert.equal(h.fallbackText(), 'https://lg.example/?type=prefix&q=192.0.2.1');
 });
 
 test('repeated presses keep the original label', async () => {

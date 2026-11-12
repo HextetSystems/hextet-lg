@@ -9,8 +9,11 @@ document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest
  const isLink=t.matches("[data-copy-link]"),src=isLink?null:document.getElementById(t.dataset.copy),text=isLink?location.href:src&&src.textContent;
  const label=t.dataset.label||t.textContent;t.dataset.label=label;const status=document.getElementById('copy-status');
  const say=(button,live)=>{t.textContent=button;if(status)status.textContent=live;clearTimeout(t._copyTimer);t._copyTimer=setTimeout(()=>{t.textContent=label;if(status)status.textContent=''},1800)};
- if(typeof text!=='string'||!navigator.clipboard){say('Copy unavailable','Copying is not available in this browser');return}
- navigator.clipboard.writeText(text).then(()=>say('Copied',isLink?'Link copied':'Text copied'),()=>say('Copy failed','Copy failed'))});
+ if(typeof text!=='string'){say('Copy failed','Nothing to copy');return}
+ if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(()=>say('Copied',isLink?'Link copied':'Text copied'),()=>say('Copy failed','Copy failed'));return}
+ // Clipboard API access is restricted to secure contexts. Keep a fallback for
+ // older browsers and HTTP deployments where navigator.clipboard is absent.
+ const area=document.createElement('textarea');area.className='copy-fallback';area.value=text;area.setAttribute('readonly','');document.body.appendChild(area);area.select();let copied=false;try{copied=document.execCommand('copy')}catch(_){}area.remove();say(copied?'Copied':'Copy unavailable',copied?(isLink?'Link copied':'Text copied'):'Copying is not available in this browser')});
 // Search form behavior is delegated from the document: browser Back/Forward re-renders the form from the server (see the history note in README), so handlers must not be bound to one form element.
 (function(){function form(){return document.getElementById('search-form')}
 function sync(){var f=form();if(!f)return;var n=f.elements.neighbor,g=f.elements.group;if(n&&g){g.disabled=n.value.trim()!=='';n.disabled=!g.disabled&&g.value.trim()!==''}}

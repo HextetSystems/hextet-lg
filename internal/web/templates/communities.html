@@ -1,1 +1,42 @@
-{{template "header" .}}<section class="intro"><p class="eyebrow">COMMUNITY REFERENCE</p><h1>Community Explorer</h1><p class="lead">Operator-supplied BGP community definitions for standard, large and extended communities.</p></section><form class="panel search-panel" method="get"><div class="controls"><label>Search<input type="search" name="q" value="{{.Query}}" placeholder="Value, name or description"></label><label>Category<select name="category"><option value="">All categories</option>{{range .Categories}}<option value="{{.}}" {{if eq $.Category .}}selected{{end}}>{{.}}</option>{{end}}</select></label><button>Filter</button><a href="/communities">Clear</a></div></form>{{if not .CommunityDefs}}<div class="notice"><strong>No community definitions are configured</strong><p>Operators enable them with the <code>community_definitions</code> configuration section. Route attributes are displayed unchanged either way.</p></div>{{else}}<p class="hint">Definitions are operator-supplied data read from the configured files at startup; they are not authoritative verification of any routing policy. In wildcard definitions <code>x</code> is one digit, <code>nnn</code> any number and <code>lo-hi</code> a range, and <code>$0</code>, <code>$1</code> in a description stand for the matched digits. Where status metadata is supplied, <strong>Implemented</strong> means the community is present in the operator's configuration; it is not independent verification that the intended routing behaviour occurs. <strong>Documented/planned</strong> means described in documentation but absent from the configuration; <strong>Unresolved</strong> means the evidence is insufficient.{{if .CommunitySource}} Evidence source: {{.CommunitySource}}.{{end}}</p>{{end}}{{if gt .CommunityMatched (len .Communities)}}<div class="notice warn"><strong>Showing the first {{commas (len .Communities)}} of {{commas .CommunityMatched}} definitions</strong><p>Use the search text or category filter to narrow the list.</p></div>{{end}}<section class="panel result-group"><div class="table-wrap"><table><thead><tr><th>Community</th><th>Name / description</th><th>Category</th><th>Status / evidence</th></tr></thead><tbody>{{range .Communities}}<tr><td>{{if .Link}}<a href="{{.Link}}"><code>{{.Key}}</code> ↗</a>{{else}}<code>{{.Key}}</code>{{if not .Exact}}<br><small>pattern</small>{{end}}{{end}}</td><td><strong>{{.Description}}</strong>{{if .Notes}}<br><small>{{.Notes}}</small>{{end}}</td><td>{{.Category}}<br><small>{{.File}}</small></td><td>{{if .Status}}<span class="pill {{statusClassName .Status}}">{{.Status}}</span>{{if .Evidence}}<br><small>{{.Evidence}}{{if .EvidenceNote}}: {{.EvidenceNote}}{{end}}</small>{{end}}{{else}}—{{end}}</td></tr>{{else}}<tr><td colspan="4">No matching communities.</td></tr>{{end}}</tbody></table></div></section>{{template "footer" .}}
+{{template "header" .}}
+<section class="intro">
+  <p class="eyebrow">COMMUNITY REFERENCE</p>
+  <h1>Community Explorer</h1>
+  <p class="lead">Operator-supplied BGP community definitions.</p>
+</section>
+<form class="panel search-panel" method="get">
+  <div class="controls">
+    <label>Search<input type="search" name="q" value="{{.Query}}" placeholder="Value or description"></label>
+    <label>Source<select name="category"><option value="">All sources</option>{{range .Categories}}<option value="{{.}}" {{if eq $.Category .}}selected{{end}}>{{.}}</option>{{end}}</select></label>
+    <button>Filter</button>
+    <a href="/communities">Clear</a>
+  </div>
+</form>
+{{if not .CommunityDefs}}
+<div class="notice"><strong>No community definitions are configured</strong><p>Enable them with the <code>community_definitions</code> configuration section.</p></div>
+{{else}}
+<p class="hint">Definitions are read from the configured text files at startup. In patterns, <code>x</code> matches one digit, <code>nnn</code> matches one or more digits, and <code>lo-hi</code> is a range. Description substitutions such as <code>$0</code> show the digits matched by a pattern.</p>
+{{end}}
+{{if gt .CommunityMatched (len .Communities)}}
+<div class="notice warn"><strong>Showing the first {{commas (len .Communities)}} of {{commas .CommunityMatched}} definitions</strong><p>Use the search or source filter to narrow the list.</p></div>
+{{end}}
+<section class="panel result-group">
+  <div class="table-wrap">
+    <table class="community-table">
+      <colgroup><col class="community-key"><col class="community-description"><col class="community-source"></colgroup>
+      <thead><tr><th>Community</th><th>Name / description</th><th>Source</th></tr></thead>
+      <tbody>
+        {{range .Communities}}
+        <tr>
+          <td class="community-key-cell" data-label="Community">{{if .Link}}<a href="{{.Link}}"><code>{{.Key}}</code> ↗</a>{{else}}<code>{{.Key}}</code>{{if not .Exact}}<br><small>pattern</small>{{end}}{{end}}</td>
+          <td class="community-description-cell" data-label="Description"><strong>{{.Description}}</strong></td>
+          <td class="community-source-cell" data-label="Source">{{.Source}}<br><small>{{.File}}</small></td>
+        </tr>
+        {{else}}
+        <tr><td colspan="3">No matching communities.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{template "footer" .}}

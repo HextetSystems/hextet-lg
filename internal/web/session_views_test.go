@@ -102,7 +102,7 @@ func TestSessionFeatureFlagsAreIndependent(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			h := m47Handler(t, func(c *config.Config) { c.Features.BGPNeighbors, c.Features.RTRSessions = tc.bgp, tc.rtr },
 				backendSpec{"a", "Alpha", m47Backend(m47Neighbors, m47Summary, m47RTR)})
-			for _, path := range []string{"/neighbors", "/summary"} {
+			for _, path := range []string{"/neighbors"} {
 				if got := get(h, path).Code; (got == 200) != tc.wantBGP || (!tc.wantBGP && got != 404) {
 					t.Errorf("%s: status %d, want enabled=%v", path, got, tc.wantBGP)
 				}
@@ -113,7 +113,7 @@ func TestSessionFeatureFlagsAreIndependent(t *testing.T) {
 			// Navigation (on every page kind) mirrors the flags exactly.
 			for _, page := range []string{"/", "/communities"} {
 				body := get(h, page).Body.String()
-				for link, want := range map[string]bool{`href="/neighbors"`: tc.wantBGP, `href="/summary"`: tc.wantBGP, `href="/rtr"`: tc.wantRTR} {
+				for link, want := range map[string]bool{`href="/neighbors"`: tc.wantBGP, `href="/summary"`: false, `href="/rtr"`: tc.wantRTR} {
 					if strings.Contains(body, link) != want {
 						t.Errorf("%s: nav %s present=%v want %v", page, link, !want, want)
 					}
@@ -175,10 +175,10 @@ func TestBGPNeighborDetailsAndEscaping(t *testing.T) {
 	mustContain(t, active, `>0 / 0<`, `<td>—</td>`)
 }
 
-func TestSummaryOmitsCounterColumnsItNeverHas(t *testing.T) {
+func TestNeighborsIncludeSummaryCountsAndOmitAbsentCounters(t *testing.T) {
 	h := m47Handler(t, nil, backendSpec{"a", "Alpha", m47Backend(m47Neighbors, m47Summary, "")})
-	page := get(h, "/summary").Body.String()
-	mustContain(t, page, `Sessions reported`, `up 1d02h`, `<span class="pill good">Established</span>`, `>Last change</th>`)
+	page := get(h, "/neighbors").Body.String()
+	mustContain(t, page, `Sessions reported`, `>2</strong><span>Sessions reported`, `>1</strong><span>Established`, `>1</strong><span>Other states`, `192.0.2.1`, `up 01:23:45`)
 	mustNotContain(t, page, `Prefixes received / sent`, `Messages received / sent`)
 	// The detail grid only exists when there is something to show.
 	mustContain(t, page, `<span>BGP ID</span>`)
@@ -200,6 +200,34 @@ func TestSameNeighborAddressOnTwoBackendsStaysSeparate(t *testing.T) {
 	if strings.Count(one, `class="panel result-group"`) != 1 {
 		t.Fatal("only the selected backend may be queried and shown")
 	}
+}
+
+func TestSummaryCountsRemainBackendSpecificAndShowForEmptyNeighborList(t *testing.T) {
+	h := m47Handler(t, nil,
+		backendSpec{"a", "Alpha", m47Backend(`{"neighbors":[]}`, `{"neighbors":[{"state":"Established"},{"state":"Idle"}]}`, "")},
+		backendSpec{"b", "Beta", m47Backend(`{"neighbors":[{"remote_addr":"192.0.2.8","state":"Established"}]}`, `{"neighbors":[{"state":"Established"}]}`, "")})
+	page := get(h, "/neighbors?backend=all").Body.String()
+	if strings.Count(page, `class="summary-stats"`) != 2 {
+		t.Fatalf("expected independent count blocks for both backends")
+	}
+	if strings.Count(page, `>2</strong><span>Sessions reported`) != 1 || strings.Count(page, `>1</strong><span>Sessions reported`) != 1 {
+		t.Fatalf("summary counts were not kept separate:\n%s", page)
+	}
+	if !strings.Contains(page, "No neighbors reported by this backend.") || !strings.Contains(page, "192.0.2.8") {
+		t.Fatal("empty and populated neighbor tables should both render")
+	}
+}
+
+func TestSummaryFailureDoesNotHideNeighborRows(t *testing.T) {
+	h := m47Handler(t, nil, backendSpec{"a", "Alpha", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/neighbors" {
+			fmt.Fprint(w, m47Neighbors)
+			return
+		}
+		http.Error(w, "down", http.StatusServiceUnavailable)
+	}})
+	page := get(h, "/neighbors").Body.String()
+	mustContain(t, page, "Session summary unavailable", "192.0.2.1", "Neighbor details")
 }
 
 func TestBGPBackendFailureDoesNotHideOthers(t *testing.T) {
@@ -353,7 +381,7 @@ func TestRTRParametersAndBackendSelection(t *testing.T) {
 
 func TestSessionPagesAreFullDocumentsForHTMXAndHistoryRestore(t *testing.T) {
 	h := m47Handler(t, nil, backendSpec{"a", "Alpha", m47Backend(m47Neighbors, m47Summary, m47RTR)})
-	for _, path := range []string{"/rtr", "/neighbors", "/summary"} {
+	for _, path := range []string{"/rtr", "/neighbors"} {
 		direct := get(h, path)
 		for name, hdrs := range map[string][]string{
 			"htmx":             {"HX-Request", "true"},
@@ -434,4 +462,12 @@ func TestRTRUsesFixedRouteAndOperationLabels(t *testing.T) {
 	mustContain(t, body, `operation="rtr"`, `route="rtr"`)
 	// An unsupported backend is not a backend failure.
 	mustNotContain(t, body, `hextet_lg_backend_failures_total{backend="a",operation="rtr"`)
+}
+
+func TestSummaryFrontendRouteIsRemoved(t *testing.T) {
+	h := m47Handler(t, nil, backendSpec{"a", "Alpha", m47Backend(m47Neighbors, m47Summary, "")})
+	rr := get(h, "/summary")
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("/summary status %d, want 404", rr.Code)
+	}
 }

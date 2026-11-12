@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/HextetSystems/hextet-lg/configs"
+	"github.com/HextetSystems/hextet-lg/examples"
 	"github.com/HextetSystems/hextet-lg/internal/config"
 	"github.com/HextetSystems/hextet-lg/internal/obs"
 	"github.com/HextetSystems/hextet-lg/internal/version"
@@ -33,7 +33,7 @@ func main() {
 	printConfig := flag.Bool("print-config", false, "print the embedded example YAML configuration and exit")
 	flag.Parse()
 	if *printConfig {
-		_, _ = os.Stdout.Write(configs.Example())
+		_, _ = os.Stdout.Write(examples.Example())
 		return
 	}
 	cfg, err := config.Load(*configPath)

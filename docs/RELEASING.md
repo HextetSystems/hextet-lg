@@ -44,7 +44,7 @@ hextet-lg_<version>_linux_arm64.tar.gz
 checksums.txt                        # SHA-256, verify with: cd dist && sha256sum -c checksums.txt
 ```
 
-Snapshot mode also asks Buildx to assemble the multi-architecture image locally; it does not push it. Each release executable embeds the example YAML, printable with `hextet-lg --print-config`; archives also include `configs/config.example.yaml` beside the binary, plus `README.md`, `ARCHITECTURE.md`, `docs/RELEASING.md`, the listed operator guides, community examples and any `LICENSE*` file. Runtime configuration is never packaged: the archive file list is an explicit allow-list. `<version>` is GoReleaser's version without the `v` (`v1.1.0` → `hextet-lg_1.1.0_linux_amd64.tar.gz`). `dist/` is ignored by Git.
+Snapshot mode also asks Buildx to assemble the multi-architecture image locally; it does not push it. Each release executable embeds the example YAML, printable with `hextet-lg --print-config`; archives also include `examples/config.example.yaml` beside the binary, plus `README.md`, `ARCHITECTURE.md`, `docs/RELEASING.md`, the listed operator guides, community examples and any `LICENSE*` file. Runtime configuration is never packaged: the archive file list is an explicit allow-list. `<version>` is GoReleaser's version without the `v` (`v1.1.0` → `hextet-lg_1.1.0_linux_amd64.tar.gz`). `dist/` is ignored by Git.
 
 Binaries are static (`CGO_ENABLED=0`, `-trimpath`) for linux/amd64 and linux/arm64. Version, commit and build time are injected by GoReleaser with linker flags (`internal/version`).
 The build date is an input, so builds with different dates are not expected to be byte-identical. Compare checksums from the same published release rather than assuming independently timed builds match.
@@ -117,7 +117,7 @@ Download and verify the archive, install the binary, create the configuration fr
 ```sh
 sha256sum -c --ignore-missing checksums.txt
 tar xzf hextet-lg_0.2.0_linux_amd64.tar.gz
-cp configs/config.example.yaml /etc/hextet-lg/config.yaml   # then set backend URLs
+cp examples/config.example.yaml /etc/hextet-lg/config.yaml   # then set backend URLs
 ./hextet-lg version
 ./hextet-lg --config /etc/hextet-lg/config.yaml
 ```
@@ -174,7 +174,7 @@ Rollback images are never deleted automatically; remove old `hextet-lg:rollback-
 
 ## Operations summary
 
-* **Configuration**: runtime YAML is private and ignored by Git; `configs/config.example.yaml` is the documented example. Backend URLs come only from YAML.
+* **Configuration**: runtime YAML is private and ignored by Git; `examples/config.example.yaml` is the documented example. Backend URLs come only from YAML.
 * **Health**: `/healthz` (liveness, independent of backends) and `/readyz` (503 once shutdown begins); the image and Compose both define the health check.
 * **Metrics**: optional (`metrics.enabled`), separate listener, never published by Compose; scrape from a collector on a shared Docker network.
 * **Logging**: JSON on stderr (`logging.level`, `logging.format`), never including queries, prefixes, ASNs, headers, client addresses or backend URLs.

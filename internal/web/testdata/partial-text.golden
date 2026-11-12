@@ -2,7 +2,7 @@ Backend: Alpha (West)
 Status: COMPLETE — 1 route decoded in 2.0s
 Flags: * = selected best (when reported); eligibility and validation are separate
 OVS: origin validation state; AVS: ASPA validation state
-  Prefix                                  Next hop                                LocalPref      MED OVS          AVS          AS path
+  Prefix                                  Exit next hop                                LocalPref      MED OVS          AVS          AS path
 * 192.0.2.0/24                            192.0.2.1                                    100        — valid        unknown      64500 15169
 
 WARNING: PARTIAL RESULTS
@@ -17,7 +17,7 @@ Do not conclude that a prefix is absent from the routing table.
 
 Flags: * = selected best (when reported); eligibility and validation are separate
 OVS: origin validation state; AVS: ASPA validation state
-  Prefix                                  Next hop                                LocalPref      MED OVS          AVS          AS path
+  Prefix                                  Exit next hop                                LocalPref      MED OVS          AVS          AS path
 * 192.0.2.0/24                            192.0.2.1                                    100        — valid        unknown      64500 15169
   2001:db8::/32                           2001:db8::1                                    —        — —            —            64500 15169
 -- end of partial results: additional matching routes may exist --
@@ -34,7 +34,7 @@ Do not conclude that a prefix is absent from the routing table.
 
 Flags: * = selected best (when reported); eligibility and validation are separate
 OVS: origin validation state; AVS: ASPA validation state
-  Prefix                                  Next hop                                LocalPref      MED OVS          AVS          AS path
+  Prefix                                  Exit next hop                                LocalPref      MED OVS          AVS          AS path
 * 192.0.2.0/24                            192.0.2.1                                    100        — valid        unknown      64500 15169
   2001:db8::/32                           2001:db8::1                                    —        — —            —            64500 15169
 -- end of partial results: additional matching routes may exist --
@@ -51,7 +51,7 @@ Do not conclude that a prefix is absent from the routing table.
 
 Flags: * = selected best (when reported); eligibility and validation are separate
 OVS: origin validation state; AVS: ASPA validation state
-  Prefix                                  Next hop                                LocalPref      MED OVS          AVS          AS path
+  Prefix                                  Exit next hop                                LocalPref      MED OVS          AVS          AS path
 * 192.0.2.0/24                            192.0.2.1                                    100        — valid        unknown      64500 15169
   2001:db8::/32                           2001:db8::1                                    —        — —            —            64500 15169
 -- end of partial results: additional matching routes may exist --

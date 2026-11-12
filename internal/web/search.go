@@ -25,10 +25,12 @@ type BackendResult struct {
 	Shared    bool
 	lease     *resultLease
 
-	// Overview pages (neighbors, summary, rtr) use these.
-	Error    string
-	Duration string
-	Overview bgp.Overview
+	// Overview pages (neighbors and rtr) use these.
+	Error          string
+	SummaryError   string
+	Duration       string
+	Overview       bgp.Overview
+	SessionSummary bgp.Overview
 	// Neighbors is Overview.Neighbors with presentation; ShowCounters says
 	// whether any neighbor carries stats (otherwise those columns are omitted).
 	Neighbors    []NeighborRow

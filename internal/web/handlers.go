@@ -94,10 +94,8 @@ type Page struct {
 	Active, Category, View                    string
 	Communities                               []CommunityRow
 	Categories                                []string
-	// CommunityDefs reports whether definitions are enabled; CommunitySource
-	// is the operator's note on where optional status metadata comes from.
-	CommunityDefs   bool
-	CommunitySource string
+	// CommunityDefs reports whether definitions are enabled.
+	CommunityDefs bool
 	// CommunityMatched is the number of definitions matching the Explorer
 	// filters; Communities is capped at maxExplorerRows.
 	CommunityMatched int
@@ -232,22 +230,23 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 			}
 			return fmt.Sprint(*n)
 		},
-		"validity": func(v *bool) string {
+		"qualification": func(v *bool) string {
 			if v == nil {
 				return "Unknown"
 			}
 			if *v {
-				return "Valid"
+				return "Qualified"
 			}
-			return "Invalid"
+			return "Unqualified"
 		},
-		"selected": selected,
-		"checked":  checked,
-		"commas":   commas,
-		"bytes":    bgp.FormatBytes,
-		"seconds":  seconds,
-		"round":    func(d time.Duration) string { return d.Round(time.Second).String() },
-		"join":     strings.Join,
+		"routeQualificationOn": func() bool { return h.cfg.Display.RouteQualification },
+		"selected":             selected,
+		"checked":              checked,
+		"commas":               commas,
+		"bytes":                bgp.FormatBytes,
+		"seconds":              seconds,
+		"round":                func(d time.Duration) string { return d.Round(time.Second).String() },
+		"join":                 strings.Join,
 		"rawJSON": func(s string) string {
 			var b bytes.Buffer
 			if err := json.Indent(&b, []byte(s), "", "  "); err != nil {
@@ -263,15 +262,6 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 				return "warn"
 			}
 			return "bad"
-		},
-		"statusClassName": func(s string) string {
-			switch s {
-			case communities.StatusImplemented:
-				return "good"
-			case communities.StatusDocumented:
-				return "warn"
-			}
-			return "muted"
 		},
 		// communityTitle is the tooltip text for a displayed community, or "".
 		// It is looked up at render time from the immutable definition set so
@@ -316,7 +306,6 @@ func (h *Handler) Routes() http.Handler {
 	// and no navigation links to them. The two flags are independent.
 	if h.cfg.Features.BGPNeighborsEnabled() {
 		mux.HandleFunc("GET /neighbors", h.overview)
-		mux.HandleFunc("GET /summary", h.overview)
 	}
 	if h.cfg.Features.RTRSessionsEnabled() {
 		mux.HandleFunc("GET /rtr", h.overview)
@@ -724,8 +713,6 @@ func (h *Handler) basePage(r *http.Request, active string) Page {
 	switch active {
 	case "neighbors":
 		p.Title = h.sessionTitle("BGP Neighbors", p.SelectedBackend)
-	case "summary":
-		p.Title = h.sessionTitle("BGP Summary", p.SelectedBackend)
 	case "rtr":
 		p.Title = h.sessionTitle("RTR Sessions", p.SelectedBackend)
 	case "communities":
@@ -788,7 +775,7 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 			if kind == "rtr" {
 				status, reason, rtrState = h.queryRTR(r.Context(), b, &res)
 			} else {
-				status, reason = h.queryOverview(r.Context(), b, kind, &res)
+				status, reason = h.queryOverview(r.Context(), b, &res)
 			}
 			h.metrics.backendActive.WithLabelValues(b.ID).Dec()
 			elapsed := time.Since(start)
@@ -825,15 +812,27 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// queryOverview fetches /neighbors or /summary into res.
-func (h *Handler) queryOverview(ctx context.Context, b backendClient, kind string, res *BackendResult) (bgp.Status, bgp.Reason) {
-	data, err := b.client.Overview(ctx, kind)
+// queryOverview fetches the detailed neighbor rows and the independent
+// summary counts for one backend.
+func (h *Handler) queryOverview(ctx context.Context, b backendClient, res *BackendResult) (bgp.Status, bgp.Reason) {
+	data, err := b.client.Overview(ctx, "neighbors")
 	res.Overview = data
 	if err != nil {
-		res.Error = "Request failed or returned an invalid response."
+		res.Error = "Backend unavailable: neighbor request failed or returned an invalid response."
+	} else {
+		res.Neighbors, res.ShowCounters = neighborRows(data.Neighbors)
+	}
+	summary, summaryErr := b.client.Overview(ctx, "summary")
+	res.SessionSummary = summary
+	if summaryErr != nil {
+		res.SummaryError = "Backend unavailable: session summary request failed or returned an invalid response."
+	}
+	if err != nil {
 		return bgp.StatusFailed, overviewReason(err)
 	}
-	res.Neighbors, res.ShowCounters = neighborRows(data.Neighbors)
+	if summaryErr != nil {
+		return bgp.StatusFailed, overviewReason(summaryErr)
+	}
 	return bgp.StatusComplete, bgp.ReasonNone
 }
 
@@ -870,20 +869,14 @@ type CommunityRow struct {
 func (h *Handler) communityPage(w http.ResponseWriter, r *http.Request) {
 	p := h.basePage(r, "communities")
 	p.CommunityDefs = h.cfg.CommunityDefinitions.Enabled
-	if h.defs != nil {
-		p.CommunitySource = h.defs.MetadataSource
-	}
 	cats := map[string]bool{}
 	query := strings.ToLower(strings.TrimSpace(p.Query))
 	for _, d := range h.defs.Definitions() {
-		if d.Category == "" {
-			d.Category = d.Source
-		}
-		cats[d.Category] = true
-		if p.Category != "" && p.Category != d.Category {
+		cats[d.Source] = true
+		if p.Category != "" && p.Category != d.Source {
 			continue
 		}
-		if query != "" && !strings.Contains(strings.ToLower(d.Key+" "+d.Description+" "+d.Status), query) {
+		if query != "" && !strings.Contains(strings.ToLower(d.Key+" "+d.Description), query) {
 			continue
 		}
 		p.CommunityMatched++
@@ -940,7 +933,7 @@ func (h *Handler) loadCommunityDefinitions() error {
 	h.defs = set
 	st := set.Stats()
 	h.log.Info("community definitions loaded", "directory", cd.Directory, "files", st.Files, "definitions", st.Definitions, "exact", st.Exact, "patterns", st.Patterns,
-		"standard", st.Standard, "large", st.Large, "extended", st.Extended, "metadata_entries", st.MetadataEntries)
+		"standard", st.Standard, "large", st.Large, "extended", st.Extended)
 	if st.Files == 0 {
 		h.log.Warn("community definitions enabled but the directory contains no asN.txt or well-known.txt files", "directory", cd.Directory)
 	}

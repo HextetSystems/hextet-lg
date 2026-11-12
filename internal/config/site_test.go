@@ -87,7 +87,7 @@ func TestSiteInvalidValuesFailStartup(t *testing.T) {
 }
 
 func TestExampleConfigDecodes(t *testing.T) {
-	c, err := Load("../../configs/config.example.yaml")
+	c, err := Load("../../examples/config.example.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

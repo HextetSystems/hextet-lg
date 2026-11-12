@@ -44,7 +44,7 @@ archives:
       - src: docs/THEMING.md
       - src: docs/PTR_ENRICHMENT.md
       - src: docs/SESSION_VISIBILITY.md
-      - src: configs/config.example.yaml
+      - src: examples/config.example.yaml
       - src: examples/communities/*
       - src: LICENSE*
 

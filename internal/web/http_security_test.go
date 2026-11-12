@@ -96,7 +96,7 @@ func (b *m52Backend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/rib":
 		_, _ = io.WriteString(w, m52Rib())
-	case "/neighbors", "/summary":
+	case "/neighbors", "/neighbors":
 		_, _ = io.WriteString(w, m52Neighbors)
 	case "/rtr":
 		_, _ = io.WriteString(w, m52RTR)
@@ -153,7 +153,7 @@ func TestM52SecurityHeadersOnEveryKindOfResponse(t *testing.T) {
 		{"GET", "/?type=prefix&q=192.0.2.0/24&view=text&output=plain", 200, "text/plain; charset=utf-8"},
 		{"GET", "/?type=prefix&q=%3Cscript%3E", 400, "text/html; charset=utf-8"},
 		{"GET", "/neighbors", 200, "text/html; charset=utf-8"},
-		{"GET", "/summary", 200, "text/html; charset=utf-8"},
+		{"GET", "/neighbors", 404, "text/plain; charset=utf-8"},
 		{"GET", "/rtr", 200, "text/html; charset=utf-8"},
 		{"GET", "/rtr?x=1", 400, "text/html; charset=utf-8"},
 		{"GET", "/communities", 200, "text/html; charset=utf-8"},
@@ -417,7 +417,7 @@ func TestM52BackendRedirectIsAFailedBackendNotAnSSRF(t *testing.T) {
 		}},
 		backendSpec{"good", "Good", (&m52Backend{}).ServeHTTP})
 	internalHost := strings.TrimPrefix(internal.URL, "http://")
-	for _, target := range []string{"/?as=3000", "/?as=3000&view=text", "/neighbors", "/summary", "/rtr", "/?as=3000&view=text&output=plain"} {
+	for _, target := range []string{"/?as=3000", "/?as=3000&view=text", "/neighbors", "/neighbors", "/rtr", "/?as=3000&view=text&output=plain"} {
 		rr := get(h, target)
 		body := rr.Body.String()
 		if rr.Code != 200 {
@@ -448,7 +448,7 @@ func TestM52RawJSONIsAbsentEverywhereByDefault(t *testing.T) {
 	targets := []string{
 		"/", "/?as=3000&backend=a", "/?as=3000&backend=a&view=text", "/?as=3000&backend=a&view=detail", "/?as=3000&backend=a&page=1",
 		"/?as=3000&backend=a&view=text&output=plain", "/?as=3000&backend=a&view=detail&output=plain",
-		"/neighbors", "/summary", "/rtr", "/communities",
+		"/neighbors", "/neighbors", "/rtr", "/communities",
 		"/?type=prefix&q=bogus", "/?as=3000&backend=nope", "/?as=3000&page=99", // error views
 	}
 	for _, target := range targets {
@@ -473,7 +473,7 @@ func TestM52RawJSONIsAbsentEverywhereByDefault(t *testing.T) {
 	// No parameter, view or path turns raw output on.
 	for target, want := range map[string]int{
 		"/?as=3000&raw=1": 400, "/?as=3000&raw_json=true": 400, "/?as=3000&view=json": 400, "/?as=3000&view=raw": 400, "/?as=3000&output=json": 200,
-		"/neighbors?raw=1": 400, "/summary?output=json": 400, "/rtr?raw=1": 400, "/raw": 404, "/rib": 404, "/neighbors/raw": 404, "/api/rib": 404,
+		"/neighbors?raw=1": 400, "/neighbors?output=json": 400, "/rtr?raw=1": 400, "/raw": 404, "/rib": 404, "/neighbors/raw": 404, "/api/rib": 404,
 	} {
 		rr := get(h, target, "Accept", "application/json")
 		if rr.Code != want || strings.Contains(rr.Body.String(), "RAWONLY") || strings.HasPrefix(rr.Header().Get("Content-Type"), "application/json") {
@@ -484,7 +484,7 @@ func TestM52RawJSONIsAbsentEverywhereByDefault(t *testing.T) {
 
 func TestM52RawJSONWhenEnabledIsEscapedAndLimitedToItsDisclosures(t *testing.T) {
 	h, be := m52Handler(t, func(c *config.Config) { c.Display.RawJSON = true })
-	for _, target := range []string{"/?as=3000&backend=a", "/neighbors", "/summary"} {
+	for _, target := range []string{"/?as=3000&backend=a", "/neighbors", "/neighbors"} {
 		for name, rr := range m52Variants(h, target) {
 			body := rr.Body.String()
 			if !strings.Contains(body, "RAWONLY") || !strings.Contains(body, "Raw JSON") {
@@ -532,7 +532,7 @@ func TestM52RTRValidatorAddressesStayPrivateByDefault(t *testing.T) {
 		c.Display.RawJSON = true // even the raw disclosures must not carry them
 		c.Display.RouteColumns.Neighbor = true
 	}, WithPTRResolver(rec), WithLogger(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))))
-	for _, target := range []string{"/rtr", "/rtr?backend=a", "/rtr?backend=all", "/", "/neighbors", "/summary", "/communities", "/?as=3000&backend=a"} {
+	for _, target := range []string{"/rtr", "/rtr?backend=a", "/rtr?backend=all", "/", "/neighbors", "/neighbors", "/communities", "/?as=3000&backend=a"} {
 		for name, rr := range m52Variants(h, target) {
 			body := rr.Body.String()
 			for _, private := range m52RTRPrivate {
@@ -582,7 +582,7 @@ func TestM52RTRAddressesOptInChangesOnlyTheAddressColumn(t *testing.T) {
 	mustContain(t, page, "10.77.77.77:8282", "[2001:db8:7777::7]:3323", "10.88.88.88")
 	mustNotContain(t, page, "data-ptr", "RAWONLY", "Raw JSON", `"rtrs"`)
 	// Enabling addresses does not leak them to other pages or start DNS for them.
-	for _, target := range []string{"/", "/neighbors", "/summary", "/?as=3000&backend=a"} {
+	for _, target := range []string{"/", "/neighbors", "/neighbors", "/?as=3000&backend=a"} {
 		mustNotContain(t, get(on, target).Body.String(), "10.77.77.77", "2001:db8:7777::7", "10.88.88.88")
 	}
 	m52WaitFor(t, func() bool { return len(rec.addrs()) > 0 })
@@ -764,7 +764,7 @@ func TestM52HostileDNSAnswersAreInert(t *testing.T) {
 	m52WaitFor(t, func() bool {
 		return strings.Contains(get(h, "/asn-status?asn=3000").Body.String(), "EVIL") && strings.Contains(get(h, "/ptr-status?ip=192.0.2.1").Body.String(), "ok-host")
 	})
-	for _, target := range []string{"/?as=3000&backend=a", "/neighbors", "/summary"} {
+	for _, target := range []string{"/?as=3000&backend=a", "/neighbors", "/neighbors"} {
 		for name, rr := range m52Variants(h, target) {
 			body := rr.Body.String()
 			if strings.Contains(body, "<script>alert") || strings.Contains(body, "<img src=x") || strings.Contains(body, `onmouseover="alert`) {
@@ -1035,7 +1035,7 @@ func TestM52BehindAReverseProxy(t *testing.T) {
 			}
 		}
 	}
-	for _, target := range []string{"/", "/?type=prefix&q=192.0.2.0/24&backend=a", "/?as=3000&backend=a&view=text", "/neighbors", "/summary", "/rtr", "/communities"} {
+	for _, target := range []string{"/", "/?type=prefix&q=192.0.2.0/24&backend=a", "/?as=3000&backend=a&view=text", "/neighbors", "/neighbors", "/rtr", "/communities"} {
 		resp, body := do(target, "X-Forwarded-Host", "evil.example", "X-Forwarded-Proto", "javascript")
 		if resp.StatusCode != 200 {
 			t.Fatalf("%s through the proxy: %d", target, resp.StatusCode)

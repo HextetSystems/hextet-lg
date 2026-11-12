@@ -26,7 +26,7 @@ func TestCommunityFeatureDefaultsAndOverrides(t *testing.T) {
 }
 
 func TestExampleConfig(t *testing.T) {
-	if _, err := Load("../../configs/config.example.yaml"); err != nil {
+	if _, err := Load("../../examples/config.example.yaml"); err != nil {
 		t.Fatal(err)
 	}
 }

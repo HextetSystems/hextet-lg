@@ -194,7 +194,7 @@ func TestLiveOpenBGPD(t *testing.T) {
 		}
 
 		// ---- the application's rendering of the same data ----
-		for _, p := range []struct{ path, name string }{{"/summary", "summary page"}, {"/neighbors", "neighbors page"}, {"/rtr", "rtr page"}} {
+		for _, p := range []struct{ path, name string }{{"/neighbors", "neighbors page"}, {"/rtr", "rtr page"}} {
 			code, body := page(p.path + "?backend=" + url.QueryEscape(id))
 			switch {
 			case code != 200:

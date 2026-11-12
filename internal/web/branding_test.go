@@ -47,7 +47,7 @@ func footerText(t *testing.T, body string) string {
 	return strings.TrimSpace(strings.Join(strings.Fields(tagRE.ReplaceAllString(right, "")), " "))
 }
 
-var htmlPages = []string{"/", "/?type=prefix&q=10.0.0.0/24", "/?type=prefix&q=bad", "/neighbors", "/summary", "/rtr", "/communities"}
+var htmlPages = []string{"/", "/?type=prefix&q=10.0.0.0/24", "/?type=prefix&q=bad", "/neighbors", "/rtr", "/communities"}
 
 func TestGenericDefaultsNameNoOperator(t *testing.T) {
 	h := m49Handler(t, func(c *config.Config) { c.Server.Title = "" })
@@ -382,7 +382,6 @@ func TestCustomSiteNameInEveryTitle(t *testing.T) {
 		"/?community=64500:1&backend=all":    "Community 64500:1 · Example Networks LG",
 		"/?neighbor=192.0.2.1&backend=a":     "Neighbor 192.0.2.1 @ Alpha · Example Networks LG",
 		"/?type=large-community&q=64500:1:2": "64500:1:2 · Example Networks LG",
-		"/summary":                           "BGP Summary · Example Networks LG",
 		"/neighbors":                         "BGP Neighbors · Example Networks LG",
 		"/rtr":                               "RTR Sessions · Example Networks LG",
 		"/communities":                       "Communities · Example Networks LG",

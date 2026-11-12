@@ -67,18 +67,18 @@ theme:
   accent: "#0D9488"
 ```
 
-`theme.default` is `auto` (follow the browser, the default), `light` or `dark`. The theme button stores the visitor's choice in the browser's `localStorage` key `theme`; that overrides the default in that browser only (no cookies, no server state) and is reset by removing the key or clearing site data. The stylesheet is generated once at startup, so edit the YAML and restart. Poor contrast logs a warning (WCAG AA targets); unreadable body text (below 3:1) refuses to start. RPKI/ASPA validity, partial/failed results and warnings keep fixed status colors that are not the accent and are always labelled in text. See [docs/THEMING.md](docs/THEMING.md) for the palettes, derivations, tokens and a manual verification checklist.
+`theme.default` is `auto` (follow the browser, the default), `light` or `dark`. The theme button stores the visitor's choice in the browser's `localStorage` key `theme`; that overrides the default in that browser only (no cookies, no server state) and is reset by removing the key or clearing site data. The stylesheet is generated once at startup, so edit the YAML and restart. Poor contrast logs a warning (WCAG AA targets); unreadable body text (below 3:1) refuses to start. RPKI/ASPA validation, route qualification, partial/failed results and warnings keep fixed status colors that are not the accent and are always labelled in text. See [docs/THEMING.md](docs/THEMING.md) for the palettes, derivations, tokens and a manual verification checklist.
 
 ## Views and shareable URLs
 
-The Route Explorer (`/`) runs native, server-side OpenBGPD queries. Neighbor Explorer (`/neighbors`) and BGP Summary (`/summary`) show live BGP session data per backend, and RTR Sessions (`/rtr`) shows the RPKI-to-Router sessions between each backend and its validators; each can be switched off independently (see [Session visibility](#session-visibility)). Community Explorer (`/communities`) is an embedded local reference and remains available if backends are down.
+The Route Explorer (`/`) runs native, server-side OpenBGPD queries. Neighbor Explorer (`/neighbors`) shows live BGP session rows and summary counts per backend, and RTR Sessions (`/rtr`) shows the RPKI-to-Router sessions between each backend and its validators; each can be switched off independently (see [Session visibility](#session-visibility)). Community Explorer (`/communities`) is an embedded local reference and remains available if backends are down.
 
 Every view is a bookmarkable GET URL. Shared links are **live queries, not snapshots**: re-opening one runs the query again and the routes may have changed. If the short-lived result cache is enabled (see below), a result may be up to `cache_ttl` old and is labelled as cached. URLs never contain backend addresses; `backend` is a stable configured ID or `all`.
 
 | Page | Parameters |
 |---|---|
 | `/` | search filters (below), `backend`, `view=table\|text\|detail`, `page`, `output=plain` |
-| `/neighbors`, `/summary`, `/rtr` | `backend` |
+| `/neighbors`, `/rtr` | `backend` |
 | `/communities` | `q`, `category` |
 
 Simple searches keep their original form: `/?type=prefix\|asn\|large-community&q=...&backend=...&view=...`. Prefix searches with a scope flag also use `type` and `q`. Other compound searches name each filter, for example `/?as=15169&large-community=395089%3A0%3A6&af=ipv6&best=1&backend=all&view=table&page=2`. The application emits parameters in a canonical order (filters in the order of the table below, then `backend`, `view`, `page`); both forms are accepted as input and mixed. A form submission that carries empty fields is redirected once to the canonical URL, and HTMX updates push the canonical URL into browser history. Back/forward and fresh-session opening work without any stored state, and ordinary navigation works without JavaScript.
@@ -112,7 +112,7 @@ Every HTML page has a title of the form `<subject> · <site name>`; the site nam
 | Neighbor / peer group | `Neighbor 192.0.2.1`, `Peer group transit` |
 | Several filters | the first primary filter above plus `+N filters`; prefix modes read `(more specifics)` / `(covering prefixes)`; filters without a primary one read `Route search (N filters)` |
 | Rejected request | `Invalid search` (the rejected input is never echoed) |
-| `/neighbors`, `/summary`, `/rtr`, `/communities` | `BGP Neighbors`, `BGP Summary`, `RTR Sessions`, `Communities` |
+| `/neighbors`, `/rtr`, `/communities` | `BGP Neighbors`, `RTR Sessions`, `Communities` |
 
 A single selected backend is appended as `@ <backend name>` (neighbor addresses and route views are backend-specific); `all` adds nothing. Page 2 and later add `(page N)`. Values come from the normalized query, not the raw input; control and invisible characters are removed, long values are cut at 64 characters with `…`, backend names at 32, and the text is HTML-escaped. Backend addresses never appear.
 
@@ -167,7 +167,7 @@ HTML pages end with a muted footer note such as `Generated in 42.7 ms`. It is on
 
 ## Session visibility
 
-Two independent switches under `features` control the session views: `bgp_neighbors` (`/neighbors` and `/summary`) and `rtr_sessions` (`/rtr`). Both default to on, so existing configurations are unchanged; a disabled view has no navigation link and answers 404. The RTR page reads bgplgd's `/rtr` endpoint (present in OpenBGPD 8.2 to 9.3). It distinguishes sessions, no sessions, an unsupported backend, an unavailable backend and a malformed response, and does not publish validator addresses unless `features.rtr_session_addresses` is enabled. See [docs/SESSION_VISIBILITY.md](docs/SESSION_VISIBILITY.md) for the exact fields, endpoints, multi-backend behavior and privacy notes.
+Two independent switches under `features` control the session views: `bgp_neighbors` (`/neighbors`) and `rtr_sessions` (`/rtr`). Both default to on, so existing configurations are unchanged; a disabled view has no navigation link and answers 404. The RTR page reads bgplgd's `/rtr` endpoint (present in OpenBGPD 8.2 to 9.3). It distinguishes sessions, no sessions, an unsupported backend, an unavailable backend and a malformed response, and does not publish validator addresses unless `features.rtr_session_addresses` is enabled. See [docs/SESSION_VISIBILITY.md](docs/SESSION_VISIBILITY.md) for the exact fields, endpoints, multi-backend behavior and privacy notes.
 
 ## Search filters (compound queries)
 
@@ -201,7 +201,7 @@ OpenBGPD answers a query that bgpctl rejects (for example a malformed `ext-commu
 
 ### IPv4 and IPv6
 
-Both families are supported everywhere and treated identically. Without `af`, no family restriction is applied and OpenBGPD returns IPv4 and IPv6 routes together (on the reference backend, `as=15169` returns 1,068 IPv4 + 146 IPv6 = 1,214 routes; `af=ipv4`/`af=ipv6` select the halves natively). Prefix and neighbor addresses are validated with `net/netip` and canonicalized (IPv6 compressed, lower-case; host bits preserved) so equivalent spellings share one cache entry and one URL; IPv4-mapped IPv6 addresses and zones are rejected in prefix searches. A route's family comes from its **prefix**, never from its next hop or neighbor: an IPv6 route may have an IPv4 next hop (RFC 8950) and either family of neighbor (the reference backend carries IPv6 routes over an IPv4 session). Plaintext columns widen to fit the longest prefix or next hop, so full 43-character IPv6 prefixes are never truncated, while IPv4-only output keeps its traditional layout. `true_nexthop: "???"` (unresolved) falls back to the exit next hop. Unmodelled attributes remain available in each route's raw JSON.
+Both families are supported everywhere and treated identically. Without `af`, no family restriction is applied and OpenBGPD returns IPv4 and IPv6 routes together (on the reference backend, `as=15169` returns 1,068 IPv4 + 146 IPv6 = 1,214 routes; `af=ipv4`/`af=ipv6` select the halves natively). Prefix and neighbor addresses are validated with `net/netip` and canonicalized (IPv6 compressed, lower-case; host bits preserved) so equivalent spellings share one cache entry and one URL; IPv4-mapped IPv6 addresses and zones are rejected in prefix searches. A route's family comes from its **prefix**, never from its next hop or neighbor: an IPv6 route may have an IPv4 next hop (RFC 8950) and either family of neighbor (the reference backend carries IPv6 routes over an IPv4 session). The UI displays `exit_nexthop` as the route next hop; it omits `true_nexthop`, which can be an internal forwarding address. The `valid` field is shown as route qualification, separate from RPKI and ASPA. Qualification reflects OpenBGPD's routing state and can depend on a reachable default route; a backend without an IPv6 default route may report IPv6 routes as unqualified. Unmodelled attributes remain available in Raw JSON when that opt-in display is enabled.
 
 ## Large responses, streaming and partial results
 
@@ -237,7 +237,7 @@ All are configurable in `looking_glass` (defaults shown):
 
 The default request-target limit is 8192 bytes, query-string limit 6144 bytes, parameter limit 64, and header limit 32768 bytes. The server has a 5s header read timeout, 15s request read timeout, 60s idle timeout, and 15s per-write deadline; there is no overall write deadline that cuts short a backend query. These limits permit IPv6 and compound searches. Header and URL limits and rates are configurable in `server` as shown in the example.
 
-Per-peer token buckets allow 10 inexpensive requests per second (burst 60), and 1 live request per second (burst 8). Live includes Route Explorer requests with parameters, neighbors, summary and RTR sessions. Exhaustion returns 429 and `Retry-After`; liveness and readiness are exempt. The limiter holds at most 10,000 buckets and removes inactive entries after ten minutes using a periodic cleanup. It uses the direct TCP peer only and ignores all forwarded headers. Behind Cloudflare Tunnel or another proxy all users therefore share the proxy's allowance; configure rate limiting at the trusted ingress or size the limits for the aggregate. Do not expose an unauthenticated bypass around that ingress.
+Per-peer token buckets allow 10 inexpensive requests per second (burst 60), and 1 live request per second (burst 8). Live includes Route Explorer requests with parameters, neighbors and RTR sessions. Exhaustion returns 429 and `Retry-After`; liveness and readiness are exempt. The limiter holds at most 10,000 buckets and removes inactive entries after ten minutes using a periodic cleanup. It uses the direct TCP peer only and ignores all forwarded headers. Behind Cloudflare Tunnel or another proxy all users therefore share the proxy's allowance; configure rate limiting at the trusted ingress or size the limits for the aggregate. Do not expose an unauthenticated bypass around that ingress.
 
 All route queries, including prefix searches, share `max_concurrent_queries` slots; `max_queued_queries` (16) bounds active and waiting work and `queue_wait` defaults to 2s. Identical queries share a flight and cached responses do not take a slot. A fully busy result returns 503 with `Retry-After`; retry later or increase capacity only after sizing memory. A partial response means one or more backends stopped early; check its reason and do not infer absence of routes. Limits are per process, not shared across replicas.
 
@@ -414,11 +414,11 @@ Plain-text status codes: `200` for complete **and** partial results (check the h
 
 BGP community descriptions are **operator-supplied data**, not built into the application. Enable them with the optional `community_definitions` section (`enabled: false` by default; `directory` is required when enabled) pointing at a directory of `asN.txt` files in the legacy [NLNOG looking glass format](https://github.com/NLNOG/lg.ring.nlnog.net/tree/main/communities) (`64500:100,Learned from customer`; ranges `400-499`, one-digit `x` and any-number `nnn` wildcards, and `$0` substitutions; standard, large and extended communities). Files are validated and compiled **once at startup**; a configuration that cannot be loaded reliably fails startup with file and line, and changes need a restart. There is no download, watcher or runtime reload. Grammar, precedence, limits and differences from the upstream implementation are in [docs/COMMUNITIES.md](docs/COMMUNITIES.md).
 
-With definitions loaded, communities in a route's expanded **Route details** show a native `title` tooltip, escaped as text, while the visible value stays unchanged; unknown communities simply render their raw value. Text views and `output=plain` are never annotated. Definitions are presentation metadata only: searches, canonical URLs, the `features.*` flags, route visibility and caching are unaffected, a community stays searchable by its raw value whether or not it has a description, and descriptions are not searchable.
+With definitions loaded, communities in a route's expanded **Route details** show a native `title` tooltip, escaped as text, while the visible value stays unchanged; unknown communities simply render their raw value. Text views and `output=plain` are never annotated. Definitions are descriptive data only: searches, canonical URLs, the `features.*` flags, route visibility and caching are unaffected, a community stays searchable by its raw value whether or not it has a description, and descriptions are not searchable.
 
-Community Explorer (`/communities`) lists the loaded definitions of any number of ASNs, with the existing text and category filters (a page shows at most 1,000 matches) and a one-click search link for each exact definition whose search type is enabled. The legacy format cannot express the former *category*, *notes* and *implementation status/evidence* columns, so those come from an optional `metadata.yaml` in the same directory (documented in the guide). **Implemented** there means the operator recorded the community as present in its own configuration (for example a RouterOS community list, routing filter or configured pattern); it is not independent verification that the intended routing behaviour occurs, and neither are the descriptions authoritative.
+Community Explorer (`/communities`) lists definitions from the loaded text files, with search and source filters (up to 1,000 matches per page) and a one-click search link for each exact definition whose search type is enabled. Rows show only the community, its description and its source file.
 
-The former built-in AS395089 reference has been moved out of the code into [`examples/communities/`](examples/communities) (`as395089.txt`, 30 definitions, and `metadata.yaml`). Nothing loads it unless you configure the directory: a clean installation is operator-neutral. In Docker, mount the directory read-only at `/etc/hextet-lg/communities` (see [Docker deployment](#docker-deployment)).
+The former built-in AS395089 reference has been moved out of the code into [`examples/communities/`](examples/communities) (`as395089.txt`, 30 definitions). Nothing loads it unless you configure the directory: a clean installation is operator-neutral. In Docker, mount the directory read-only at `/etc/hextet-lg/communities` (see [Docker deployment](#docker-deployment)).
 
 ## Isolated container load exercise
 
@@ -430,10 +430,10 @@ A 305-second run with 10,000 mock routes per dataset and 24 client workers compl
 
 ## Configuration
 
-`configs/config.example.yaml` is the complete, documented example committed to the repository. Runtime configuration belongs in `configs/config.yaml` for standalone development and `configs/config.docker.yaml` for Compose. Both are local, Git-ignored, and excluded from Docker build contexts. If the development file does not already exist, create it with:
+`examples/config.example.yaml` is the complete, documented example committed to the repository. Runtime configuration belongs in `configs/config.yaml` for standalone development and `configs/config.docker.yaml` for Compose. Both are local, Git-ignored, and excluded from Docker build contexts. If the development file does not already exist, create it with:
 
 ```sh
-cp configs/config.example.yaml configs/config.yaml
+cp examples/config.example.yaml configs/config.yaml
 ```
 
 Release binaries also embed this same example. To write it to a file, run `hextet-lg --print-config > config.example.yaml`; this prints the sample and exits without loading runtime configuration.
@@ -568,13 +568,13 @@ Requires the Go version declared in `go.mod` (1.26 or newer). Release tooling: `
 - Metrics and log records are in-process only: counters reset on restart, and logs are as durable as the container log driver. There is no tracing and no bundled dashboard or alert rules.
 - The footer's page generation time is server-side only and is read before the footer is written, so it excludes the footer itself, network time and browser rendering; HTMX history restoration displays the original request's figure.
 - Browser Back/Forward re-queries the backends (through the result cache) instead of restoring a snapshot; results are always live queries.
-- On phones the Neighbors, Summary, RTR and Community Explorer tables keep their columns and scroll horizontally inside their own container rather than turning into cards; only the Route Explorer table is card-based.
+- On phones the Neighbors, RTR and Community Explorer tables keep their columns and scroll horizontally inside their own container rather than turning into cards; only the Route Explorer table is card-based.
 - Cached results can be up to `cache_ttl` old; disable with `cache_ttl: 0s` for strictly live results.
 - RTR sessions: OpenBGPD reports no record counts or last-synchronization time over `/rtr`, so none are shown; a bgplgd without `/rtr` is shown as unsupported. The raw backend JSON on the neighbor pages (off unless `display.raw_json` is enabled) contains fields not otherwise displayed (see [docs/SESSION_VISIBILITY.md](docs/SESSION_VISIBILITY.md)).
-- OpenBGPD versions may expose different optional fields. Summary session counts are derived only from returned neighbor records; other data is available as raw JSON per route when `display.raw_json` is enabled.
-- Community definitions and any "Implemented" status are operator-supplied; they are not live verification. The loader is stricter than the NLNOG implementation (duplicates, unsupported tokens and leading-zero literals are startup errors), so some upstream files need editing; see [docs/COMMUNITIES.md](docs/COMMUNITIES.md). Extended-community definitions cover the numeric `label A[:B]` forms only, and the OpenBGPD well-known standard community names are mapped from knowledge of its output format, not verified against a live backend.
+- OpenBGPD versions may expose different optional fields. The Neighbors page combines session counts from `/summary` with detailed rows from `/neighbors`, independently for each backend.
+- Community definitions are operator-supplied descriptions, not live verification. The loader is stricter than the NLNOG implementation (duplicates, unsupported tokens and leading-zero literals are startup errors), so some upstream files need editing; see [docs/COMMUNITIES.md](docs/COMMUNITIES.md). Extended-community definitions cover the numeric `label A[:B]` forms only, and the OpenBGPD well-known standard community names are mapped from knowledge of its output format, not verified against a live backend.
 - The embedded HTMX runtime is pinned at version 2.0.4. No external browser assets are required.
-- Absent route fields display as unknown or an em dash. RPKI OVS, ASPA AVS, and route validity remain separate values.
+- Absent route fields display as unknown or an em dash. RPKI OVS, ASPA AVS, and route qualification remain separate values.
 - Live route results depend on the separately managed OpenBGPD API.
 - Between 701 and about 900 px the nine-column route table scrolls inside its own container (the page does not scroll); the card layout starts at 700 px.
 - Integration coverage with a real OpenBGPD 9.3 backend was bounded and read-only (see [docs/TESTING.md](docs/TESTING.md)); IPv6 BGP neighbors, non-`unknown` ASPA results and community searches were not exercised live and rely on mock tests.

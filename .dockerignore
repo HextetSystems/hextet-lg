@@ -10,5 +10,4 @@ scripts
 .env.*
 .deploy-state
 compose*.yaml
-configs/config.yaml
-configs/config.docker.yaml
+configs/

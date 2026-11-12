@@ -235,6 +235,7 @@ rt 64500,Single number form
 	if _, err := loadFiles(t, map[string]string{"as1.txt": "soo 1:2,A\nSOO 1:2,B\n"}); err == nil || !strings.Contains(err.Error(), "duplicate") {
 		t.Fatalf("case-variant duplicate accepted: %v", err)
 	}
+
 }
 
 func TestPrecedence(t *testing.T) {
@@ -491,7 +492,6 @@ func TestLimits(t *testing.T) {
 		"files":       {"as1.txt": "1:1,a\n", "as2.txt": "2:1,a\n", "as3.txt": "3:1,a\n"},
 		"file size":   {"as1.txt": "1:1," + strings.Repeat("a", 100) + "\n"},
 		"definitions": {"as1.txt": "1:1,a\n1:2,a\n", "as2.txt": "2:1,a\n2:2,a\n"},
-		"metadata":    {"metadata.yaml": "source: " + strings.Repeat("a", 100) + "\n"},
 	} {
 		if _, err := loadFilesLimits(t, files, lim); err == nil {
 			t.Errorf("%s: limit not enforced", name)
@@ -500,64 +500,6 @@ func TestLimits(t *testing.T) {
 	if _, err := loadFilesLimits(t, map[string]string{"as1.txt": "1:1,a\n1:2,b\n1:3,c\n"}, lim); err != nil {
 		t.Errorf("exactly at the limit: %v", err)
 	}
-}
-
-func TestMetadata(t *testing.T) {
-	files := map[string]string{
-		"as64500.txt": "64500:100,Customer\n64500:4xx,Regional $0\nsoo 64500:nnn,Origin\n",
-		"metadata.yaml": `
-source: "Operator configuration export"
-communities:
-  "64500:100":
-    category: Route classification
-    status: implemented
-    evidence: community list
-    notes: "Reviewed"
-  "64500:4xx":
-    status: Documented/planned
-    evidence_note: "pattern"
-  "soo 64500:nnn":
-    status: unresolved
-`}
-	s := mustLoad(t, files)
-	if s.MetadataSource != "Operator configuration export" || s.Stats().MetadataEntries != 3 {
-		t.Fatalf("%q %+v", s.MetadataSource, s.Stats())
-	}
-	d := s.Definitions()
-	if d[0].Status != StatusImplemented || d[0].Category != "Route classification" || d[0].Evidence != "community list" || d[0].Notes != "Reviewed" || d[0].Source != "AS64500" || d[0].File != "as64500.txt" || d[0].Line != 1 {
-		t.Errorf("%+v", d[0])
-	}
-	if d[1].Status != StatusDocumented || d[1].EvidenceNote != "pattern" || d[1].Exact || d[1].Key != "64500:4xx" || d[1].Description != "Regional $0" {
-		t.Errorf("%+v", d[1])
-	}
-	if d[2].Status != StatusUnresolved || d[2].Kind != Extended {
-		t.Errorf("%+v", d[2])
-	}
-	// Metadata never changes lookups.
-	check(t, s, []lookup{{Standard, "64500:123", ""}, {Standard, "64500:412", "Regional 1"}})
-
-	for name, meta := range map[string]string{
-		"unknown field": "communities:\n  \"64500:100\": {bogus: 1}\n",
-		"unknown top":   "bogus: 1\n",
-		"undefined":     "communities:\n  \"64500:999\": {status: implemented}\n",
-		"non-canonical": "communities:\n  \"64500:4XX\": {status: implemented}\n",
-		"bad status":    "communities:\n  \"64500:100\": {status: verified}\n",
-		"bad community": "communities:\n  \"nonsense\": {status: implemented}\n",
-		"comma key":     "communities:\n  \"64500:100,x\": {status: implemented}\n",
-		"two documents": "source: a\n---\nsource: b\n",
-		"not yaml":      "communities: [\n",
-		"control char":  "source: \"a\\u0001b\"\n",
-		"duplicate key": "communities:\n  \"64500:100\": {status: implemented}\n  \"64500:100\": {status: unresolved}\n",
-	} {
-		_, err := loadFiles(t, map[string]string{"as64500.txt": files["as64500.txt"], "metadata.yaml": meta})
-		if err == nil {
-			t.Errorf("%s: accepted", name)
-		} else if !strings.Contains(err.Error(), "metadata.yaml") {
-			t.Errorf("%s: %v", name, err)
-		}
-	}
-	// An empty metadata file is fine.
-	mustLoad(t, map[string]string{"as64500.txt": files["as64500.txt"], "metadata.yaml": ""})
 }
 
 func TestNilSet(t *testing.T) {

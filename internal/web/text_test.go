@@ -10,7 +10,7 @@ import (
 
 func TestTextGolden(t *testing.T) {
 	n := int64(100)
-	routes := []BackendResult{{Name: "Alpha", Location: "West", Result: complete(1200*time.Millisecond, []bgp.Route{{Prefix: "192.0.2.0/24", ASPath: "64500 15169", OriginASN: "15169", TrueNexthop: "192.0.2.1", LocalPref: &n, Best: true, OVS: "valid", AVS: "unknown", LargeCommunities: []string{"395089:0:6"}}, {Prefix: "192.0.2.0/24", ASPath: "64501 15169"}, {Prefix: "2001:db8::/32", ASPath: "64500 64501 64502 15169", ExitNexthop: "2001:db8::1"}})}, {Name: "Beta", Result: complete(300*time.Millisecond, []bgp.Route{{Prefix: "2001:db8::/32", ASPath: "15169"}})}}
+	routes := []BackendResult{{Name: "Alpha", Location: "West", Result: complete(1200*time.Millisecond, []bgp.Route{{Prefix: "192.0.2.0/24", ASPath: "64500 15169", OriginASN: "15169", TrueNexthop: "172.18.0.1", ExitNexthop: "192.0.2.1", LocalPref: &n, Best: true, OVS: "valid", AVS: "unknown", LargeCommunities: []string{"395089:0:6"}}, {Prefix: "192.0.2.0/24", ASPath: "64501 15169"}, {Prefix: "2001:db8::/32", ASPath: "64500 64501 64502 15169", ExitNexthop: "2001:db8::1"}})}, {Name: "Beta", Result: complete(300*time.Millisecond, []bgp.Route{{Prefix: "2001:db8::/32", ASPath: "15169"}})}}
 	for _, view := range []string{"text", "detail"} {
 		t.Run(view, func(t *testing.T) {
 			got := formatRoutes(routes, view)
@@ -38,7 +38,7 @@ func complete(elapsed time.Duration, routes []bgp.Route) bgp.Result {
 func TestPartialAndFailedTextGolden(t *testing.T) {
 	n := int64(100)
 	routes := []bgp.Route{
-		{Prefix: "192.0.2.0/24", ASPath: "64500 15169", OriginASN: "15169", TrueNexthop: "192.0.2.1", LocalPref: &n, Best: true, OVS: "valid", AVS: "unknown", LargeCommunities: []string{"395089:0:6", "395089:5:2"}, Communities: []string{"64500:1"}, ExtCommunities: []string{"rt 64500:1"}},
+		{Prefix: "192.0.2.0/24", ASPath: "64500 15169", OriginASN: "15169", TrueNexthop: "172.18.0.1", ExitNexthop: "192.0.2.1", LocalPref: &n, Best: true, OVS: "valid", AVS: "unknown", LargeCommunities: []string{"395089:0:6", "395089:5:2"}, Communities: []string{"64500:1"}, ExtCommunities: []string{"rt 64500:1"}},
 		{Prefix: "2001:db8::/32", ASPath: "64500 15169", ExitNexthop: "2001:db8::1"},
 	}
 	part := func(reason bgp.Reason, detail string) bgp.Result {

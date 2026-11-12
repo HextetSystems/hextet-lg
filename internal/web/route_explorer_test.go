@@ -125,8 +125,6 @@ func TestPageTitlesOfOtherViews(t *testing.T) {
 	for target, want := range map[string]string{
 		"/neighbors":                "BGP Neighbors · Test LG",
 		"/neighbors?backend=a":      "BGP Neighbors @ Alpha · Test LG",
-		"/summary":                  "BGP Summary · Test LG",
-		"/summary?backend=b":        "BGP Summary @ Beta · Test LG",
 		"/rtr":                      "RTR Sessions · Test LG",
 		"/rtr?backend=a":            "RTR Sessions @ Alpha · Test LG",
 		"/communities":              "Communities · Test LG",
@@ -543,7 +541,7 @@ func TestFooterTimingSurvivesTheNewLayout(t *testing.T) {
 func TestRouteTablePreserved(t *testing.T) {
 	h := m481Handler(t)
 	body := get(h, "/?type=prefix&q=10.0.0.0/24&backend=a").Body.String()
-	for _, want := range []string{"<th>Prefix</th><th>AS path</th><th>Origin ASN</th><th>Next hop</th><th>Local pref</th><th>MED</th><th>Age</th><th>RPKI</th><th>ASPA</th>", "BEST", "Route details", "395089%3A0%3A8", `<caption class="sr-only">Routes from Alpha</caption>`} {
+	for _, want := range []string{"<th>Prefix</th><th>AS path</th><th>Origin ASN</th><th>Exit next hop</th><th>Local pref</th><th>MED</th><th>Age</th><th>RPKI</th><th>ASPA</th>", "BEST", "Route details", "395089%3A0%3A8", `<caption class="sr-only">Routes from Alpha</caption>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
 		}

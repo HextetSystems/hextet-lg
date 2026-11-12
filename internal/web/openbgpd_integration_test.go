@@ -134,7 +134,7 @@ func TestOpenBGPD93RTRAddressesDoNotLeakThroughEnrichmentOrOtherPages(t *testing
 	defer h.Close()
 	routes := h.Routes()
 
-	for _, p := range []string{"/rtr", "/summary", "/neighbors", "/?type=prefix&q=198.51.100.0/24", "/communities"} {
+	for _, p := range []string{"/rtr", "/neighbors", "/?type=prefix&q=198.51.100.0/24", "/communities"} {
 		page := m51Page(t, routes, p, 200)
 		mustNotContain(t, page, "192.0.2.3", "192.0.2.4", `data-ptr="192.0.2.3"`, `data-ptr="192.0.2.4"`)
 	}
@@ -181,14 +181,14 @@ func TestOpenBGPD93NeighborAndSummaryFixture(t *testing.T) {
 			t.Errorf("neighbors page lacks %q\n%s", want, txt)
 		}
 	}
-	sum := textOf(m51Page(t, h, "/summary", 200))
+	sum := textOf(m51Page(t, h, "/neighbors", 200))
 	for _, want := range []string{"1 Sessions reported", "1 Established", "0 Other states", "192.0.2.1 example-description AS64500 Established"} {
 		if !strings.Contains(sum, want) {
 			t.Errorf("summary lacks %q\n%s", want, sum)
 		}
 	}
-	// /summary has no counters and the page does not invent any.
-	mustNotContain(t, m51Page(t, h, "/summary", 200), "Prefixes received", "Messages received")
+	// /summary is no longer a public page.
+	m51Page(t, h, "/summary", 404)
 	// Raw JSON stays off by default and appears only when opted in.
 	mustNotContain(t, nei, "Raw JSON", "bgpid", "&#34;remote_as&#34;")
 	raw := m47Handler(t, func(c *config.Config) { c.Display.RawJSON = true }, backendSpec{"a", "Alpha", m51Real(t)})
@@ -275,8 +275,8 @@ func TestRPKIAndASPAStatesAreNotConflated(t *testing.T) {
 	if got := m51Pills(page, "aspa"); fmt.Sprint(got) != fmt.Sprint(wantAVS) {
 		t.Errorf("ASPA pills %v, want %v", got, wantAVS)
 	}
-	// Route validity is a third, separate field.
-	mustContain(t, page, "Route validity")
+	// Route qualification is hidden by default and can be enabled explicitly.
+	mustNotContain(t, page, "Route qualification")
 }
 
 // ---- multi-backend matrix ----

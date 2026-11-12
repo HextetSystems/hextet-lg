@@ -181,7 +181,7 @@ func TestMetricsLoopbackOnly(t *testing.T) {
 }
 
 func TestASNEnrichmentDefaultsAndValidation(t *testing.T) {
-	c, err := Load("../../configs/config.example.yaml")
+	c, err := Load("../../examples/config.example.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestThemeSectionRejectsInvalidValues(t *testing.T) {
 // The documented example must stay valid and must spell out exactly the
 // built-in themes, so the example cannot drift from the real defaults.
 func TestExampleThemeMatchesBuiltInDefaults(t *testing.T) {
-	c, err := Load("../../configs/config.example.yaml")
+	c, err := Load("../../examples/config.example.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,7 +364,7 @@ func TestPageTimingFlag(t *testing.T) {
 			}
 		})
 	}
-	c, err := Load("../../configs/config.example.yaml")
+	c, err := Load("../../examples/config.example.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -374,7 +374,7 @@ func TestPageTimingFlag(t *testing.T) {
 }
 
 func TestExampleConfigDocumentsSessionFlags(t *testing.T) {
-	c, err := Load("../../configs/config.example.yaml")
+	c, err := Load("../../examples/config.example.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

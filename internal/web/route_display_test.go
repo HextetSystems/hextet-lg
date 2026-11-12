@@ -64,6 +64,18 @@ func m482Handler(t *testing.T, edit func(*config.Config), specs ...backendSpec) 
 	return h.Routes()
 }
 
+func TestRouteQualificationDisplaySetting(t *testing.T) {
+	doc := m482Doc(m482Route("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "unknown"))
+	page := get(m482Handler(t, nil, backendSpec{"a", "Alpha", serveDoc(doc)}), "/?type=prefix&q=203.0.113.0/24").Body.String()
+	if strings.Contains(page, "Route qualification") {
+		t.Fatal("qualification visible by default")
+	}
+	page = get(m482Handler(t, func(c *config.Config) { c.Display.RouteQualification = true }, backendSpec{"a", "Alpha", serveDoc(doc)}), "/?type=prefix&q=203.0.113.0/24").Body.String()
+	if !strings.Contains(page, "Route qualification") || !strings.Contains(page, "Qualified") {
+		t.Fatal("qualification not shown when enabled")
+	}
+}
+
 // ---- display.route_columns ----------------------------------------------------
 
 var (
@@ -136,7 +148,7 @@ func TestRouteColumnCombinations(t *testing.T) {
 func TestDefaultTableLayout(t *testing.T) {
 	h := m482Handler(t, nil, backendSpec{"a", "Alpha", serveDoc(m482Doc(m482Route("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid")))})
 	body := get(h, "/?type=prefix&q=203.0.113.0/24&backend=a").Body.String()
-	mustContain(t, body, "<th>Prefix</th><th>AS path</th><th>Origin ASN</th><th>Next hop</th><th>Local pref</th><th>MED</th><th>Age</th><th>RPKI</th><th>ASPA</th>", `routes cols-9`)
+	mustContain(t, body, "<th>Prefix</th><th>AS path</th><th>Origin ASN</th><th>Exit next hop</th><th>Local pref</th><th>MED</th><th>Age</th><th>RPKI</th><th>ASPA</th>", `routes cols-9`)
 	mustNotContain(t, body, "<th>Neighbor</th>", `class="c-nb`, "Raw JSON")
 	// Only the Route details disclosure exists by default: one summary per route.
 	table := body[strings.Index(body, "<table>"):]
@@ -162,7 +174,7 @@ func TestRawJSONIsOptIn(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	}
-	paths := []string{"/?type=prefix&q=203.0.113.0/24&backend=a", "/?type=prefix&q=203.0.113.0/24&backend=a&view=table", "/neighbors", "/summary", "/rtr"}
+	paths := []string{"/?type=prefix&q=203.0.113.0/24&backend=a", "/?type=prefix&q=203.0.113.0/24&backend=a&view=table", "/neighbors", "/rtr"}
 	for _, enabled := range []bool{false, true} {
 		h := m482Handler(t, func(c *config.Config) { c.Display.RawJSON = enabled }, backendSpec{"a", "Alpha", backend})
 		for _, p := range paths {
@@ -233,7 +245,7 @@ func TestCardStructureSharesOneDOM(t *testing.T) {
 	}
 	mustContain(t, body, "2001:db8:1234::/48", "Query failed", "Alpha", "Beta", "Gamma")
 	// Card labels come from the same cells; secondary cells are marked for hiding on phones.
-	mustContain(t, body, `class="c-path" data-label="AS path"`, `class="c-origin" data-label="Origin"`, `class="c-nh" data-label="Next hop"`, `class="c-rpki" data-label="RPKI"`, `class="c-aspa" data-label="ASPA"`, `c-lp m-hide`, `c-med m-hide`, `c-age m-hide`)
+	mustContain(t, body, `class="c-path" data-label="AS path"`, `class="c-origin" data-label="Origin"`, `class="c-nh" data-label="Exit next hop"`, `class="c-rpki" data-label="RPKI"`, `class="c-aspa" data-label="ASPA"`, `c-lp m-hide`, `c-med m-hide`, `c-age m-hide`)
 	// The whole AS path is in the expanded details (the collapsed card clamps it).
 	if !strings.Contains(body, "<span>AS path</span><strong>"+long+"</strong>") {
 		t.Error("full long AS path missing from the details")

@@ -94,7 +94,7 @@ The accent is used for ordinary UI emphasis only, and sparingly: links, the one 
 
 ### Semantic status colors
 
-Route validity (RPKI `ovs`, ASPA `avs`, route `valid`), result completeness and notices carry operational meaning and are **not** the accent and **not** configurable. Each status has fixed hues for light and dark; `--status-{good,bad,warn}-bg` is the hue mixed 16% into the surface and `--status-{good,bad,warn}-fg` is the hue moved toward the pole until it reaches 4.5:1 on that background and on every surface of the palette. Unknown, not-found and other neutral states use `surface_hover` and `text_muted`. Every status always has a text label (`valid`, `invalid`, `unknown`, `COMPLETE`, `PARTIAL`, `FAILED`, "Query failed", "Partial results"), so meaning never depends on color alone; notices also get a heavier left border.
+RPKI `ovs`, ASPA `avs`, route qualification, result completeness and notices carry operational meaning and are **not** the accent and **not** configurable. Each status has fixed hues for light and dark; `--status-{good,bad,warn}-bg` is the hue mixed 16% into the surface and `--status-{good,bad,warn}-fg` is the hue moved toward the pole until it reaches 4.5:1 on that background and on every surface of the palette. Unknown, not-found and other neutral states use `surface_hover` and `text_muted`. Every status always has a text label (`valid`, `invalid`, `unknown`, `qualified`, `unqualified`, `COMPLETE`, `PARTIAL`, `FAILED`, "Query failed", "Partial results"), so meaning never depends on color alone; notices also get a heavier left border.
 
 ### Remaining non-configurable colors
 

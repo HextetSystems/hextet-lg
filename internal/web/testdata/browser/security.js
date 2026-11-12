@@ -35,7 +35,7 @@ function check(name, ok, detail) {
 
 const RTR_PRIVATE = ['10.77.77.77', '2001:db8:7777::7', '8282', '3323', '10.88.88.88'];
 const SEARCH = '/?type=prefix&q=10.0.0.0%2F24&backend=a';
-const PAGES = ['/', SEARCH, SEARCH + '&view=text', SEARCH + '&view=detail', '/neighbors', '/summary', '/rtr', '/communities',
+const PAGES = ['/', SEARCH, SEARCH + '&view=text', SEARCH + '&view=detail', '/neighbors', '/rtr', '/communities',
   '/?type=prefix&q=%22%3E%3Cscript%3Ealert(9)%3C%2Fscript%3E'];
 
 // watch records everything that would betray an injection or a policy gap:
@@ -225,7 +225,7 @@ async function optIn(ctx) {
   const brand = await page.evaluate(() => ({ header: document.querySelector('header').innerText, footer: document.querySelector('footer').innerText, title: document.title, logo: (document.querySelector('img.logo') || {}).naturalWidth || 0 }));
   check('opt-in: hostile site name, subtitle and operator are literal text', brand.header.includes('<img src=x onerror=alert(3)>') && brand.header.includes('<b onmouseover=alert(5)>sub</b>') && brand.footer.includes('<script>alert(4)</script>') && d.injected === 0, JSON.stringify(brand));
   check('opt-in: the title carries the hostile site name as text', brand.title.includes('<img src=x onerror=alert(3)> Site'), brand.title);
-  for (const p of ['/neighbors', '/summary']) {
+  for (const p of ['/neighbors']) {
     await page.goto(optin + p);
     await page.waitForLoadState('networkidle');
     await openAll(page);
@@ -326,7 +326,7 @@ async function reverseProxy(ctx) {
   await page.waitForLoadState('networkidle');
   const links = await page.evaluate(() => [...document.querySelectorAll('a[href], form[action], link[href], script[src], img[src]')].map((el) => el.getAttribute('href') || el.getAttribute('action') || el.getAttribute('src')));
   check('proxy: every link, form and asset reference is path-only', links.length > 10 && links.every((h) => h.startsWith('/') && !h.startsWith('//')), links.filter((h) => !h.startsWith('/') || h.startsWith('//')).join(' '));
-  for (const nav of ['Neighbors', 'Summary', 'RTR sessions', 'Communities', 'Routes']) {
+  for (const nav of ['Neighbors', 'RTR sessions', 'Communities', 'Routes']) {
     await page.click(`nav >> text="${nav}"`);
     await page.waitForLoadState('networkidle');
     const u = await url();

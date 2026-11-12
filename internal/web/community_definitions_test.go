@@ -246,55 +246,38 @@ func TestM44StartupPolicy(t *testing.T) {
 }
 
 func TestM44CommunityExplorer(t *testing.T) {
-	files := map[string]string{}
-	for k, v := range m44Files {
-		files[k] = v
-	}
-	files["metadata.yaml"] = `
-source: "Synthetic evidence"
-communities:
-  "64500:100":
-    category: Classification
-    status: implemented
-    evidence: community list
-    evidence_note: "<i>note</i>"
-    notes: "A note"
-  "64500:200":
-    category: Classification
-    status: documented
-`
-	h := newDefsHandler(t, files, nil, routeBackend(m44Route))
+	h := newDefsHandler(t, m44Files, nil, routeBackend(m44Route))
 	body := get(h, "/communities?backend=a").Body.String()
 	for _, want := range []string{
-		"COMMUNITY REFERENCE", "Synthetic evidence", "Learned from customer", "Second operator seven", "NO_EXPORT: do not export",
-		`href="/?community=64500%3A100&amp;backend=a&amp;view=table"`,          // standard, canonical
-		`href="/?type=large-community&amp;q=64500%3A1%3A100&amp;backend=a"`,    // large, unchanged legacy form
-		`href="/?ext-community=rt&#43;64500%3A1&amp;backend=a&amp;view=table"`, // extended search is enabled in the test config
-		"<small>pattern</small>", "as64501.txt", "AS64501", "Well-known",
-		`Implemented</span>`, "community list: &lt;i&gt;note&lt;/i&gt;", "A note", "Documented/planned",
-		"not independent verification",
+		"COMMUNITY REFERENCE", "Learned from customer", "Second operator seven", "NO_EXPORT: do not export",
+		`href="/?community=64500%3A100&amp;backend=a&amp;view=table"`,
+		`href="/?type=large-community&amp;q=64500%3A1%3A100&amp;backend=a"`,
+		`href="/?ext-community=rt&#43;64500%3A1&amp;backend=a&amp;view=table"`,
+		"<small>pattern</small>", "as64501.txt", "AS64501", "Well-known", "<th>Source</th>",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("explorer missing %q", want)
+		}
+	}
+	for _, unwanted := range []string{"Status / evidence", "Implemented", "evidence", "notes"} {
+		if strings.Contains(strings.ToLower(body), strings.ToLower(unwanted)) {
+			t.Errorf("removed metadata remains in Explorer: %q", unwanted)
 		}
 	}
 	// Patterns have no single value to search for.
 	if strings.Contains(body, "q=64500%3A1%3Annn") || strings.Contains(body, "community=64500%3A4xx") {
 		t.Error("link generated for a pattern")
 	}
-	// Filtering by category and text still works; categories combine metadata and per-ASN groups.
-	if b := get(h, "/communities?category=Classification").Body.String(); !strings.Contains(b, "Learned from customer") || strings.Contains(b, "Second operator seven") {
-		t.Error("category filter")
-	}
+	// Source filtering and description search use only the loaded text files.
 	if b := get(h, "/communities?category=AS64501").Body.String(); !strings.Contains(b, "Second operator seven") || strings.Contains(b, "Learned from customer") {
-		t.Error("per-ASN default category")
+		t.Error("source filter")
 	}
-	if b := get(h, "/communities?q=implemented").Body.String(); !strings.Contains(b, "Learned from customer") || strings.Contains(b, "Learned from peer") {
-		t.Error("status search")
+	if b := get(h, "/communities?q=customer").Body.String(); !strings.Contains(b, "Learned from customer") || strings.Contains(b, "Second operator seven") {
+		t.Error("description search")
 	}
 	// Search links honour the M4.2 flags; the Explorer itself stays visible.
 	no := false
-	h = newDefsHandler(t, files, func(c *config.Config) {
+	h = newDefsHandler(t, m44Files, func(c *config.Config) {
 		c.Features = config.Features{Communities: &no, LargeCommunities: &no, ExtendedCommunities: &no}
 	}, routeBackend(m44Route))
 	rr := get(h, "/communities")
@@ -415,77 +398,28 @@ func TestM44LargeResultLookup(t *testing.T) {
 	}
 }
 
-// The AS395089 definitions migrated out of the code base must reproduce the
-// pre-migration reference exactly: every value, description, category, status
-// and evidence, plus the notes (two README-undocumented entries moved their
-// longer sentence into the notes). The expected rows are the dump of the
-// former built-in reference, kept in testdata.
-func TestM44MigratedAS395089Inventory(t *testing.T) {
-	raw, err := os.ReadFile("testdata/as395089-inventory-before.tsv")
+func TestM44ExampleDefinitionsComeFromTextFile(t *testing.T) {
+	data, err := os.ReadFile("../../examples/communities/as395089.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
-	var want [][]string
-	for _, line := range strings.Split(strings.TrimRight(string(raw), "\n"), "\n") {
-		want = append(want, strings.Split(line, "\t"))
-	}
-	if len(want) != 30 {
-		t.Fatalf("inventory has %d rows, expected the 30 documented before migration", len(want))
-	}
-	cfg, closeAll := testConfig(defaults(), routeBackend(`{"rib":[{"prefix":"192.0.2.0/24","large_communities":["395089:0:8"]}]}`))
-	defer closeAll()
-	files := make(map[string]string)
-	for _, name := range []string{"as395089.txt", "metadata.yaml"} {
-		data, err := os.ReadFile(filepath.Join("../../examples/communities", name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		files[name] = string(data)
-	}
-	cfg.CommunityDefinitions = config.CommunityDefinitions{Enabled: true, Directory: writeDefs(t, files)}
-	h, err := NewHandler(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer h.Close()
+	files := map[string]string{"as395089.txt": string(data)}
+	h := newDefsHandler(t, files, nil, routeBackend(m44Route))
 	defs := h.defs.Definitions()
-	if len(defs) != len(want) {
-		t.Fatalf("%d definitions loaded, %d expected", len(defs), len(want))
+	if len(defs) != 30 {
+		t.Fatalf("loaded %d definitions, want 30", len(defs))
 	}
-	for i, w := range want {
-		value, name, description, category, notes, status, evidence, evidenceNote := w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]
-		d := defs[i]
-		wantNotes := notes
-		if name != description { // the longer sentence moved into the notes
-			wantNotes = strings.TrimSpace(description + " " + notes)
-		}
-		if d.Key != value || d.Description != name || d.Category != category || d.Notes != wantNotes || d.Status != status || d.Evidence != evidence || d.EvidenceNote != evidenceNote || !d.Exact || d.Source != "AS395089" {
-			t.Errorf("row %d (%s) differs:\n got %+v\nwant name=%q category=%q notes=%q status=%q evidence=%q/%q", i, value, d, name, category, wantNotes, status, evidence, evidenceNote)
-		}
-		if got, ok := h.defs.Lookup(2, value); !ok || got != name {
-			t.Errorf("%s: lookup %q", value, got)
+	for _, d := range defs {
+		if d.Source != "AS395089" || d.File != "as395089.txt" {
+			t.Errorf("definition source is not derived from its text file: %+v", d)
 		}
 	}
-	// Ambiguous entries keep their non-meaning.
-	for _, v := range []string{"395089:5:3", "395089:6:11"} {
-		for _, d := range defs {
-			if d.Key == v && (d.Description != "Not described in the README" || !strings.Contains(d.Notes, "not inferred")) {
-				t.Errorf("%s: %+v", v, d)
-			}
-		}
+	page := get(h, "/communities?category=AS395089").Body.String()
+	if !strings.Contains(page, "Peering routes") || !strings.Contains(page, "as395089.txt") || strings.Contains(page, "Status / evidence") {
+		t.Error("Explorer did not render the text-file definitions as expected")
 	}
-	page := get(h.Routes(), "/communities?backend=a").Body.String()
-	for _, w := range []string{"Peering routes", "Implemented", "configured pattern: 395089:[05678]:.*", "routing filter: Customer classification", `href="/?type=large-community&amp;q=395089%3A0%3A6&amp;backend=a"`, "RouterOS routing configuration supplied by the operator"} {
-		if !strings.Contains(page, w) {
-			t.Errorf("explorer missing %q", w)
-		}
-	}
-	if body := get(h.Routes(), routeQuery).Body.String(); !strings.Contains(body, `title="Peering routes" href="/?type=large-community&amp;q=395089%3A0%3A8`) {
-		t.Error("migrated definition not used for the route tooltip")
-	}
-	// Filtering behaviour of the former Explorer is preserved.
-	if b := get(h.Routes(), "/communities?q=transit&category=Route+classification").Body.String(); !strings.Contains(b, "395089:0:6") || strings.Contains(b, "395089:0:8") {
-		t.Error("explorer filter changed")
+	if body := get(h, routeQuery).Body.String(); !strings.Contains(body, `title="Peering routes" href="/?type=large-community&amp;q=395089%3A0%3A8`) {
+		t.Error("text-file definition not used for the route tooltip")
 	}
 }
 

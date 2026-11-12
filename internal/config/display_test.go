@@ -15,12 +15,12 @@ func TestDisplayDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := c.Display
-	if d.RawJSON || d.RouteColumns.Neighbor || d.RouteColumns.Format() != NeighborFormatName || !d.RouteColumns.RPKIColumn() || !d.RouteColumns.ASPAColumn() || d.RouteColumns.NeighborNames() {
+	if d.RawJSON || d.RouteQualification || d.RouteColumns.Neighbor || d.RouteColumns.Format() != NeighborFormatName || !d.RouteColumns.RPKIColumn() || !d.RouteColumns.ASPAColumn() || d.RouteColumns.NeighborNames() {
 		t.Fatalf("defaults: %+v", d)
 	}
 	// The zero Config (programmatic use) resolves to the same defaults.
 	var z Config
-	if z.Display.RawJSON || z.Display.RouteColumns.Format() != NeighborFormatName || !z.Display.RouteColumns.RPKIColumn() || !z.Display.RouteColumns.ASPAColumn() {
+	if z.Display.RawJSON || z.Display.RouteQualification || z.Display.RouteColumns.Format() != NeighborFormatName || !z.Display.RouteColumns.RPKIColumn() || !z.Display.RouteColumns.ASPAColumn() {
 		t.Fatalf("zero value: %+v", z.Display)
 	}
 }
@@ -76,17 +76,17 @@ func TestDisplayRejectsInvalidSettings(t *testing.T) {
 }
 
 func TestExampleConfigDocumentsDisplay(t *testing.T) {
-	b, err := os.ReadFile("../../configs/config.example.yaml")
+	b, err := os.ReadFile("../../examples/config.example.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(b)
-	for _, want := range []string{"display:", "raw_json: false", "route_columns:", "neighbor: false", "neighbor_format: name", "rpki: true", "aspa: true"} {
+	for _, want := range []string{"display:", "raw_json: false", "route_qualification: false", "route_columns:", "neighbor: false", "neighbor_format: name", "rpki: true", "aspa: true"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("example config lacks %q", want)
 		}
 	}
-	c, err := Load("../../configs/config.example.yaml")
+	c, err := Load("../../examples/config.example.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

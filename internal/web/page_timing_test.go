@@ -127,7 +127,7 @@ func TestPageTimingFlag(t *testing.T) {
 	}{"omitted": {nil, true}, "enabled": {b3(true), true}, "disabled": {b3(false), false}} {
 		t.Run(name, func(t *testing.T) {
 			h := m48Handler(t, func(c *config.Config) { c.Features.PageTiming = tc.flag }, backendSpec{"a", "Alpha", delayed(0, 2)})
-			for _, path := range []string{"/", "/?q=10.0.0.0/24&type=prefix&backend=a", "/?q=bad", "/communities", "/neighbors", "/summary", "/rtr"} {
+			for _, path := range []string{"/", "/?q=10.0.0.0/24&type=prefix&backend=a", "/?q=bad", "/communities", "/neighbors", "/rtr"} {
 				rr := get(h, path)
 				_, ok := generatedIn(t, rr.Body.String())
 				if ok != tc.want || timingCount(rr.Body.String()) > 1 {
@@ -172,7 +172,6 @@ func TestTimingOnEveryHTMLPageExactlyOnce(t *testing.T) {
 		"empty result page": "/?type=prefix&q=10.0.0.0/24&backend=nope",
 		"invalid request":   "/?type=prefix&q=not-a-prefix",
 		"unknown parameter": "/?bogus=1",
-		"summary":           "/summary",
 		"neighbors":         "/neighbors",
 		"rtr unsupported":   "/rtr",
 		"communities":       "/communities",
@@ -451,7 +450,7 @@ func TestEmptyResultAndTimeoutKeepStatusAndFooter(t *testing.T) {
 }
 
 func TestStatusCodesUnchangedByTimingFlag(t *testing.T) {
-	paths := []string{"/", "/?type=prefix&q=bad", "/?type=prefix&q=10.0.0.0/24&backend=a", "/?bogus=1", "/communities", "/summary", "/rtr", "/nope"}
+	paths := []string{"/", "/?type=prefix&q=bad", "/?type=prefix&q=10.0.0.0/24&backend=a", "/?bogus=1", "/communities", "/rtr", "/nope"}
 	codes := func(flag *bool) []int {
 		h := m48Handler(t, func(c *config.Config) { c.Features.PageTiming = flag }, backendSpec{"a", "Alpha", delayed(0, 2)})
 		var out []int

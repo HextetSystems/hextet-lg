@@ -81,16 +81,16 @@ func TestMixedFamilyHTMLTextAndDetailAreComplete(t *testing.T) {
 	}
 	hdr := ""
 	for _, line := range strings.Split(text, "\n") {
-		if strings.Contains(line, "Prefix") && strings.Contains(line, "Next hop") {
+		if strings.Contains(line, "Prefix") && strings.Contains(line, "Exit next hop") {
 			hdr = line
 		}
 	}
-	if strings.Index(hdr, "Next hop") != len(longV6)+3 {
-		t.Fatalf("header not widened to the longest prefix: %q (next hop at %d)", hdr, strings.Index(hdr, "Next hop"))
+	if strings.Index(hdr, "Exit next hop") != len(longV6)+3 {
+		t.Fatalf("header not widened to the longest prefix: %q (exit next hop at %d)", hdr, strings.Index(hdr, "Exit next hop"))
 	}
 
 	detail := get(h, base+"&view=detail&output=plain").Body.String()
-	for _, want := range []string{"Prefix: " + longV6 + "\n  Address family: IPv6", "Prefix: 10.0.0.0/24\n  Address family: IPv4", "Next hop: 2001:db8:ffff::1", "Neighbor: v6-peer (2001:db8:ffff::2)", "Next hop: 192.0.2.1", "Neighbor: fe80::2", "Large communities: 395089:0:8"} {
+	for _, want := range []string{"Prefix: " + longV6 + "\n  Address family: IPv6", "Prefix: 10.0.0.0/24\n  Address family: IPv4", "Exit next hop: 2001:db8:ffff::1", "Neighbor: v6-peer (2001:db8:ffff::2)", "Exit next hop: 192.0.2.1", "Neighbor: fe80::2", "Large communities: 395089:0:8"} {
 		if !strings.Contains(detail, want) {
 			t.Errorf("detail missing %q", want)
 		}
@@ -220,14 +220,14 @@ func TestMixedFamilyPaginationAndPartialResults(t *testing.T) {
 	}
 }
 
-func TestIPv6NeighborsOnNeighborAndSummaryPages(t *testing.T) {
+func TestIPv6NeighborsAndSummaryCountsOnNeighborsPage(t *testing.T) {
 	h := newTestHandler(t, defaults(), backendSpec{"a", "Alpha", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, `{"neighbors":[
 		 {"remote_as":"64500","remote_addr":"2001:db8:ffff::2","description":"v6-peer","state":"Established","stats":{"prefixes":{"received":120000}}},
 		 {"remote_as":"64501","remote_addr":"192.0.2.254","description":"v4-peer","state":"Idle"},
 		 {"remote_as":"64502","remote_addr":"fe80::2%em0","state":"Established"}]}`)
 	}})
-	for _, page := range []string{"/neighbors?backend=a", "/summary?backend=a"} {
+	for _, page := range []string{"/neighbors?backend=a"} {
 		body := get(h, page).Body.String()
 		for _, want := range []string{"2001:db8:ffff::2", "192.0.2.254", "fe80::2%em0", "120000"} {
 			if !strings.Contains(body, want) {
@@ -235,7 +235,7 @@ func TestIPv6NeighborsOnNeighborAndSummaryPages(t *testing.T) {
 			}
 		}
 	}
-	if !strings.Contains(get(h, "/summary?backend=a").Body.String(), ">2</strong><span>Established") {
+	if !strings.Contains(get(h, "/neighbors?backend=a").Body.String(), ">2</strong><span>Established") {
 		t.Error("summary must count IPv6 and IPv4 sessions together")
 	}
 }

@@ -1,5 +1,5 @@
-// Package configs provides the example configuration embedded in release binaries.
-package configs
+// Package examples provides the example configuration embedded in release binaries.
+package examples
 
 import _ "embed"
 

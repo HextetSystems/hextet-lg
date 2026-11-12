@@ -185,8 +185,7 @@ async function layoutAll(browser) {
     ['route results', '/?type=prefix&q=10.0.0.0%2F24&backend=all'],
     ['route results (text view)', '/?type=prefix&q=10.0.0.0%2F24&backend=all&view=text'],
     ['empty results', '/?type=prefix&q=203.0.113.0%2F24&backend=all'],
-    ['BGP summary', '/summary'],
-    ['BGP neighbors', '/neighbors'],
+    ['BGP neighbors and summary counts', '/neighbors'],
     ['RTR sessions', '/rtr'],
     ['community explorer', '/communities'],
     ['home', '/'],
@@ -227,7 +226,7 @@ async function layoutAll(browser) {
         check(`${tag}: Route details opens and stays inside the viewport`, !d.before && d.after && d.within, JSON.stringify(d));
         check(`${tag}: Raw JSON absent by default`, d.raw === false);
       }
-      if (['route results', 'BGP summary', 'BGP neighbors', 'RTR sessions', 'empty results'].includes(name)) {
+      if (['route results', 'BGP neighbors and summary counts', 'RTR sessions', 'empty results'].includes(name)) {
         check(`${tag}: footer timing shown once`, m.timing === 1, String(m.timing));
       }
     }

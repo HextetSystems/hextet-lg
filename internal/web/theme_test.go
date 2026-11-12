@@ -96,7 +96,7 @@ func TestRestartWithNewColorsNeverReusesOldValidator(t *testing.T) {
 func TestPagesLinkThemeBeforePaintAndExposeDefault(t *testing.T) {
 	for mode, want := range map[string]string{"": "auto", "auto": "auto", "light": "light", "dark": "dark"} {
 		h := themeHandler(t, theme.Config{Default: mode})
-		for _, path := range []string{"/", "/?type=prefix&q=203.0.113.0/24&backend=all", "/neighbors", "/summary", "/communities"} {
+		for _, path := range []string{"/", "/?type=prefix&q=203.0.113.0/24&backend=all", "/neighbors", "/communities"} {
 			rr := get(h, path)
 			if rr.Code != 200 {
 				t.Fatalf("%s: %d", path, rr.Code)

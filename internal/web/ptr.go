@@ -55,14 +55,10 @@ func (h *Handler) schedulePTRs(p *Page) {
 	}
 	for _, sec := range p.Sections {
 		for _, r := range sec.Rows {
-			if h.ptrKey(r.NextHop()) != "" {
-				add(r.NextHop())
-			} else {
-				add(r.ExitNexthop)
-			}
+			add(r.NextHop())
 		}
 	}
-	// Neighbor names come second: they are visible in the table (next hops
+	// Neighbor names come second: they are visible in the table (exit next hops
 	// first, so neighbor lookups never starve next-hop enrichment), and they
 	// share the page budget, the deduplication and the cache with next hops.
 	if h.cfg.Display.RouteColumns.NeighborNames() {
@@ -70,12 +66,6 @@ func (h *Handler) schedulePTRs(p *Page) {
 			for _, r := range sec.Rows {
 				add(r.NeighborAddress)
 			}
-		}
-	}
-	for _, sec := range p.Sections {
-		for _, r := range sec.Rows {
-			add(r.TrueNexthop)
-			add(r.ExitNexthop)
 		}
 	}
 }

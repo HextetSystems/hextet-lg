@@ -5,36 +5,39 @@
 # Migrated unchanged from the former built-in Community Explorer reference.
 # Descriptions are operator-supplied documentation, not verified routing policy.
 #
-# Implementation status, category and notes cannot be expressed in this format;
-# they live in metadata.yaml beside this file.
-
+# Note 1: Community descriptions from the README are documented policy; their
+# implementation was not found in the configs/ routing policy.
+#
 395089:0:1,Self routes
 395089:0:2,Downstream routes
-395089:0:3,Unspecified route classification
-395089:0:4,Unspecified route classification
+395089:0:3,Reserved
+395089:0:4,Reserved
 395089:0:6,Transit routes
 395089:0:8,Peering routes
-395089:5:1,Accepted with valid IRR entry
-395089:5:2,Accepted with valid ROA
-395089:5:3,Not described in the README
-395089:5:4,RPKI invalid accepted by whitelist
-395089:6:10,Received from Les.net
-395089:6:11,Not described in the README
-395089:8:703,Received via MBIX (PeeringDB ID 703)
-395089:7:1,Rejection reason: More specific covering AS395089 space
-395089:7:2,Rejection reason: AS path contains a bogon ASN
-395089:7:3,Rejection reason: Bogon prefix
-395089:7:4,Rejection reason: RPKI invalid prefix
-395089:7:5,Rejection reason: Unacceptable prefix length
-395089:7:6,Rejection reason: No covering IRR object
-395089:7:7,Rejection reason: Member not authorized to announce route
 395089:1:50,Set local preference to 50
 395089:1:150,Set local preference to 150
-395089:1:450,Set member local preference to 450
-395089:1:550,Set member local preference to 550
-395089:2:0,Prepend AS395089 once to all eBGP peers
-395089:3:0,Prepend AS395089 twice to all eBGP peers
-395089:4:0,Do not export to any eBGP peers
-395089:301:0,Do not export to other members
-395089:302:0,Do not export to transit providers
-395089:303:0,Do not export to direct peers
+395089:1:450,Set local preference to 450
+395089:1:550,Set local preference to 550
+395089:2:0,Prepend AS395089 once to all eBGP peers (1)
+395089:2:nnn,Prepend AS395089 once to peer AS nnn (1)
+395089:3:0,Prepend AS395089 twice to all eBGP peers (1)
+395089:3:nnn,Prepend AS395089 twice to peer AS nnn (1)
+395089:4:0,Do not export to any eBGP peers (1)
+395089:4:nnn,Do not export to peer AS nnn (1)
+395089:5:1,Accepted reason: Valid IRR entry
+395089:5:2,Accepted reason: Valid ROA
+395089:5:3,Not described in the README
+395089:5:4,Accepted reason: RPKI invalid prefix on whitelist
+395089:6:10,Received from Les.net
+395089:7:1,More specifics covering AS395089 space (considered hijacks)
+395089:7:2,Rejected because AS_PATH contains a bogon ASN (1)
+395089:7:3,Rejected because prefix is bogon space (including RFC1918 and RFC4291)
+395089:7:4,Rejected because RPKI validation is invalid
+395089:7:5,Rejected because prefix length is unacceptable
+395089:7:6,Rejected because no IRR object covers the route (1)
+395089:7:7,Rejected because Hextet member is not authorized to announce the route (1)
+395089:8:703,Received via Manitoba Internet Exchange (MBIX)
+#395089:8:n,Received via IXP with PeeringDB ID n (README)
+395089:301:0,Do not export to other Hextet Systems members (1)
+395089:302:0,Do not export to transit providers (1)
+395089:303:0,Do not export to direct peers (1)

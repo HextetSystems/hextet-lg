@@ -22,7 +22,6 @@ Definitions are compiled **once at startup**. Changing a file requires a restart
 |---|---|
 | `as<N>.txt` | Definitions, `N` a canonical ASN (`as64500.txt`; 1–4294967295, no leading zeros, lower case) |
 | `well-known.txt` | Definitions that belong to no operator (for example `65535:666`) |
-| `metadata.yaml` | Optional Community Explorer metadata (below) |
 
 The ASN in a file name is organisational. A definition matches by the **community value it describes**, not by the file it is in: `65535:nnn` in `as10965.txt` matches `65535:7`. Different files can describe different ASNs, and a file may describe communities of any ASN. Other `.txt` files (for example the upstream `src_decix.txt` template) are ignored and reported in a startup warning; a file that starts with `as`, ends in `.txt` and is not a valid `asN.txt` name is a startup error, because it is almost certainly a typo. Non-`.txt` files and subdirectories are ignored. Symbolic links are followed (in Docker the target must also be inside the mount).
 
@@ -139,11 +138,10 @@ A configuration that cannot be loaded reliably **fails startup**; the applicatio
 | Directory missing, not a directory or unreadable | startup error |
 | Unreadable file, dangling symlink, not a regular file, over the size limit | startup error |
 | Invalid file name, malformed or unsupported definition, bad range or number, duplicate, bad substitution, invalid UTF-8, control characters, over a limit | startup error |
-| Invalid `metadata.yaml` | startup error |
 | Empty directory | valid: no definitions, a warning is logged |
 | Other `.txt` files | ignored, listed in a warning |
 
-Startup logs the number of files, definitions (exact and pattern; standard, large and extended) and metadata entries.
+Startup logs the number of text files and definitions (exact and pattern; standard, large and extended).
 
 ## Route tooltips
 
@@ -155,24 +153,9 @@ The `text` and `detail` views and `output=plain` are **not annotated**: their co
 
 Definitions do not influence searching. A community is searchable by its raw value whether or not a description exists, search URLs and canonical forms are unchanged, the M4.2 `features.*` flags still govern which search types are accepted, route visibility exclusions still apply, and descriptions cannot be searched (the Community Explorer's own text filter is local to that page).
 
-## Community Explorer and optional metadata
+## Community Explorer
 
-The Explorer lists every loaded definition in loading order: its community or pattern, description, category and file, and (when supplied) status and evidence. Exact definitions link to a one-click search when that search type is enabled; wildcard and range definitions show as patterns without a link. Without metadata the category is the source (`AS64500`, `Well-known`). Search text and category filters work as before. One page shows at most 1,000 matching definitions and says so when it truncates; the filters reach all of them.
-
-The NLNOG format carries only community and description. To keep the Explorer's *category*, *notes* and *implementation status/evidence* without extending that format, an operator may add `metadata.yaml` to the same directory:
-
-```yaml
-source: "Free text shown in the Explorer: where the evidence comes from"
-communities:
-  "64500:100":            # the canonical definition text, as listed in the Explorer
-    category: Route classification
-    status: implemented    # implemented | documented | unresolved
-    evidence: community list
-    evidence_note: "optional detail"
-    notes: "optional note"
-```
-
-Keys must be the canonical text of an existing definition (a key with no definition is a startup error); every field is optional; unknown fields are rejected. `implemented` means the community is present in the operator's own configuration; it never claims the routing behaviour was independently verified. Metadata is purely presentational.
+The Explorer lists definitions from the loaded text files in loading order: community or pattern, description, ASN source and file name. Exact definitions link to a one-click search when that search type is enabled; wildcard and range definitions show as patterns without a link. Search text and source filters work across the full set. One page shows at most 1,000 matching definitions and reports when the list is truncated.
 
 ## Docker
 
@@ -190,4 +173,4 @@ with `community_definitions.enabled: true` and `directory: /etc/hextet-lg/commun
 
 ## Example set
 
-[`examples/communities/`](../examples/communities) holds the AS395089 definitions migrated from the former built-in reference: `as395089.txt` (30 definitions) and `metadata.yaml` (category, status and evidence from the operator's RouterOS configuration). Copy them to your communities directory if you operate AS395089, or use them as a model. They are plain operator data, not defaults: nothing is loaded unless you configure the directory.
+[`examples/communities/`](../examples/communities) holds the AS395089 definitions migrated from the former built-in reference: `as395089.txt` (30 definitions). Copy it to your communities directory if you operate AS395089, or use it as a model. It is operator data, not a default: nothing is loaded unless you configure the directory.

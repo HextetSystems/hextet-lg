@@ -37,7 +37,7 @@ func TestVisibilityConfig(t *testing.T) {
 }
 
 func TestTrackedExampleConfiguration(t *testing.T) {
-	if _, err := Load("../../configs/config.example.yaml"); err != nil {
+	if _, err := Load("../../examples/config.example.yaml"); err != nil {
 		t.Fatal(err)
 	}
 }

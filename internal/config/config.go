@@ -88,8 +88,11 @@ type Display struct {
 	// summary). It is off by default because the raw backend objects can
 	// reveal internal routing details; it only affects what is rendered, not
 	// how backend responses are processed.
-	RawJSON      bool         `yaml:"raw_json"`
-	RouteColumns RouteColumns `yaml:"route_columns"`
+	RawJSON bool `yaml:"raw_json"`
+	// RouteQualification enables the bgpd route qualification field in route details.
+	// It is hidden by default because most operators do not need it.
+	RouteQualification bool         `yaml:"route_qualification"`
+	RouteColumns       RouteColumns `yaml:"route_columns"`
 }
 
 // RPKIColumn reports whether the RPKI column is shown (default true).

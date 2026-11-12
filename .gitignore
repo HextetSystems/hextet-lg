@@ -1,7 +1,5 @@
-# Private runtime configuration (operator backend addresses). Only
-# configs/config.example.yaml is committed.
-/configs/config.yaml
-/configs/config.docker.yaml
+# Private runtime configuration (operator backend addresses).
+/configs/
 
 # Local Compose selection and overrides (image pin, local mounts).
 /.env

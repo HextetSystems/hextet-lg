@@ -74,14 +74,6 @@ func ParseKind(s string) (Kind, bool) {
 	return 0, false
 }
 
-// Implementation statuses an operator may record in the optional metadata file.
-// They describe the operator's own evidence, not verified behaviour.
-const (
-	StatusImplemented = "Implemented"
-	StatusDocumented  = "Documented/planned"
-	StatusUnresolved  = "Unresolved"
-)
-
 // Definition is one loaded definition, for listing in the Community Explorer.
 type Definition struct {
 	Kind        Kind
@@ -91,16 +83,12 @@ type Definition struct {
 	Source      string // "AS64500" or "Well-known": derived from the file name
 	Line        int
 	Exact       bool // no ranges or wildcards
-
-	// Optional operator metadata (metadata.yaml); empty when none was supplied.
-	Category, Notes, Status, Evidence, EvidenceNote string
 }
 
 // Stats describes a loaded Set for startup diagnostics.
 type Stats struct {
 	Files, Definitions, Exact, Patterns int
 	Standard, Large, Extended           int
-	MetadataEntries                     int
 	// Ignored lists directory entries that were not loaded (other .txt files).
 	Ignored []string
 }
@@ -122,9 +110,6 @@ type Set struct {
 	patterns map[bucketKey][]*entry
 	defs     []Definition
 	stats    Stats
-	// MetadataSource is the operator's free-text note about where the optional
-	// metadata (status and evidence) comes from.
-	MetadataSource string
 }
 
 // Definitions returns every definition in documented load order (well-known

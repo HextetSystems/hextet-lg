@@ -231,14 +231,14 @@ func TestMemSizeGrowsWithContent(t *testing.T) {
 	}
 }
 
-func TestNextHopIgnoresUnresolvedMarker(t *testing.T) {
+func TestNextHopUsesOnlyExitNexthop(t *testing.T) {
 	for _, tc := range []struct {
 		r    Route
 		want string
 	}{
-		{Route{TrueNexthop: "192.0.2.1", ExitNexthop: "198.51.100.1"}, "192.0.2.1"},
+		{Route{TrueNexthop: "192.0.2.1", ExitNexthop: "198.51.100.1"}, "198.51.100.1"},
 		{Route{TrueNexthop: "???", ExitNexthop: "198.51.100.1"}, "198.51.100.1"},
-		{Route{TrueNexthop: "???"}, "???"},
+		{Route{TrueNexthop: "192.0.2.1"}, ""},
 		{Route{ExitNexthop: "198.51.100.1"}, "198.51.100.1"},
 	} {
 		if got := tc.r.NextHop(); got != tc.want {
