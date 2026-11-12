@@ -97,6 +97,9 @@ jobs:
           HEXTET_LG_IMAGE=ghcr.io/hextetsystems/hextet-lg@sha256:0000000000000000000000000000000000000000000000000000000000000000 docker compose config -q
 
   goreleaser:
+    # Validate release packaging before merge and again for release tags. A
+    # main-branch push has already passed the PR check; skip its extra snapshot.
+    if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/')
     name: GoReleaser configuration and snapshot
     runs-on: ubuntu-latest
     timeout-minutes: 20

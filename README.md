@@ -546,7 +546,7 @@ go build ./cmd/hextet-lg
 ./hextet-lg version
 ```
 
-Requires the Go version declared in `go.mod` (1.26 or newer). Release tooling: `make docker` (local image), `goreleaser check` (`make release-check`) and `make snapshot` (local release build into `dist/`, no credentials, nothing published). CI (`.github/workflows/ci.yaml`) runs the checks above plus the image, Compose and GoReleaser snapshot validation on every pull request and push to `main`.
+Requires the Go version declared in `go.mod` (1.26 or newer). Release tooling: `make docker` (local image), `goreleaser check` (`make release-check`) and `make snapshot` (local release build into `dist/`, no credentials, nothing published). CI runs Go and Docker/Compose checks on pull requests and pushes to `main`; GoReleaser snapshot validation runs on pull requests and release-tag validation, not again on the post-merge `main` push.
 
 `node --test internal/web/testdata/*.test.js` runs the client-script unit tests. Tests use `httptest` fixtures and do not require a live OpenBGPD process. Dependencies use normal Go module metadata and are not vendored. Opt-in headless-Chromium regression tests and an opt-in, read-only live OpenBGPD compatibility check are described in [docs/TESTING.md](docs/TESTING.md); without their environment variables they are skipped, never reported as passing.
 

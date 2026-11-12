@@ -71,9 +71,9 @@ Labels: `org.opencontainers.image.{title,description,source,url,documentation,li
 
 **`.github/workflows/ci.yaml`** runs on pull requests, pushes to `main` and (as a reusable workflow) from the release workflow. It needs no secrets and no access to OpenBGPD, Prometheus, Cloudflare or any private network. Jobs:
 
-* *Go checks*: `gofmt` (fails on unformatted files), `go mod verify`, `go vet`, `go build`, `go test ./...`, `go test -race ./...`, using the Go version declared in `go.mod` (latest patch). The tests use `httptest` backends; the five-minute container load exercise is **not** part of CI.
-* *Docker image and Compose*: builds linux/amd64 and linux/arm64 from the Dockerfile, smoke-tests the amd64 image (version, `/healthz`, `/readyz`, `/metrics` is 404, UID 10001, read-only root, all capabilities dropped, clean stop) with the committed example configuration, and runs `docker compose config -q` for the default and a digest-pinned image.
-* *GoReleaser*: `goreleaser check`, then `release --snapshot --clean`, `sha256sum -c`, verification that no `config*.yaml` is in the archive, and `hextet-lg version` from the archived binary.
+* *Go checks*: run on pull requests, pushes to `main`, and release-tag validation. They include formatting, `go mod verify`, `go vet`, `go build`, `go test ./...`, `go test -race ./...`, and the JavaScript tests, using the Go version declared in `go.mod` (latest patch). The tests use `httptest` backends; the five-minute container load exercise is **not** part of CI.
+* *Docker image and Compose*: run on pull requests, pushes to `main`, and release-tag validation. They build linux/amd64 and linux/arm64 from the Dockerfile, smoke-test the amd64 image (version, `/healthz`, `/readyz`, `/metrics` is 404, UID 10001, read-only root, all capabilities dropped, clean stop) with the committed example configuration, and run `docker compose config -q` for the default and a digest-pinned image.
+* *GoReleaser*: runs on pull requests and release-tag validation, but is skipped on pushes to `main` because the pull request already checked packaging and the release-tag run checks it again. It runs `goreleaser check`, then `release --snapshot --clean`, verifies checksums and archive contents, and checks `hextet-lg version` from an archived binary.
 
 **`.github/workflows/release.yaml`** runs only for pushed tags matching `v*`:
 
