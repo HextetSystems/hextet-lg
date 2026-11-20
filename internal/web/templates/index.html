@@ -11,6 +11,7 @@
 <header class="topbar">{{template "brand"}}{{template "nav" .}}</header>
 <main>
   <div class="page-head"><h1>Route Explorer</h1><p class="lead">Inspect routes across this network's OpenBGPD backends.</p></div>
+  {{if not .SnapshotAt.IsZero}}<div class="notice snapshot-note"><strong>Snapshot created at <time datetime="{{routeMapTime .SnapshotAt}}">{{routeMapDisplayTime .SnapshotAt}}</time></strong> · <a href="{{.LiveURL}}">Run this search live</a></div>{{end}}
   <form id="search-form" class="panel search-panel" method="get" action="/" role="search" aria-label="Route search" hx-get="/" hx-target="#results" hx-swap="innerHTML" hx-push-url="true">
     <div class="controls">
       <label class="c-backend"><span class="sr-only">Backend</span><select name="backend" title="Backend"><option value="all" {{if eq .SelectedBackend "all"}}selected{{end}}>All enabled backends</option>{{range .Backends}}<option value="{{.ID}}" {{if eq $.SelectedBackend .ID}}selected{{end}}>{{.Name}}{{if .Location}} · {{.Location}}{{end}}</option>{{end}}</select></label>
@@ -19,7 +20,7 @@
       <label class="c-view"><span class="sr-only">View</span><select name="view" title="View"><option value="table" {{if eq .View "table"}}selected{{end}}>HTML table</option><option value="text" {{if eq .View "text"}}selected{{end}}>Plain text summary</option><option value="detail" {{if eq .View "detail"}}selected{{end}}>Plain text detail</option></select></label>
       <button type="submit" aria-label="Search routes"><span class="button-text">Search</span><span class="spinner" aria-hidden="true"></span></button>
     </div>
-    <div class="search-tools">{{template "context" .}}<button type="button" data-copy-link>Copy link</button><a href="/">Clear search</a><span id="copy-status" class="sr-only" role="status" aria-live="polite"></span></div>
+    <div class="search-tools">{{template "context" .}}{{if .SnapshotAt.IsZero}}<span class="copy-group">Copy: <button type="button" data-copy-link>Live</button><button type="button" data-copy-value="{{.SnapshotURL}}">Snapshot</button></span>{{end}}<a href="/">Clear search</a><span id="copy-status" class="sr-only" role="status" aria-live="polite"></span></div>
     <details class="advanced" id="advanced" {{if .Form.AdvancedOpen}}open{{end}}>
       <summary>Advanced filters <small id="advanced-count">{{if .Form.ActiveCount}}({{.Form.ActiveCount}} active){{end}}</small></summary>
       <div class="adv-body">

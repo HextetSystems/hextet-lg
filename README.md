@@ -9,7 +9,7 @@ Hextet LG supplies a read-only web interface for the `openbgpd/openbgpd` Docker 
 - Inspect route paths, BGP neighbors, and RTR sessions; share searches with bookmarkable URLs or plain-text output.
 - Customize the site with optional branding, themes, community definitions, and bounded DNS enrichment.
 
-Results use a short-lived, bounded in-memory cache. Links are live queries, not historical snapshots.
+Results use a short-lived, bounded in-memory cache. Route searches offer both live links and self-contained snapshots of the currently displayed page. BGP path-map links also carry bounded snapshots; these URLs are not stored by the application.
 
 ## Get started
 

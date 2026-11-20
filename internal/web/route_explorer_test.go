@@ -267,14 +267,14 @@ func TestCompactSearchControls(t *testing.T) {
 	if !strings.Contains(form, `<details class="advanced" id="advanced" >`) {
 		t.Error("Advanced filters must be collapsed by default")
 	}
-	for _, want := range []string{`<a href="/">Clear search</a>`, `<button type="button" data-copy-link>Copy link</button>`, `id="copy-status"`, `role="status"`} {
+	for _, want := range []string{`<a href="/">Clear search</a>`, `data-copy-link>Live</button>`, `data-copy-value="`, `id="copy-status"`, `role="status"`} {
 		if !strings.Contains(form, want) {
 			t.Errorf("missing secondary control %s", want)
 		}
 	}
 	// The route explorer has exactly one Copy link: the one beside the search.
-	if strings.Count(body, ">Copy link<") != 1 || strings.Contains(body, `id="copy-link"`) {
-		t.Errorf("want one Copy link on the explorer, got %d", strings.Count(body, ">Copy link<"))
+	if strings.Count(body, ">Live</button>") != 1 || strings.Count(body, ">Snapshot</button>") != 1 || strings.Contains(body, `id="copy-link"`) {
+		t.Error("route explorer must have one Live and one Snapshot copy button")
 	}
 	// Only route views expose Copy link; session and reference pages do not.
 	for _, path := range []string{"/neighbors", "/rtr", "/communities"} {

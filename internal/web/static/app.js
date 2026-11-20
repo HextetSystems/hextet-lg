@@ -5,8 +5,8 @@ bind();
 // Browser Back/Forward re-renders the page body from the server, which replaces the button.
 document.addEventListener('htmx:historyRestore',bind)}catch(e){}})();
 // Copy buttons confirm in their own label and in the #copy-status live region (when present), then restore the label.
-document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("[data-copy],[data-copy-link]");if(!t)return;
- const isLink=t.matches("[data-copy-link]"),src=isLink?null:document.getElementById(t.dataset.copy),text=isLink?location.href:src&&src.textContent;
+document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("[data-copy],[data-copy-link],[data-copy-value]");if(!t)return;
+ const isLink=t.matches("[data-copy-link]"),isValue=t.matches("[data-copy-value]"),src=isLink||isValue?null:document.getElementById(t.dataset.copy),text=isLink?location.href:isValue?t.dataset.copyValue:src&&src.textContent;
  const label=t.dataset.label||t.textContent;t.dataset.label=label;const status=document.getElementById('copy-status');
  const say=(button,live)=>{t.textContent=button;if(status)status.textContent=live;clearTimeout(t._copyTimer);t._copyTimer=setTimeout(()=>{t.textContent=label;if(status)status.textContent=''},1800)};
  if(typeof text!=='string'){say('Copy failed','Nothing to copy');return}

@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -89,7 +90,12 @@ func (h *Handler) routeMapURL(rows []bgp.Route, backend, prefix string, fetchedA
 	if err != nil {
 		return ""
 	}
-	data := base64.RawURLEncoding.EncodeToString(b)
+	var compressed bytes.Buffer
+	zw := gzip.NewWriter(&compressed)
+	if _, err := zw.Write(b); err != nil || zw.Close() != nil {
+		return ""
+	}
+	data := base64.RawURLEncoding.EncodeToString(compressed.Bytes())
 	values := url.Values{"prefix": {prefix}, "backend": {backend}, "data": {data}}
 	u := "/map?" + values.Encode()
 	maxURL, maxQuery := h.cfg.Server.MaxURLBytes, h.cfg.Server.MaxQueryBytes
@@ -138,8 +144,13 @@ func (h *Handler) routeMap(w http.ResponseWriter, r *http.Request) {
 		requestError(w, r, 400, "Invalid map data.")
 		return
 	}
-	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
-	if err != nil || len(decoded) > 3072 {
+	compressed, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil || len(compressed) > maxRouteMapURL {
+		requestError(w, r, 400, "Invalid map data.")
+		return
+	}
+	decoded, err := gunzipBounded(compressed, 3072)
+	if err != nil {
 		requestError(w, r, 400, "Invalid map data.")
 		return
 	}

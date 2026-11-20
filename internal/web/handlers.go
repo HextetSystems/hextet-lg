@@ -116,8 +116,11 @@ type Page struct {
 	LargeCommunityEnabled bool
 	Groups                []FormGroup
 	// Cols is the route table's column layout (display.route_columns).
-	Cols RouteCols
-	Map  RouteMap
+	Cols        RouteCols
+	Map         RouteMap
+	SnapshotURL string
+	SnapshotAt  time.Time
+	LiveURL     string
 
 	// Started is when request handling began (zero when unknown); the footer
 	// computes the page generation time from it when it is rendered.
@@ -216,6 +219,7 @@ func NewHandler(cfg config.Config, opts ...Option) (*Handler, error) {
 		"neighborTitle":       neighborTitle,
 		"neighborCell":        h.neighborCell,
 		"routeMapURL":         h.routeMapURL,
+		"routeSnapshotURL":    h.routeSnapshotURL,
 		"routeMapAdd":         routeMapAdd,
 		"routeMapLabel":       routeMapLabel,
 		"routeMapTime":        routeMapTime,
@@ -309,6 +313,7 @@ func commas(n int) string {
 func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", h.index)
+	mux.HandleFunc("GET /snapshot", h.routeSnapshot)
 	// Disabled session views are not registered at all: their URLs answer 404
 	// and no navigation links to them. The two flags are independent.
 	if h.cfg.Features.BGPNeighborsEnabled() {
@@ -529,6 +534,8 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 			p.Problems = append(p.Problems, err.Error())
 		} else {
 			h.fillResults(&p, q, results, page)
+			p.LiveURL = publicURL(q, p.SelectedBackend, p.View, page, false)
+			p.SnapshotURL = h.routeSnapshotURL(p)
 			noteSearch(r, p.Summary, results)
 		}
 	}

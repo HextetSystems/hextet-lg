@@ -1,10 +1,13 @@
 package web
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -36,6 +39,14 @@ func TestRouteMapLinkAndPageUseCurrentBackendPaths(t *testing.T) {
 	}
 	var payload routeMapPayload
 	data, err := base64.RawURLEncoding.DecodeString(mapURL.Query().Get("data"))
+	if err == nil {
+		var zr *gzip.Reader
+		zr, err = gzip.NewReader(strings.NewReader(string(data)))
+		if err == nil {
+			data, err = io.ReadAll(io.LimitReader(zr, 3073))
+			_ = zr.Close()
+		}
+	}
 	if err != nil || json.Unmarshal(data, &payload) != nil || payload.FetchedAt.IsZero() || time.Since(payload.FetchedAt) > time.Minute {
 		t.Fatalf("map URL did not preserve the recent route fetch time: %v", payload.FetchedAt)
 	}
@@ -98,7 +109,7 @@ func TestRouteMapFeatureCanBeDisabled(t *testing.T) {
 		t.Fatal("map link was shown while BGP maps are disabled")
 	}
 	payload, _ := json.Marshal(routeMapPayload{FetchedAt: time.Now().UTC(), Paths: []routeMapPath{{ASPath: "13335"}, {ASPath: "15169"}}})
-	path := "/map?prefix=203.0.113.0%2F24&backend=a&data=" + base64.RawURLEncoding.EncodeToString(payload)
+	path := "/map?prefix=203.0.113.0%2F24&backend=a&data=" + base64.RawURLEncoding.EncodeToString(gzipBytes(t, payload))
 	if rr := get(handler, path); rr.Code != http.StatusNotFound {
 		t.Fatalf("disabled map route status %d, want 404", rr.Code)
 	}
@@ -118,7 +129,7 @@ func TestRouteMapEscapesLabelsWithoutSchedulingCallerSuppliedASNEnrichment(t *te
 	}
 	defer h.Close()
 	payload, _ := json.Marshal(routeMapPayload{FetchedAt: time.Now().UTC(), Paths: []routeMapPath{{ASPath: "13335", Peer: "<script>bad</script>"}, {ASPath: "15169"}}})
-	values := url.Values{"prefix": {"203.0.113.0/24"}, "backend": {"a"}, "data": {base64.RawURLEncoding.EncodeToString(payload)}}
+	values := url.Values{"prefix": {"203.0.113.0/24"}, "backend": {"a"}, "data": {base64.RawURLEncoding.EncodeToString(gzipBytes(t, payload))}}
 	rr := get(h.Routes(), "/map?"+values.Encode())
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status %d: %s", rr.Code, rr.Body.String())
@@ -144,9 +155,23 @@ func TestRouteMapURLHonorsConfiguredRequestLimits(t *testing.T) {
 	doc := `{"rib":[` + strings.Join(rows, ",") + `]}`
 	h := newRouteFixtureHandler(t, func(c *config.Config) { c.Server.MaxURLBytes = 700 }, backendSpec{"a", "Alpha", serveDoc(doc)})
 	page := get(h, "/?type=prefix&q=203.0.113.0%2F24&backend=a").Body.String()
-	if strings.Contains(page, `class="map-link"`) {
-		t.Fatal("map link exceeded configured request URL limit")
+	match := regexp.MustCompile(`href="([^"]*?/map\?[^\"]+)"`).FindStringSubmatch(page)
+	if len(match) != 2 || len(html.UnescapeString(match[1])) > 700 {
+		t.Fatal("compressed map link did not fit configured request URL limit")
 	}
+}
+
+func gzipBytes(t *testing.T, input []byte) []byte {
+	t.Helper()
+	var out bytes.Buffer
+	w := gzip.NewWriter(&out)
+	if _, err := w.Write(input); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return out.Bytes()
 }
 
 func TestRouteMapMergesASNsAcrossDifferentPathLengths(t *testing.T) {

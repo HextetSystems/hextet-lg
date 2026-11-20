@@ -58,8 +58,8 @@ select:hover,input:hover{border-color:var(--color-text-muted)}
 button{height:36px;padding:0 16px;border:1px solid transparent;border-radius:7px;background:var(--color-accent);color:var(--color-accent-foreground);font:700 13px system-ui,sans-serif;display:flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap}
 button:hover{background:var(--color-accent-hover)}
 /* Secondary controls: neutral, so the accent stays on the primary action. */
-nav button,button[data-copy],button[data-copy-link]{background:var(--color-surface);color:var(--color-text);border-color:var(--color-border-control)}
-nav button:hover,button[data-copy]:hover,button[data-copy-link]:hover{background:var(--color-surface-hover)}
+nav button,button[data-copy],button[data-copy-link],button[data-copy-value]{background:var(--color-surface);color:var(--color-text);border-color:var(--color-border-control)}
+nav button:hover,button[data-copy]:hover,button[data-copy-link]:hover,button[data-copy-value]:hover{background:var(--color-surface-hover)}
 .copy-fallback{position:fixed;left:-10000px;top:0;opacity:0;pointer-events:none}
 .map-link{display:inline-flex;vertical-align:middle;padding:.1rem;border-radius:0.25rem;color:var(--color-accent-text)}
 .map-link svg{width:1rem;height:1rem;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
