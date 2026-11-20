@@ -94,7 +94,9 @@ details.advanced>summary{cursor:pointer;color:var(--color-accent-text);font-weig
 .adv-body{clear:both;border-top:1px solid var(--color-border);margin-top:4px;padding-top:2px}
 /* Secondary row: floats beside the Advanced filters summary so the closed panel costs one line. */
 .search-tools{float:right;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:4px 10px;margin-top:6px;font-size:12px;max-width:100%}
-.ctx{display:contents}
+.copy-group{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.search-actions{display:inline-flex;align-items:center;gap:10px;white-space:nowrap}
+.ctx{display:inline-flex;align-items:center;gap:6px}
 .tag{font:10px ui-monospace,monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--color-text-muted);border:1px solid var(--color-border);border-radius:4px;padding:2px 6px}
 .search-tools .chip{margin:0;font-size:11px;max-width:26ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
 details.help{position:relative}
@@ -211,9 +213,10 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font:11px ui-mono
   button{justify-content:center}
   /* Touch targets: only narrow screens get the taller controls. */
   select,input,.controls button{height:42px}
-  .search-tools button{height:36px}
-  .search-tools a,details.advanced>summary{line-height:36px}
-  .search-tools{float:none;justify-content:flex-start}
+  .search-tools button{height:40px}
+  .search-tools a,details.advanced>summary{line-height:40px}
+  .search-tools{float:none;justify-content:space-between;gap:4px 10px}
+  .search-actions{gap:8px}
   /* The help text spans the search panel instead of hanging off its icon, so it can never be wider than a phone screen wherever the icon wraps to. */
   details.help{position:static}
   .popover{left:10px;right:10px;top:auto;width:auto;margin-top:4px}

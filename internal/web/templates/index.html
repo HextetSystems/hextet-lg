@@ -20,7 +20,7 @@
       <label class="c-view"><span class="sr-only">View</span><select name="view" title="View"><option value="table" {{if eq .View "table"}}selected{{end}}>HTML table</option><option value="text" {{if eq .View "text"}}selected{{end}}>Plain text summary</option><option value="detail" {{if eq .View "detail"}}selected{{end}}>Plain text detail</option></select></label>
       <button type="submit" aria-label="Search routes"><span class="button-text">Search</span><span class="spinner" aria-hidden="true"></span></button>
     </div>
-    <div class="search-tools">{{template "context" .}}{{if .SnapshotAt.IsZero}}<span class="copy-group">Copy: <button type="button" data-copy-link>Live</button><button type="button" data-copy-value="{{.SnapshotURL}}">Snapshot</button></span>{{end}}<a href="/">Clear search</a><span id="copy-status" class="sr-only" role="status" aria-live="polite"></span></div>
+    <div class="search-tools">{{template "context" .}}<span class="search-actions">{{if .SnapshotAt.IsZero}}<span class="copy-group">Copy: <button type="button" data-copy-link>Live</button><button type="button" data-copy-value="{{.SnapshotURL}}">Snapshot</button></span>{{end}}<a href="/">Clear search</a></span><span id="copy-status" class="sr-only" role="status" aria-live="polite"></span></div>
     <details class="advanced" id="advanced" {{if .Form.AdvancedOpen}}open{{end}}>
       <summary>Advanced filters <small id="advanced-count">{{if .Form.ActiveCount}}({{.Form.ActiveCount}} active){{end}}</small></summary>
       <div class="adv-body">
