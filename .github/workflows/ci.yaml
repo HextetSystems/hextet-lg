@@ -3,16 +3,15 @@
 # smoke test uses the committed example configuration (nothing contacts a
 # backend at startup).
 #
-# Triggers: pull requests, pushes to main, and workflow_call. Release tags do
-# not run this file on their own; release.yaml calls it so that the tagged
-# commit passes the same checks before anything is published.
+# Triggers: pull requests and pushes to main. Before publishing a tag,
+# release.yaml requires a successful main run for that exact commit instead of
+# rerunning the full CI suite.
 name: CI
 
 on:
   pull_request:
   push:
     branches: [main]
-  workflow_call:
 
 # Least privilege: CI only reads the repository.
 permissions:
@@ -67,13 +66,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - name: Build amd64 image (not pushed)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: docker buildx build --platform linux/amd64 --build-arg REVISION="${GITHUB_SHA}" .
       - name: Build both architectures (not pushed)
-        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
-        # Pull requests and release validation keep checking the multi-arch
-        # path. The Dockerfile cross-compiles, so arm64 needs no emulation.
+        # The Dockerfile cross-compiles, so arm64 needs no emulation. Main
+        # validates the same architectures that the release publishes.
         run: docker buildx build --platform linux/amd64,linux/arm64 --build-arg REVISION="${GITHUB_SHA}" .
       - name: Build amd64 image for the smoke test
         run: docker buildx build --load --platform linux/amd64 --build-arg REVISION="${GITHUB_SHA}" -t hextet-lg:ci .
@@ -101,9 +96,9 @@ jobs:
           HEXTET_LG_IMAGE=ghcr.io/hextetsystems/hextet-lg@sha256:0000000000000000000000000000000000000000000000000000000000000000 docker compose config -q
 
   goreleaser:
-    # Validate release packaging before merge and again for release tags. A
-    # main-branch push has already passed the PR check; skip its extra snapshot.
-    if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/')
+    # Validate release packaging on PRs and on the exact main commit that a
+    # release tag will require. The tag workflow only performs the real release.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     name: GoReleaser configuration and snapshot
     runs-on: ubuntu-latest
     timeout-minutes: 20

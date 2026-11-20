@@ -69,24 +69,24 @@ Labels: `org.opencontainers.image.{title,description,source,url,documentation,li
 
 ## CI/CD
 
-**`.github/workflows/ci.yaml`** runs on pull requests, pushes to `main` and (as a reusable workflow) from the release workflow. It needs no secrets and no access to OpenBGPD, Prometheus, Cloudflare or any private network. Jobs:
+**`.github/workflows/ci.yaml`** runs on pull requests and pushes to `main`. It needs no secrets and no access to OpenBGPD, Prometheus, Cloudflare or any private network. Jobs:
 
-* *Go checks*: run on pull requests, pushes to `main`, and release-tag validation. They include formatting, `go mod verify`, `go vet`, `go build`, `go test ./...`, `go test -race ./...`, and the JavaScript tests, using the Go version declared in `go.mod` (latest patch). The tests use `httptest` backends; the five-minute container load exercise is **not** part of CI.
-* *Docker image and Compose*: run on pull requests, pushes to `main`, and release-tag validation. Pull requests and release-tag validation build linux/amd64 and linux/arm64; pushes to `main` build linux/amd64 only for faster confirmation. All paths smoke-test the amd64 image (version, `/healthz`, `/readyz`, `/metrics` is 404, UID 10001, read-only root, all capabilities dropped, clean stop) with the committed example configuration, and run `docker compose config -q` for the default and a digest-pinned image.
-* *GoReleaser*: runs on pull requests and release-tag validation, but is skipped on pushes to `main` because the pull request already checked packaging and the release-tag run checks it again. It runs `goreleaser check`, then `release --snapshot --clean`, verifies checksums and archive contents, and checks `hextet-lg version` from an archived binary.
+* *Go checks*: run on pull requests and pushes to `main`. They include formatting, `go mod verify`, `go vet`, `go build`, `go test ./...`, `go test -race ./...`, and the JavaScript tests, using the Go version declared in `go.mod` (latest patch). The tests use `httptest` backends; the five-minute container load exercise is **not** part of CI.
+* *Docker image and Compose*: run on pull requests and pushes to `main`. Both build linux/amd64 and linux/arm64, then smoke-test the amd64 image (version, `/healthz`, `/readyz`, `/metrics` is 404, UID 10001, read-only root, all capabilities dropped, clean stop) with the committed example configuration, and run `docker compose config -q` for the default and a digest-pinned image.
+* *GoReleaser*: runs on pull requests and pushes to `main`. It runs `goreleaser check`, then `release --snapshot --clean`, verifies checksums and archive contents, and checks `hextet-lg version` from an archived binary. This validates packaging on the exact main commit before a release tag is cut.
 
 **`.github/workflows/release.yaml`** runs only for pushed tags matching `v*`:
 
-1. `validate-tag`: the tag must be `vMAJOR.MINOR.PATCH[-prerelease]` and its commit must be reachable from `main`.
-2. `ci`: the full CI workflow runs on the tagged commit, including linux/amd64 and linux/arm64 image builds.
-3. `release` (needs both): checkout at the tag, Go, Buildx, `docker/login-action` to `ghcr.io` with the built-in `GITHUB_TOKEN`, `goreleaser release --clean` (including generated release notes), then the digest of the pushed manifest list is read back with `docker buildx imagetools inspect`, written to the job summary and attached to the GitHub Release as `image-digests.txt`.
+1. `validate-tag`: the tag must be `vMAJOR.MINOR.PATCH[-prerelease]`, its commit must be reachable from `main`, and a successful completed `main` CI run must exist for that exact commit. The job uses read-only `actions` permission to check the run. If a tag is pushed before CI finishes, this job fails with instructions to wait for CI and rerun the release workflow.
+2. `release` (needs validation): checkout at the tag, Go, Buildx, `docker/login-action` to `ghcr.io` with the built-in `GITHUB_TOKEN`, `goreleaser release --clean` (including generated release notes), then the digest of the pushed manifest list is read back with `docker buildx imagetools inspect`, written to the job summary and attached to the GitHub Release as `image-digests.txt`.
 
-Permissions are `contents: read` for the workflow; only the `release` job gets `contents: write` and `packages: write`. No personal access tokens are used. Pull requests cannot reach the release workflow, and because `release` needs `ci`, a failing test cannot produce a release. Third-party actions are pinned to commit SHAs (version in the trailing comment); update them deliberately (Dependabot is configured for this).
+Permissions are `contents: read` for the workflow; the validation job also gets `actions: read`, and only the `release` job gets `contents: write` and `packages: write`. No personal access tokens are used. Pull requests cannot reach the release workflow, and a failing or unfinished main CI run cannot produce a release. Third-party actions are pinned to commit SHAs (version in the trailing comment); update them deliberately (Dependabot is configured for this).
 
 ### Cutting a release (maintainer)
 
 ```sh
 git switch main && git pull --ff-only
+gh run list --workflow ci.yaml --commit "$(git rev-parse HEAD)" --event push  # wait for a successful main CI run on this commit
 git tag -s vX.Y.Z -m "Hextet LG vX.Y.Z"     # annotated and signed
 git push origin vX.Y.Z                       # starts the release workflow
 ```

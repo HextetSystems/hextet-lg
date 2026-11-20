@@ -3,8 +3,8 @@
 #   git tag -s v1.1.0 -m "Hextet LG v1.1.0"
 #   git push origin v1.1.0
 #
-# The tagged commit must pass the full CI workflow first (job "ci"); the
-# release job needs it, so a failing test cannot result in a published release.
+# The tagged commit must already have a successful main CI run. Waiting for
+# that run before tagging avoids repeating checks while preserving the gate.
 # Pull requests and branch pushes never reach this file.
 name: Release
 
@@ -26,9 +26,12 @@ env:
 
 jobs:
   validate-tag:
-    name: Validate tag
+    name: Validate tag and prior CI
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -45,17 +48,28 @@ jobs:
           if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/main; then
             echo "::error::$tag does not point at a commit on main; release only reviewed commits"; exit 1
           fi
-
-  ci:
-    name: CI
-    needs: validate-tag
-    uses: ./.github/workflows/ci.yaml
-    permissions:
-      contents: read
+      - name: Require successful main CI for tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          runs="$(gh run list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --workflow ci.yaml \
+            --commit "${GITHUB_SHA}" \
+            --event push \
+            --limit 100 \
+            --json headSha,headBranch,event,status,conclusion)"
+          if ! jq -e --arg sha "${GITHUB_SHA}" \
+            'any(.[]; .headSha == $sha and .headBranch == "main" and .event == "push" and .status == "completed" and .conclusion == "success")' \
+            <<<"${runs}" >/dev/null; then
+            echo "::error::No successful CI push run for ${GITHUB_SHA} on main. Wait for CI on main to pass, then rerun all jobs in this release workflow."
+            exit 1
+          fi
 
   release:
     name: GoReleaser
-    needs: [validate-tag, ci]
+    needs: validate-tag
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
