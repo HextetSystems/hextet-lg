@@ -276,9 +276,15 @@ func TestCompactSearchControls(t *testing.T) {
 	if strings.Count(body, ">Copy link<") != 1 || strings.Contains(body, `id="copy-link"`) {
 		t.Errorf("want one Copy link on the explorer, got %d", strings.Count(body, ">Copy link<"))
 	}
-	// Other pages keep the navigation Copy link.
-	if o := get(h, "/communities").Body.String(); strings.Count(o, ">Copy link<") != 1 || !strings.Contains(o, `id="copy-link" data-copy-link`) {
-		t.Error("non-explorer pages keep the navigation Copy link")
+	// Shared-layout pages keep Copy link in the page body, outside navigation.
+	for _, path := range []string{"/neighbors", "/rtr", "/communities"} {
+		o := get(h, path).Body.String()
+		if strings.Count(o, ">Copy link<") != 1 || !strings.Contains(o, `<main><div class="page-tools"><button type="button" data-copy-link>Copy link</button></div>`) {
+			t.Errorf("%s must render one Copy link in the page body", path)
+		}
+		if strings.Contains(o[strings.Index(o, `<nav aria-label="Main navigation">`):strings.Index(o, `</nav>`)], ">Copy link<") {
+			t.Errorf("%s must not render Copy link in navigation", path)
+		}
 	}
 }
 
