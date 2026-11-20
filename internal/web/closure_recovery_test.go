@@ -1,6 +1,6 @@
 package web
 
-// Acceptance B: after a mixed workload ends, every resource counter returns to
+// After a mixed workload ends, every resource counter returns to
 // its idle baseline. Nothing is force-reset: if a counter does not recover, the
 // test reports who still owns the reservation.
 

@@ -17,9 +17,9 @@ import (
 	"github.com/HextetSystems/hextet-lg/internal/visibility"
 )
 
-// m44Files are synthetic definitions (documentation ASN 64500 and the private
+// communityDefinitionFiles are synthetic definitions (documentation ASN 64500 and the private
 // range): nothing here is a real operator's policy.
-var m44Files = map[string]string{
+var communityDefinitionFiles = map[string]string{
 	"as64500.txt": `# synthetic
 64500:100,Learned from customer
 64500:200,Learned from peer
@@ -33,7 +33,7 @@ soo 64500:nnn,Site of origin $0
 	"well-known.txt": "65535:65281,NO_EXPORT: do not export\n",
 }
 
-const m44Route = `{"rib":[{"prefix":"192.0.2.0/24","aspath":"64500","best":true,"neighbor":{"description":"peer-a","remote_addr":"192.0.2.1"},` +
+const communityRouteFixture = `{"rib":[{"prefix":"192.0.2.0/24","aspath":"64500","best":true,"neighbor":{"description":"peer-a","remote_addr":"192.0.2.1"},` +
 	`"communities":["64500:100","NO_EXPORT","64500:999","64501:7","64500:412"],` +
 	`"extended_communities":["rt 64500:1","soo 64500:42","rt 64500:2"],` +
 	`"large_communities":["64500:1:100","64500:1:4200000000","64500:2:2","64501:1:2"]}]}`
@@ -71,8 +71,8 @@ func routeBackend(doc string) backendSpec { return backendSpec{"a", "Alpha", ser
 
 const routeQuery = "/?type=prefix&q=192.0.2.0%2F24&backend=a"
 
-func TestM44RouteTooltips(t *testing.T) {
-	h := newDefsHandler(t, m44Files, nil, routeBackend(m44Route))
+func TestCommunityDescriptionsAppearInRouteDetails(t *testing.T) {
+	h := newDefsHandler(t, communityDefinitionFiles, nil, routeBackend(communityRouteFixture))
 	rr := get(h, routeQuery)
 	if rr.Code != 200 {
 		t.Fatal(rr.Code)
@@ -108,8 +108,8 @@ func TestM44RouteTooltips(t *testing.T) {
 	}
 }
 
-func TestM44DescriptionsAreEscapedEverywhere(t *testing.T) {
-	h := newDefsHandler(t, m44Files, nil, routeBackend(m44Route))
+func TestCommunityDescriptionsAreEscaped(t *testing.T) {
+	h := newDefsHandler(t, communityDefinitionFiles, nil, routeBackend(communityRouteFixture))
 	body := get(h, routeQuery).Body.String()
 	// 64500:412 matches 64500:4xx whose description holds markup, quotes and &.
 	want := `title="Regional policy 1 &amp; &#34;quotes&#34; &lt;b&gt;bold&lt;/b&gt;"`
@@ -134,9 +134,9 @@ func TestM44DescriptionsAreEscapedEverywhere(t *testing.T) {
 	}
 }
 
-func TestM44PlaintextIsUnchanged(t *testing.T) {
-	on := newDefsHandler(t, m44Files, nil, routeBackend(m44Route))
-	off := newDefsHandler(t, nil, nil, routeBackend(m44Route))
+func TestPlainTextDoesNotIncludeCommunityDescriptions(t *testing.T) {
+	on := newDefsHandler(t, communityDefinitionFiles, nil, routeBackend(communityRouteFixture))
+	off := newDefsHandler(t, nil, nil, routeBackend(communityRouteFixture))
 	elapsed := regexp.MustCompile(`\d+\.\ds`)
 	for _, view := range []string{"text", "detail"} {
 		target := routeQuery + "&view=" + view + "&output=plain"
@@ -162,12 +162,12 @@ func TestM44PlaintextIsUnchanged(t *testing.T) {
 // With and without definitions, the only difference in a route page is the
 // tooltip markup: neighbor links, IPv4 and IPv6 rows and everything else are
 // identical.
-func TestM44EnrichmentIsPurelyPresentational(t *testing.T) {
+func TestCommunityDefinitionsOnlyAffectPresentation(t *testing.T) {
 	doc := `{"rib":[` + strings.Join([]string{
 		`{"prefix":"192.0.2.0/24","aspath":"64500","best":true,"neighbor":{"description":"peer-a","remote_addr":"192.0.2.1"},"communities":["64500:100"],"extended_communities":["rt 64500:1"],"large_communities":["64500:1:100"]}`,
 		`{"prefix":"2001:db8::/32","aspath":"64500 64501","neighbor":{"description":"peer-v6","remote_addr":"2001:db8::1"},"communities":["64500:200"],"large_communities":["64501:1:2"]}`,
 	}, ",") + `]}`
-	on := newDefsHandler(t, m44Files, nil, routeBackend(doc))
+	on := newDefsHandler(t, communityDefinitionFiles, nil, routeBackend(doc))
 	off := newDefsHandler(t, nil, nil, routeBackend(doc))
 	strip := regexp.MustCompile(` class="known" title="[^"]*"`)
 	elapsed := regexp.MustCompile(`\d+\.\ds|Generated in [^<]+`) // per-request timings legitimately vary
@@ -187,12 +187,12 @@ func TestM44EnrichmentIsPurelyPresentational(t *testing.T) {
 	}
 }
 
-func TestM44DisabledReadsNothing(t *testing.T) {
+func TestDisabledCommunityDefinitionsAreNotRead(t *testing.T) {
 	// Disabled with a directory that would not load: nothing is read.
 	bad := writeDefs(t, map[string]string{"as64500.txt": "this is not valid\n"})
 	h := newDefsHandler(t, nil, func(c *config.Config) {
 		c.CommunityDefinitions = config.CommunityDefinitions{Enabled: false, Directory: bad}
-	}, routeBackend(m44Route))
+	}, routeBackend(communityRouteFixture))
 	body := get(h, routeQuery).Body.String()
 	if strings.Contains(body, `class="known"`) || !strings.Contains(body, `<span>64500:100</span>`) {
 		t.Fatal("tooltips rendered while disabled")
@@ -203,9 +203,9 @@ func TestM44DisabledReadsNothing(t *testing.T) {
 	}
 }
 
-func TestM44StartupPolicy(t *testing.T) {
+func TestInvalidCommunityDefinitionsFailStartup(t *testing.T) {
 	build := func(dir string) error {
-		cfg, closeAll := testConfig(defaults(), routeBackend(m44Route))
+		cfg, closeAll := testConfig(defaults(), routeBackend(communityRouteFixture))
 		defer closeAll()
 		cfg.CommunityDefinitions = config.CommunityDefinitions{Enabled: true, Directory: dir}
 		h, err := NewHandler(cfg)
@@ -245,8 +245,8 @@ func TestM44StartupPolicy(t *testing.T) {
 	}
 }
 
-func TestM44CommunityExplorer(t *testing.T) {
-	h := newDefsHandler(t, m44Files, nil, routeBackend(m44Route))
+func TestCommunityExplorerListsAndFiltersDefinitions(t *testing.T) {
+	h := newDefsHandler(t, communityDefinitionFiles, nil, routeBackend(communityRouteFixture))
 	body := get(h, "/communities?backend=a").Body.String()
 	for _, want := range []string{
 		"COMMUNITY REFERENCE", "Learned from customer", "Second operator seven", "NO_EXPORT: do not export",
@@ -275,18 +275,18 @@ func TestM44CommunityExplorer(t *testing.T) {
 	if b := get(h, "/communities?q=customer").Body.String(); !strings.Contains(b, "Learned from customer") || strings.Contains(b, "Second operator seven") {
 		t.Error("description search")
 	}
-	// Search links honour the M4.2 flags; the Explorer itself stays visible.
+	// Search links honor the feature flags; the Explorer itself stays visible.
 	no := false
-	h = newDefsHandler(t, m44Files, func(c *config.Config) {
+	h = newDefsHandler(t, communityDefinitionFiles, func(c *config.Config) {
 		c.Features = config.Features{Communities: &no, LargeCommunities: &no, ExtendedCommunities: &no}
-	}, routeBackend(m44Route))
+	}, routeBackend(communityRouteFixture))
 	rr := get(h, "/communities")
 	if rr.Code != 200 || !strings.Contains(rr.Body.String(), "Learned from customer") || strings.Contains(rr.Body.String(), "view=table") || strings.Contains(rr.Body.String(), "type=large-community") {
 		t.Fatal("explorer must stay visible without search links when the search types are disabled")
 	}
 }
 
-func TestM44SearchIsIndependentOfDefinitions(t *testing.T) {
+func TestCommunitySearchDoesNotDependOnDefinitions(t *testing.T) {
 	record := func(files map[string]string) (*[]string, http.Handler) {
 		var mu sync.Mutex
 		var seen []string
@@ -294,7 +294,7 @@ func TestM44SearchIsIndependentOfDefinitions(t *testing.T) {
 			mu.Lock()
 			seen = append(seen, r.URL.RequestURI())
 			mu.Unlock()
-			fmt.Fprint(w, m44Route)
+			fmt.Fprint(w, communityRouteFixture)
 		}}
 		return &seen, newDefsHandler(t, files, nil, spec)
 	}
@@ -308,7 +308,7 @@ func TestM44SearchIsIndependentOfDefinitions(t *testing.T) {
 		"/?ext-community=rt+64500%3A1&backend=a",
 		"/?as=64500&community=64500%3A100&best=1&backend=a",
 	}
-	seenOn, on := record(m44Files)
+	seenOn, on := record(communityDefinitionFiles)
 	seenOff, off := record(nil)
 	for _, q := range queries {
 		a, b := get(on, q), get(off, q)
@@ -328,11 +328,11 @@ func TestM44SearchIsIndependentOfDefinitions(t *testing.T) {
 	if rr.Code == 200 && len(*seenOn) > len(*seenOff) {
 		t.Error("a description reached the backend as a search")
 	}
-	// M4.2: disabled search types stay disabled with definitions present.
+	// Disabled search types stay disabled when definitions are present.
 	no := false
-	h := newDefsHandler(t, m44Files, func(c *config.Config) {
+	h := newDefsHandler(t, communityDefinitionFiles, func(c *config.Config) {
 		c.Features = config.Features{Communities: &no, LargeCommunities: &no, ExtendedCommunities: &no}
-	}, routeBackend(m44Route))
+	}, routeBackend(communityRouteFixture))
 	for _, q := range []string{"/?community=64500%3A100&backend=a", "/?type=large-community&q=64500%3A1%3A100&backend=a", "/?ext-community=rt+64500%3A1&backend=a"} {
 		if rr := get(h, q); rr.Code != 400 {
 			t.Errorf("%s: %d, want 400", q, rr.Code)
@@ -344,7 +344,7 @@ func TestM44SearchIsIndependentOfDefinitions(t *testing.T) {
 	}
 }
 
-func TestM44VisibilityCacheAndSharedFlights(t *testing.T) {
+func TestCommunityDefinitionsRespectVisibilityAndCache(t *testing.T) {
 	var hits atomic.Int32
 	doc := `{"rib":[{"prefix":"10.1.0.0/16","communities":["64500:100"]},{"prefix":"192.0.2.0/24","communities":["64500:200"]}]}`
 	spec := backendSpec{"a", "Alpha", func(w http.ResponseWriter, r *http.Request) {
@@ -352,7 +352,7 @@ func TestM44VisibilityCacheAndSharedFlights(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 		fmt.Fprint(w, doc)
 	}}
-	h := newDefsHandler(t, m44Files, func(c *config.Config) {
+	h := newDefsHandler(t, communityDefinitionFiles, func(c *config.Config) {
 		c.LookingGlass.CacheTTL = time.Minute
 		c.RouteVisibility.Exclude.IPv4 = []visibility.Rule{{Prefix: "10.0.0.0/8", Match: "or-longer"}}
 	}, spec)
@@ -380,7 +380,7 @@ func TestM44VisibilityCacheAndSharedFlights(t *testing.T) {
 	}
 }
 
-func TestM44LargeResultLookup(t *testing.T) {
+func TestCommunityLookupHandlesLargeResults(t *testing.T) {
 	const n = 1000
 	h := newDefsHandler(t, map[string]string{
 		"as64500.txt": "64500:1,Std\nrt 64500:1,Ext\n395089:0:8,Large 8\n395089:5:2,Large 52\n",
@@ -398,13 +398,13 @@ func TestM44LargeResultLookup(t *testing.T) {
 	}
 }
 
-func TestM44ExampleDefinitionsComeFromTextFile(t *testing.T) {
+func TestExampleCommunityDefinitionsLoadFromFiles(t *testing.T) {
 	data, err := os.ReadFile("../../examples/communities/as395089.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
 	files := map[string]string{"as395089.txt": string(data)}
-	doc := strings.Replace(m44Route, `"large_communities":[`, `"large_communities":["395089:0:8",`, 1)
+	doc := strings.Replace(communityRouteFixture, `"large_communities":[`, `"large_communities":["395089:0:8",`, 1)
 	cfg, closeAll := testConfig(defaults(), routeBackend(doc))
 	t.Cleanup(closeAll)
 	cfg.CommunityDefinitions = config.CommunityDefinitions{Enabled: true, Directory: writeDefs(t, files)}
@@ -431,8 +431,8 @@ func TestM44ExampleDefinitionsComeFromTextFile(t *testing.T) {
 	}
 }
 
-func TestM44StartupDiagnostics(t *testing.T) {
-	cfg, closeAll := testConfig(defaults(), routeBackend(m44Route))
+func TestCommunityDefinitionStartupDiagnostics(t *testing.T) {
+	cfg, closeAll := testConfig(defaults(), routeBackend(communityRouteFixture))
 	defer closeAll()
 	dir := writeDefs(t, map[string]string{"as64500.txt": "64500:1,ok\n64500:nnn,wild $0\n", "notes.txt": "x"})
 	cfg.CommunityDefinitions = config.CommunityDefinitions{Enabled: true, Directory: dir}
@@ -457,12 +457,12 @@ func TestM44StartupDiagnostics(t *testing.T) {
 	}
 }
 
-func TestM44ExplorerIsBounded(t *testing.T) {
+func TestCommunityExplorerLimitsResults(t *testing.T) {
 	var b strings.Builder
 	for i := 0; i < maxExplorerRows+500; i++ {
 		fmt.Fprintf(&b, "64500:%d,Definition number %d\n", i, i)
 	}
-	h := newDefsHandler(t, map[string]string{"as64500.txt": b.String()}, nil, routeBackend(m44Route))
+	h := newDefsHandler(t, map[string]string{"as64500.txt": b.String()}, nil, routeBackend(communityRouteFixture))
 	body := get(h, "/communities").Body.String()
 	if got := strings.Count(body, "Definition number"); got != maxExplorerRows {
 		t.Fatalf("%d rows, want %d", got, maxExplorerRows)

@@ -10,7 +10,7 @@ import (
 	"github.com/HextetSystems/hextet-lg/internal/config"
 )
 
-func TestM42SearchEnforcementAndForm(t *testing.T) {
+func TestSearchFlagsControlValidationAndForm(t *testing.T) {
 	var hits atomic.Int32
 	cfg, done := testConfig(defaults(), backendSpec{"a", "A", func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
@@ -69,7 +69,7 @@ func TestM42SearchEnforcementAndForm(t *testing.T) {
 	}
 }
 
-func TestM42PrefixModesAndHistory(t *testing.T) {
+func TestPrefixModesPreserveCanonicalHistory(t *testing.T) {
 	var seen string
 	h := newTestHandler(t, defaults(), backendSpec{"a", "A", func(w http.ResponseWriter, r *http.Request) { seen = r.URL.RawQuery; fmt.Fprint(w, `{"rib":[]}`) }})
 	for _, tc := range []struct{ query, upstream, canonical string }{

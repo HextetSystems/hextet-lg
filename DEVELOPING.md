@@ -39,4 +39,4 @@ Browser regression tests and live OpenBGPD compatibility checks are opt-in. Thei
 - Do not include production configuration, backend responses, or private network details.
 - Do not stage, commit, tag, push, deploy, or publish unless explicitly instructed.
 
-For the project structure and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md). Configuration options are documented in [`examples/config.example.yaml`](examples/config.example.yaml).
+For the project structure and request flow, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Configuration options are documented in [`examples/config.example.yaml`](examples/config.example.yaml).

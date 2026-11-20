@@ -90,7 +90,7 @@ func TestNeighborNavigationAndVisibility(t *testing.T) {
 }
 
 func TestNeighborLinkDropsSearchContext(t *testing.T) {
-	h := m48Handler(t, func(c *config.Config) { c.Display.RouteColumns.Neighbor = true }, backendSpec{"a", "Alpha", serveDoc(`[{"prefix":"2001:db8::/32","true_nexthop":"198.51.100.1","neighbor":{"remote_addr":"192.0.2.1","description":"example"}}]`)})
+	h := newTestRoutes(t, func(c *config.Config) { c.Display.RouteColumns.Neighbor = true }, backendSpec{"a", "Alpha", serveDoc(`[{"prefix":"2001:db8::/32","true_nexthop":"198.51.100.1","neighbor":{"remote_addr":"192.0.2.1","description":"example"}}]`)})
 	rr := get(h, "/?prefix=2001%3Adb8%3A%3A%2F32&af=ipv6&backend=all&view=table", "HX-Request", "true")
 	body := rr.Body.String()
 	want := `href="/?neighbor=192.0.2.1&amp;backend=a&amp;view=table"`

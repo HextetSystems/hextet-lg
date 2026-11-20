@@ -1,6 +1,6 @@
 package web
 
-// Acceptance C: concurrent cache churn against the aggregate memory budget.
+// Concurrent cache churn must respect the aggregate memory budget.
 // These tests drive the real Handler (budget + work gates + single-flight cache
 // + upstream client) through h.fetch, not an isolated counter.
 

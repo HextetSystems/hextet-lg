@@ -126,8 +126,8 @@ func (h *Handler) recordBackend(b backendClient, op string, status bgp.Status, r
 	}
 }
 
-// resourceCollector exposes the authoritative M3.1 counters at scrape time.
-// Every read is O(1): no cache scan, no copying.
+// resourceCollector exposes resource counters at scrape time. Each read is
+// O(1); collection does not scan or copy the cache.
 type resourceCollector struct{ h *Handler }
 
 var (

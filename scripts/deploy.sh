@@ -144,7 +144,7 @@ verify() {
   local first
   first="$(docker logs --tail 50 "$cid" 2>&1 | grep -m1 -v '^$' || true)"
   if printf '%s' "$first" | grep -q '^{'; then log "  logging:   structured (JSON)"
-  else warn "logging is not structured JSON (image predates M3.2, or logging.format: text)"; fi
+  else warn "logging is not structured JSON (older image, or logging.format: text)"; fi
   return 0
 }
 

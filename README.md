@@ -15,12 +15,12 @@ Results use a short-lived, bounded in-memory cache. Links are live queries, not 
 
 - [Install and deploy](INSTALL.md) with Docker Compose or a Linux binary.
 - [Develop and contribute](https://github.com/HextetSystems/hextet-lg/blob/main/DEVELOPING.md) from a local checkout.
-- [Architecture](https://github.com/HextetSystems/hextet-lg/blob/main/ARCHITECTURE.md) describes the main components and request flow.
+- [Architecture](docs/ARCHITECTURE.md) describes the main components and request flow.
 
 ## Guides
 
 - Deployment: [OpenBGPD setup](docs/OPENBGPD.md) · [Security](docs/SECURITY.md) · [Releases](https://github.com/HextetSystems/hextet-lg/blob/main/docs/RELEASING.md)
-- Features: [Community definitions](docs/COMMUNITIES.md) · [Session visibility](https://github.com/HextetSystems/hextet-lg/blob/main/docs/SESSION_VISIBILITY.md) · [Branding](docs/BRANDING.md) · [Themes](docs/THEMING.md) · [PTR enrichment](https://github.com/HextetSystems/hextet-lg/blob/main/docs/PTR_ENRICHMENT.md)
+- Features: [Community definitions](docs/COMMUNITIES.md) · [Site appearance](docs/THEMING.md)
 - [Testing](https://github.com/HextetSystems/hextet-lg/blob/main/docs/TESTING.md)
 
 Hextet LG is licensed under the [BSD 2-Clause License](LICENSE).

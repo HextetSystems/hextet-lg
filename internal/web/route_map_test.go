@@ -17,7 +17,7 @@ import (
 
 func TestRouteMapLinkAndPageUseCurrentBackendPaths(t *testing.T) {
 	doc := `{"rib":[{"prefix":"203.0.113.0/24","aspath":"64500 64496","best":true,"neighbor":{"description":"peer-a","remote_addr":"192.0.2.1"}},{"prefix":"203.0.113.0/24","aspath":"64501 64496","neighbor":{"description":"peer-b","remote_addr":"192.0.2.2"}},{"prefix":"198.51.100.0/24","aspath":"64502"}]}`
-	handler := m482Handler(t, nil, backendSpec{"a", "Alpha", serveDoc(doc)})
+	handler := newRouteFixtureHandler(t, nil, backendSpec{"a", "Alpha", serveDoc(doc)})
 	page := get(handler, "/?type=prefix&q=203.0.113.0%2F24&backend=a").Body.String()
 	if got := strings.Count(page, `class="map-link"`); got != 2 {
 		t.Fatalf("map icon count %d, want one for each row in the two-path prefix group", got)
@@ -80,7 +80,7 @@ func TestRouteMapLinkAndPageUseCurrentBackendPaths(t *testing.T) {
 }
 
 func TestRouteMapRejectsMalformedPayloadAndBadParameters(t *testing.T) {
-	handler := m482Handler(t, nil, backendSpec{"a", "Alpha", serveDoc(`{"rib":[]}`)})
+	handler := newRouteFixtureHandler(t, nil, backendSpec{"a", "Alpha", serveDoc(`{"rib":[]}`)})
 	invalidTime, _ := json.Marshal(routeMapPayload{Paths: []routeMapPath{{ASPath: "13335"}, {ASPath: "15169"}}})
 	for _, path := range []string{"/map", "/map?prefix=203.0.113.0%2F24&backend=a&data=%25", "/map?prefix=203.0.113.0%2F24&backend=unknown&data=e30", "/map?prefix=203.0.113.0%2F24&backend=a&data=e30&extra=1", "/map?prefix=203.0.113.0%2F24&backend=a&data=" + base64.RawURLEncoding.EncodeToString(invalidTime), "/map?prefix=203.0.113.0%2F24&backend=a&layout=diagonal&data=e30"} {
 		if rr := get(handler, path); rr.Code != http.StatusBadRequest {
@@ -92,7 +92,7 @@ func TestRouteMapRejectsMalformedPayloadAndBadParameters(t *testing.T) {
 func TestRouteMapFeatureCanBeDisabled(t *testing.T) {
 	doc := `{"rib":[{"prefix":"203.0.113.0/24","aspath":"13335"},{"prefix":"203.0.113.0/24","aspath":"15169"}]}`
 	off := false
-	handler := m482Handler(t, func(c *config.Config) { c.Features.BGPMaps = &off }, backendSpec{"a", "Alpha", serveDoc(doc)})
+	handler := newRouteFixtureHandler(t, func(c *config.Config) { c.Features.BGPMaps = &off }, backendSpec{"a", "Alpha", serveDoc(doc)})
 	page := get(handler, "/?type=prefix&q=203.0.113.0%2F24&backend=a").Body.String()
 	if strings.Contains(page, `class="map-link"`) {
 		t.Fatal("map link was shown while BGP maps are disabled")
@@ -142,7 +142,7 @@ func TestRouteMapURLHonorsConfiguredRequestLimits(t *testing.T) {
 		rows[i] = fmt.Sprintf(`{"prefix":"203.0.113.0/24","aspath":%q}`, strings.Repeat("64500 ", 60))
 	}
 	doc := `{"rib":[` + strings.Join(rows, ",") + `]}`
-	h := m482Handler(t, func(c *config.Config) { c.Server.MaxURLBytes = 700 }, backendSpec{"a", "Alpha", serveDoc(doc)})
+	h := newRouteFixtureHandler(t, func(c *config.Config) { c.Server.MaxURLBytes = 700 }, backendSpec{"a", "Alpha", serveDoc(doc)})
 	page := get(h, "/?type=prefix&q=203.0.113.0%2F24&backend=a").Body.String()
 	if strings.Contains(page, `class="map-link"`) {
 		t.Fatal("map link exceeded configured request URL limit")

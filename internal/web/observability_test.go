@@ -1,6 +1,6 @@
 package web
 
-// M3.2: structured logging, Prometheus metrics, backend visibility.
+// Tests for structured logging, Prometheus metrics, and backend visibility.
 
 import (
 	"bytes"

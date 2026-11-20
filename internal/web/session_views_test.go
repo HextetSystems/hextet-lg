@@ -13,7 +13,7 @@ import (
 
 // ---- fixtures: shapes printed by bgpctl -j (OpenBGPD 9.3) -------------------
 
-const m47Neighbors = `{"neighbors":[
+const neighborFixture = `{"neighbors":[
 {"remote_as":"64500","description":"edge <script>alert(1)</script>","group":"transit","remote_addr":"192.0.2.1","bgpid":"192.0.2.1","state":"Established","last_updown":"01:23:45","last_updown_sec":5025,
  "stats":{"last_read":"00:00:12","last_write":"00:00:03","prefixes":{"sent":7,"received":0},
   "message":{"sent":{"open":1,"notifications":0,"updates":9,"keepalives":40,"route_refresh":0,"total":50},"received":{"open":1,"notifications":0,"updates":11,"keepalives":41,"route_refresh":0,"total":53}},
@@ -24,9 +24,9 @@ const m47Neighbors = `{"neighbors":[
 {"remote_addr":"198.51.100.9","state":"Idle"}
 ]}`
 
-const m47Summary = `{"neighbors":[{"remote_as":"64500","description":"edge","remote_addr":"192.0.2.1","bgpid":"192.0.2.1","state":"Established","last_updown":"1d02h","last_updown_sec":93600},{"remote_as":"64501","remote_addr":"2001:db8::2","state":"Idle","last_updown":"Never"}]}`
+const summaryFixture = `{"neighbors":[{"remote_as":"64500","description":"edge","remote_addr":"192.0.2.1","bgpid":"192.0.2.1","state":"Established","last_updown":"1d02h","last_updown_sec":93600},{"remote_as":"64501","remote_addr":"2001:db8::2","state":"Idle","last_updown":"Never"}]}`
 
-const m47RTR = `{"rtrs":[
+const rtrFixture = `{"rtrs":[
 {"descr":"routinator <b>one</b>","remote_addr":"192.0.2.100","remote_port":323,"local_addr":"203.0.113.77","state":"established","version":2,"minimal_version":1,"session_id":7,"serial":4242,"refresh":3600,"retry":600,"expire":7200,
  "timers":[{"name":"RTR RefreshTimer","due":3100},{"name":"RTR ExpireTimer","due":0}]},
 {"remote_addr":"2001:db8::100","remote_port":3323,"state":"closed","refresh":3600,"retry":600,"expire":7200,"last_recv_error":"Transport Error","last_recv_msg":"refused <img src=x onerror=alert(1)>"},
@@ -34,8 +34,8 @@ const m47RTR = `{"rtrs":[
 {"remote_addr":"192.0.2.102"}
 ]}`
 
-// m47Backend serves fixed bodies; an empty string for a path means 404.
-func m47Backend(neighbors, summary, rtr string) http.HandlerFunc {
+// sessionFixtureBackend serves fixed bodies; an empty string for a path means 404.
+func sessionFixtureBackend(neighbors, summary, rtr string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body := map[string]string{"/neighbors": neighbors, "/summary": summary, "/rtr": rtr}[r.URL.Path]
 		if body == "" {
@@ -46,7 +46,7 @@ func m47Backend(neighbors, summary, rtr string) http.HandlerFunc {
 	}
 }
 
-func m47Handler(t *testing.T, edit func(*config.Config), specs ...backendSpec) http.Handler {
+func newTestRoutes(t *testing.T, edit func(*config.Config), specs ...backendSpec) http.Handler {
 	t.Helper()
 	cfg, closeAll := testConfig(defaults(), specs...)
 	t.Cleanup(closeAll)
@@ -100,8 +100,8 @@ func TestSessionFeatureFlagsAreIndependent(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := m47Handler(t, func(c *config.Config) { c.Features.BGPNeighbors, c.Features.RTRSessions = tc.bgp, tc.rtr },
-				backendSpec{"a", "Alpha", m47Backend(m47Neighbors, m47Summary, m47RTR)})
+			h := newTestRoutes(t, func(c *config.Config) { c.Features.BGPNeighbors, c.Features.RTRSessions = tc.bgp, tc.rtr },
+				backendSpec{"a", "Alpha", sessionFixtureBackend(neighborFixture, summaryFixture, rtrFixture)})
 			for _, path := range []string{"/neighbors"} {
 				if got := get(h, path).Code; (got == 200) != tc.wantBGP || (!tc.wantBGP && got != 404) {
 					t.Errorf("%s: status %d, want enabled=%v", path, got, tc.wantBGP)
@@ -126,8 +126,8 @@ func TestSessionFeatureFlagsAreIndependent(t *testing.T) {
 
 func TestDisabledSessionViewDoesNotReachTheBackend(t *testing.T) {
 	var hits atomic.Int32
-	h := m47Handler(t, func(c *config.Config) { c.Features.RTRSessions = b3(false) },
-		backendSpec{"a", "Alpha", func(w http.ResponseWriter, r *http.Request) { hits.Add(1); fmt.Fprint(w, m47RTR) }})
+	h := newTestRoutes(t, func(c *config.Config) { c.Features.RTRSessions = b3(false) },
+		backendSpec{"a", "Alpha", func(w http.ResponseWriter, r *http.Request) { hits.Add(1); fmt.Fprint(w, rtrFixture) }})
 	for _, target := range []string{"/rtr", "/rtr?backend=a", "/rtr?backend=all"} {
 		if rr := get(h, target); rr.Code != 404 || strings.Contains(rr.Body.String(), "Validator") {
 			t.Fatalf("%s: %d", target, rr.Code)
@@ -141,7 +141,7 @@ func TestDisabledSessionViewDoesNotReachTheBackend(t *testing.T) {
 // ---- BGP neighbors ------------------------------------------------------------
 
 func TestBGPNeighborDetailsAndEscaping(t *testing.T) {
-	h := m47Handler(t, nil, backendSpec{"a", "Alpha", m47Backend(m47Neighbors, m47Summary, "")})
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", sessionFixtureBackend(neighborFixture, summaryFixture, "")})
 	page := get(h, "/neighbors").Body.String()
 	mustContain(t, page,
 		`<span class="pill good">Established</span>`, `<span class="pill warn">Active</span>`, `<span class="pill muted">Idle</span>`,
@@ -176,7 +176,7 @@ func TestBGPNeighborDetailsAndEscaping(t *testing.T) {
 }
 
 func TestNeighborsIncludeSummaryCountsAndOmitAbsentCounters(t *testing.T) {
-	h := m47Handler(t, nil, backendSpec{"a", "Alpha", m47Backend(m47Neighbors, m47Summary, "")})
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", sessionFixtureBackend(neighborFixture, summaryFixture, "")})
 	page := get(h, "/neighbors").Body.String()
 	mustContain(t, page, `Sessions reported`, `>2</strong><span>Sessions reported`, `>1</strong><span>Established`, `>1</strong><span>Other states`, `192.0.2.1`, `up 01:23:45`)
 	mustContain(t, page, `Prefixes received / sent`, `Messages received / sent`)
@@ -185,9 +185,9 @@ func TestNeighborsIncludeSummaryCountsAndOmitAbsentCounters(t *testing.T) {
 }
 
 func TestSameNeighborAddressOnTwoBackendsStaysSeparate(t *testing.T) {
-	h := m47Handler(t, nil,
-		backendSpec{"a", "Alpha", m47Backend(m47Neighbors, "", "")},
-		backendSpec{"b", "Beta", m47Backend(`{"neighbors":[{"remote_addr":"192.0.2.1","remote_as":"64999","state":"Idle","description":"other"}]}`, "", "")})
+	h := newTestRoutes(t, nil,
+		backendSpec{"a", "Alpha", sessionFixtureBackend(neighborFixture, "", "")},
+		backendSpec{"b", "Beta", sessionFixtureBackend(`{"neighbors":[{"remote_addr":"192.0.2.1","remote_as":"64999","state":"Idle","description":"other"}]}`, "", "")})
 	page := get(h, "/neighbors?backend=all").Body.String()
 	mustContain(t, page, `neighbor=192.0.2.1&amp;backend=a&amp;view=table`, `neighbor=192.0.2.1&amp;backend=b&amp;view=table`, "Alpha", "Beta")
 	if strings.Count(page, `class="panel result-group"`) != 2 {
@@ -203,9 +203,9 @@ func TestSameNeighborAddressOnTwoBackendsStaysSeparate(t *testing.T) {
 }
 
 func TestSummaryCountsRemainBackendSpecificAndShowForEmptyNeighborList(t *testing.T) {
-	h := m47Handler(t, nil,
-		backendSpec{"a", "Alpha", m47Backend(`{"neighbors":[]}`, `{"neighbors":[{"state":"Established"},{"state":"Idle"}]}`, "")},
-		backendSpec{"b", "Beta", m47Backend(`{"neighbors":[{"remote_addr":"192.0.2.8","state":"Established"}]}`, `{"neighbors":[{"state":"Established"}]}`, "")})
+	h := newTestRoutes(t, nil,
+		backendSpec{"a", "Alpha", sessionFixtureBackend(`{"neighbors":[]}`, `{"neighbors":[{"state":"Established"},{"state":"Idle"}]}`, "")},
+		backendSpec{"b", "Beta", sessionFixtureBackend(`{"neighbors":[{"remote_addr":"192.0.2.8","state":"Established"}]}`, `{"neighbors":[{"state":"Established"}]}`, "")})
 	page := get(h, "/neighbors?backend=all").Body.String()
 	if strings.Count(page, `class="summary-stats"`) != 2 {
 		t.Fatalf("expected independent count blocks for both backends")
@@ -219,9 +219,9 @@ func TestSummaryCountsRemainBackendSpecificAndShowForEmptyNeighborList(t *testin
 }
 
 func TestSummaryFailureDoesNotHideNeighborRows(t *testing.T) {
-	h := m47Handler(t, nil, backendSpec{"a", "Alpha", func(w http.ResponseWriter, r *http.Request) {
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/neighbors" {
-			fmt.Fprint(w, m47Neighbors)
+			fmt.Fprint(w, neighborFixture)
 			return
 		}
 		http.Error(w, "down", http.StatusServiceUnavailable)
@@ -231,9 +231,9 @@ func TestSummaryFailureDoesNotHideNeighborRows(t *testing.T) {
 }
 
 func TestBGPBackendFailureDoesNotHideOthers(t *testing.T) {
-	h := m47Handler(t, nil,
+	h := newTestRoutes(t, nil,
 		backendSpec{"a", "Alpha", func(w http.ResponseWriter, r *http.Request) { http.Error(w, "down", 503) }},
-		backendSpec{"b", "Beta", m47Backend(m47Neighbors, "", "")})
+		backendSpec{"b", "Beta", sessionFixtureBackend(neighborFixture, "", "")})
 	rr := get(h, "/neighbors")
 	page := rr.Body.String()
 	if rr.Code != 200 {
@@ -246,7 +246,7 @@ func TestBGPBackendFailureDoesNotHideOthers(t *testing.T) {
 
 func rtrPage(t *testing.T, edit func(*config.Config), rtr string) string {
 	t.Helper()
-	h := m47Handler(t, edit, backendSpec{"a", "Alpha", m47Backend(m47Neighbors, m47Summary, rtr)})
+	h := newTestRoutes(t, edit, backendSpec{"a", "Alpha", sessionFixtureBackend(neighborFixture, summaryFixture, rtr)})
 	rr := get(h, "/rtr")
 	if rr.Code != 200 {
 		t.Fatalf("status %d", rr.Code)
@@ -255,7 +255,7 @@ func rtrPage(t *testing.T, edit func(*config.Config), rtr string) string {
 }
 
 func TestRTRSessionsRenderedWithoutAddressesByDefault(t *testing.T) {
-	page := rtrPage(t, nil, m47RTR)
+	page := rtrPage(t, nil, rtrFixture)
 	mustContain(t, page,
 		`4 sessions`,
 		`<span class="pill good">established</span>`,
@@ -277,12 +277,12 @@ func TestRTRSessionsRenderedWithoutAddressesByDefault(t *testing.T) {
 }
 
 func TestRTRAddressesOnlyWhenEnabled(t *testing.T) {
-	page := rtrPage(t, func(c *config.Config) { c.Features.RTRSessionAddresses = b3(true) }, m47RTR)
+	page := rtrPage(t, func(c *config.Config) { c.Features.RTRSessionAddresses = b3(true) }, rtrFixture)
 	mustContain(t, page, `<code>192.0.2.100:323</code>`, `<code>[2001:db8::100]:3323</code>`, `<code>192.0.2.101</code>`, `<span>Local address</span><strong>203.0.113.77</strong>`)
 }
 
 func TestRTREstablishedWithoutIdentityIsNotPresentedAsHealthy(t *testing.T) {
-	page := rtrPage(t, nil, m47RTR)
+	page := rtrPage(t, nil, rtrFixture)
 	// "half" is established but reported no session ID or serial.
 	row := page[strings.Index(page, "half"):]
 	row = row[:strings.Index(row, "</tr>")]
@@ -302,13 +302,13 @@ func TestRTRZeroSessionsDiffersFromUnsupported(t *testing.T) {
 }
 
 func TestRTRCapabilityStatesAreNeverConflated(t *testing.T) {
-	h := m47Handler(t, nil,
-		backendSpec{"a", "Active", m47Backend("", "", m47RTR)},
-		backendSpec{"b", "Bare", m47Backend("", "", `{}`)},
-		backendSpec{"c", "Old", m47Backend("", "", "")}, // 404: bgplgd without /rtr
+	h := newTestRoutes(t, nil,
+		backendSpec{"a", "Active", sessionFixtureBackend("", "", rtrFixture)},
+		backendSpec{"b", "Bare", sessionFixtureBackend("", "", `{}`)},
+		backendSpec{"c", "Old", sessionFixtureBackend("", "", "")}, // 404: bgplgd without /rtr
 		backendSpec{"d", "Down", func(w http.ResponseWriter, r *http.Request) { http.Error(w, "x", 503) }},
 		backendSpec{"e", "Empty", func(w http.ResponseWriter, r *http.Request) {}}, // 200, empty body
-		backendSpec{"f", "Junk", m47Backend("", "", `<html>proxy</html>`)},
+		backendSpec{"f", "Junk", sessionFixtureBackend("", "", `<html>proxy</html>`)},
 	)
 	rr := get(h, "/rtr?backend=all")
 	if rr.Code != 200 {
@@ -345,9 +345,9 @@ func TestRTRCapabilityStatesAreNeverConflated(t *testing.T) {
 
 func TestRTRRequestsOnlyRTR(t *testing.T) {
 	var paths []string
-	h := m47Handler(t, nil, backendSpec{"a", "Alpha", func(w http.ResponseWriter, r *http.Request) {
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", func(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, r.URL.RequestURI())
-		fmt.Fprint(w, m47RTR)
+		fmt.Fprint(w, rtrFixture)
 	}})
 	get(h, "/rtr?backend=a")
 	if len(paths) != 1 || paths[0] != "/rtr" {
@@ -356,9 +356,9 @@ func TestRTRRequestsOnlyRTR(t *testing.T) {
 }
 
 func TestRTRParametersAndBackendSelection(t *testing.T) {
-	h := m47Handler(t, nil,
-		backendSpec{"a", "Alpha", m47Backend("", "", m47RTR)},
-		backendSpec{"b", "Beta", m47Backend("", "", `{}`)})
+	h := newTestRoutes(t, nil,
+		backendSpec{"a", "Alpha", sessionFixtureBackend("", "", rtrFixture)},
+		backendSpec{"b", "Beta", sessionFixtureBackend("", "", `{}`)})
 	if rr := get(h, "/rtr?x=1"); rr.Code != 400 {
 		t.Errorf("unknown parameter: %d", rr.Code)
 	}
@@ -380,7 +380,7 @@ func TestRTRParametersAndBackendSelection(t *testing.T) {
 // ---- navigation, HTMX and history ---------------------------------------------
 
 func TestSessionPagesAreFullDocumentsForHTMXAndHistoryRestore(t *testing.T) {
-	h := m47Handler(t, nil, backendSpec{"a", "Alpha", m47Backend(m47Neighbors, m47Summary, m47RTR)})
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", sessionFixtureBackend(neighborFixture, summaryFixture, rtrFixture)})
 	for _, path := range []string{"/rtr", "/neighbors"} {
 		direct := get(h, path)
 		for name, hdrs := range map[string][]string{
@@ -412,7 +412,7 @@ func TestSessionPagesAreFullDocumentsForHTMXAndHistoryRestore(t *testing.T) {
 }
 
 func TestSessionPagesAddNoClientScriptOrPolling(t *testing.T) {
-	h := m47Handler(t, nil, backendSpec{"a", "Alpha", m47Backend(m47Neighbors, m47Summary, m47RTR)})
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", sessionFixtureBackend(neighborFixture, summaryFixture, rtrFixture)})
 	for _, path := range []string{"/rtr", "/neighbors"} {
 		page := get(h, path).Body.String()
 		mustNotContain(t, page, "hx-trigger", "hx-get", "setInterval", "EventSource")
@@ -420,7 +420,7 @@ func TestSessionPagesAddNoClientScriptOrPolling(t *testing.T) {
 }
 
 func TestExistingRouteNavigationUnaffectedBySessionFlags(t *testing.T) {
-	h := m47Handler(t, func(c *config.Config) { c.Features.BGPNeighbors, c.Features.RTRSessions = b3(false), b3(false) },
+	h := newTestRoutes(t, func(c *config.Config) { c.Features.BGPNeighbors, c.Features.RTRSessions = b3(false), b3(false) },
 		backendSpec{"a", "Alpha", func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, `{"rib":[{"prefix":"192.0.2.0/24","neighbor":{"remote_addr":"192.0.2.1"}}]}`)
 		}})
@@ -448,7 +448,7 @@ func TestRTRUsesFixedRouteAndOperationLabels(t *testing.T) {
 	}
 	// Unsupported / unavailable outcomes are recorded without a query string
 	// or backend address anywhere in the metric output.
-	cfg, closeAll := testConfig(defaults(), backendSpec{"a", "Alpha", m47Backend("", "", "")})
+	cfg, closeAll := testConfig(defaults(), backendSpec{"a", "Alpha", sessionFixtureBackend("", "", "")})
 	defer closeAll()
 	h, err := NewHandler(cfg)
 	if err != nil {
@@ -465,7 +465,7 @@ func TestRTRUsesFixedRouteAndOperationLabels(t *testing.T) {
 }
 
 func TestSummaryFrontendRouteIsRemoved(t *testing.T) {
-	h := m47Handler(t, nil, backendSpec{"a", "Alpha", m47Backend(m47Neighbors, m47Summary, "")})
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", sessionFixtureBackend(neighborFixture, summaryFixture, "")})
 	rr := get(h, "/summary")
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("/summary status %d, want 404", rr.Code)

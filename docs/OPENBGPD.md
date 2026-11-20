@@ -142,7 +142,7 @@ Replace `192.0.2.10` with the private host address reachable from Hextet LG. Set
 
 RTR is not required for BGP collection or the JSON API. Configure one or more RTR-speaking validators if you want RPKI validation data. RTR v2 is not required for an RTR session or ROA origin validation; set `min-version 2` only when you need ASPA records synchronized, and ensure the validator supports v2. Set `port` to the validator's configured port (the RTR default is 323), and follow its authentication and network guidance. The image also provides `/var/lib/rpki-client` for validated ROA payload files when using `rpki-client` output instead.
 
-When `rtr` is configured, Hextet LG's RTR Sessions page (`/rtr`) shows the session state reported by the same `bgplgd` API. A `descr` in the `rtr` block is shown by default; validator addresses are not published unless `features.rtr_session_addresses` is enabled. Choose descriptions that are safe to publish. See [SESSION_VISIBILITY.md](SESSION_VISIBILITY.md).
+When `rtr` is configured, Hextet LG's RTR Sessions page (`/rtr`) shows the session state reported by the same `bgplgd` API. A `descr` in the `rtr` block is shown by default; validator addresses are not published unless `features.rtr_session_addresses` is enabled. Choose descriptions that are safe to publish, and enable address display only when those network details are safe for visitors. The example configuration documents the session page settings.
 
 ## Network access
 

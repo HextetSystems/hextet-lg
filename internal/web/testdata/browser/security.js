@@ -1,5 +1,5 @@
 'use strict';
-// M5.2 browser security checks for isolated, mock-backed Hextet LG instances.
+// Browser security checks for isolated, mock-backed Hextet LG instances.
 //
 //   HEXTET_LG_SEC_BASE=<default instance> HEXTET_LG_SEC_OPTIN=<opt-in instance>
 //   HEXTET_LG_SEC_PROXY=<default instance behind a reverse proxy>
@@ -112,7 +112,7 @@ async function defaults(ctx) {
     check(`${tag}: nothing executable was injected`, d.inlineScripts === 0 && d.foreignScripts === 0 && d.handlers === 0 && d.jsLinks === 0 && d.injected === 0 && d.frames === 0,
       JSON.stringify({ ...d, html: undefined, text: undefined }));
     check(`${tag}: no inline styles (style-src 'self')`, d.inlineStyles === 0 && d.styleElements === 0, `${d.inlineStyles} attributes, ${d.styleElements} elements`);
-    check(`${tag}: no Raw JSON control or payload`, !/RAWONLY|m52_raw|Raw JSON|d-raw/.test(d.html), (d.html.match(/.{40}(RAWONLY|m52_raw|Raw JSON|d-raw).{40}/) || [''])[0]);
+    check(`${tag}: no Raw JSON control or payload`, !/RAWONLY|raw_only|Raw JSON|d-raw/.test(d.html), (d.html.match(/.{40}(RAWONLY|raw_only|Raw JSON|d-raw).{40}/) || [''])[0]);
     check(`${tag}: no RTR validator address, port or local address`, !RTR_PRIVATE.some((s) => d.html.includes(s)), RTR_PRIVATE.filter((s) => d.html.includes(s)).join(','));
     check(`${tag}: exactly one title element`, (await page.locator('title').count()) === 1 && d.title.length > 0, d.title);
   }
@@ -141,7 +141,7 @@ async function defaults(ctx) {
   check('default: no RTR address in any attribute, tooltip or hidden element', hidden.length === 0, hidden.join(','));
 
   // Every response body the browser received, not only the final DOM.
-  const leakRaw = w.bodies.filter((b) => /RAWONLY|m52_raw/.test(b.text)).map((b) => b.url);
+  const leakRaw = w.bodies.filter((b) => /RAWONLY|raw_only/.test(b.text)).map((b) => b.url);
   const leakRTR = w.bodies.filter((b) => RTR_PRIVATE.slice(0, 2).concat('10.88.88.88').some((s) => b.text.includes(s))).map((b) => b.url);
   check('default: no response body carried raw backend JSON', leakRaw.length === 0 && w.bodies.length > 20, `${leakRaw.join(',')} (${w.bodies.length} bodies)`);
   check('default: no response body carried an RTR validator address', leakRTR.length === 0, leakRTR.join(','));

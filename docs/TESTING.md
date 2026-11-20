@@ -1,6 +1,6 @@
 # Testing
 
-The default test suite uses mock backends and does not require a running OpenBGPD service or external network access. CI runs the formatting, build, Go, race-detector, and JavaScript checks below.
+The default test suite uses mock backends and does not require a running OpenBGPD service or external network access. CI runs the standard checks below, builds and smoke-tests the container, validates the source-checkout Compose file with default and digest-pinned image values, and checks the release archive. The container smoke test uses the example configuration and does not contact a backend at startup.
 
 ## Standard checks
 

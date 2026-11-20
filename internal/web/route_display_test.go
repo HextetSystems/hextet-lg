@@ -20,14 +20,14 @@ import (
 
 const rawMarker = "INTERNAL-ROUTER-ID-7f3a"
 
-// m482Route is one bgplgd rib entry. The unmodelled x_marker key proves what
+// routeFixture is one bgplgd rib entry. The unmodelled x_marker key proves what
 // reaches the page: it exists only in the raw backend object.
-func m482Route(prefix, nexthop, neighbor, aspath, ovs, avs string) string {
+func routeFixture(prefix, nexthop, neighbor, aspath, ovs, avs string) string {
 	return fmt.Sprintf(`{"prefix":%q,"aspath":%q,"true_nexthop":%q,"exit_nexthop":%q,"neighbor":{"description":"peer <b>x</b>","remote_addr":%q},"valid":true,"best":true,"ovs":%q,"avs":%q,"origin":"igp","localpref":100,"metric":5,"last_update_sec":3600,"communities":["64500:1"],"x_marker":%q}`,
 		prefix, aspath, nexthop, nexthop, neighbor, ovs, avs, rawMarker)
 }
 
-func m482Doc(routes ...string) string { return `{"rib":[` + strings.Join(routes, ",") + `]}` }
+func ribFixture(routes ...string) string { return `{"rib":[` + strings.Join(routes, ",") + `]}` }
 
 // recordingBackend serves doc and records every upstream query string.
 type recordingBackend struct {
@@ -44,7 +44,7 @@ func (b *recordingBackend) handler(doc string) http.HandlerFunc {
 	}
 }
 
-func m482Config(t *testing.T, edit func(*config.Config), specs ...backendSpec) config.Config {
+func newRouteFixtureConfig(t *testing.T, edit func(*config.Config), specs ...backendSpec) config.Config {
 	t.Helper()
 	cfg, closeAll := testConfig(defaults(), specs...)
 	t.Cleanup(closeAll)
@@ -54,9 +54,9 @@ func m482Config(t *testing.T, edit func(*config.Config), specs ...backendSpec) c
 	return cfg
 }
 
-func m482Handler(t *testing.T, edit func(*config.Config), specs ...backendSpec) http.Handler {
+func newRouteFixtureHandler(t *testing.T, edit func(*config.Config), specs ...backendSpec) http.Handler {
 	t.Helper()
-	h, err := NewHandler(m482Config(t, edit, specs...))
+	h, err := NewHandler(newRouteFixtureConfig(t, edit, specs...))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,12 +65,12 @@ func m482Handler(t *testing.T, edit func(*config.Config), specs ...backendSpec) 
 }
 
 func TestRouteQualificationDisplaySetting(t *testing.T) {
-	doc := m482Doc(m482Route("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "unknown"))
-	page := get(m482Handler(t, nil, backendSpec{"a", "Alpha", serveDoc(doc)}), "/?type=prefix&q=203.0.113.0/24").Body.String()
+	doc := ribFixture(routeFixture("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "unknown"))
+	page := get(newRouteFixtureHandler(t, nil, backendSpec{"a", "Alpha", serveDoc(doc)}), "/?type=prefix&q=203.0.113.0/24").Body.String()
 	if strings.Contains(page, "Route qualification") {
 		t.Fatal("qualification visible by default")
 	}
-	page = get(m482Handler(t, func(c *config.Config) { c.Display.RouteQualification = true }, backendSpec{"a", "Alpha", serveDoc(doc)}), "/?type=prefix&q=203.0.113.0/24").Body.String()
+	page = get(newRouteFixtureHandler(t, func(c *config.Config) { c.Display.RouteQualification = true }, backendSpec{"a", "Alpha", serveDoc(doc)}), "/?type=prefix&q=203.0.113.0/24").Body.String()
 	if !strings.Contains(page, "Route qualification") || !strings.Contains(page, "Qualified") {
 		t.Fatal("qualification not shown when enabled")
 	}
@@ -86,13 +86,13 @@ var (
 )
 
 func TestRouteColumnCombinations(t *testing.T) {
-	doc := m482Doc(m482Route("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500 64501", "valid", "unknown"), m482Route("2001:db8::/32", "2001:db8::1", "2001:db8:f::1", "64500", "invalid", "valid"))
+	doc := ribFixture(routeFixture("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500 64501", "valid", "unknown"), routeFixture("2001:db8::/32", "2001:db8::1", "2001:db8:f::1", "64500", "invalid", "valid"))
 	var rec recordingBackend
 	var want string
 	for mask := 0; mask < 8; mask++ {
 		nb, rpki, aspa := mask&1 != 0, mask&2 != 0, mask&4 != 0
 		t.Run(fmt.Sprintf("neighbor=%v rpki=%v aspa=%v", nb, rpki, aspa), func(t *testing.T) {
-			h := m482Handler(t, func(c *config.Config) {
+			h := newRouteFixtureHandler(t, func(c *config.Config) {
 				c.Display.RouteColumns.Neighbor, c.Display.RouteColumns.RPKI, c.Display.RouteColumns.ASPA = nb, &rpki, &aspa
 			}, backendSpec{"a", "Alpha", rec.handler(doc)})
 			body := get(h, "/?type=prefix&q=203.0.113.0/24&backend=a").Body.String()
@@ -146,7 +146,7 @@ func TestRouteColumnCombinations(t *testing.T) {
 }
 
 func TestDefaultTableLayout(t *testing.T) {
-	h := m482Handler(t, nil, backendSpec{"a", "Alpha", serveDoc(m482Doc(m482Route("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid")))})
+	h := newRouteFixtureHandler(t, nil, backendSpec{"a", "Alpha", serveDoc(ribFixture(routeFixture("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid")))})
 	body := get(h, "/?type=prefix&q=203.0.113.0/24&backend=a").Body.String()
 	mustContain(t, body, "<th>Prefix</th><th>AS path</th><th>Origin ASN</th><th>Exit next hop</th><th>Local pref</th><th>MED</th><th>Age</th><th>RPKI</th><th>ASPA</th>", `routes cols-9`)
 	mustNotContain(t, body, "<th>Neighbor</th>", `class="c-nb`, "Raw JSON")
@@ -160,7 +160,7 @@ func TestDefaultTableLayout(t *testing.T) {
 // ---- display.raw_json ---------------------------------------------------------
 
 func TestRawJSONIsOptIn(t *testing.T) {
-	routes := m482Doc(m482Route("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid"))
+	routes := ribFixture(routeFixture("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid"))
 	neighbors := `{"neighbors":[{"remote_addr":"198.51.100.1","remote_as":"64500","description":"<script>alert(1)</script>","state":"Established","last_updown":"1d","x_marker":"` + rawMarker + `","stats":{}}]}`
 	backend := func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -176,7 +176,7 @@ func TestRawJSONIsOptIn(t *testing.T) {
 	}
 	paths := []string{"/?type=prefix&q=203.0.113.0/24&backend=a", "/?type=prefix&q=203.0.113.0/24&backend=a&view=table", "/neighbors", "/rtr"}
 	for _, enabled := range []bool{false, true} {
-		h := m482Handler(t, func(c *config.Config) { c.Display.RawJSON = enabled }, backendSpec{"a", "Alpha", backend})
+		h := newRouteFixtureHandler(t, func(c *config.Config) { c.Display.RawJSON = enabled }, backendSpec{"a", "Alpha", backend})
 		for _, p := range paths {
 			for _, hdr := range [][]string{nil, {"HX-Request", "true"}} {
 				rr := get(h, p, hdr...)
@@ -208,7 +208,7 @@ func TestRawJSONIsOptIn(t *testing.T) {
 		}
 	}
 	// No frontend endpoint serves raw data, enabled or not.
-	h := m482Handler(t, func(c *config.Config) { c.Display.RawJSON = true }, backendSpec{"a", "Alpha", backend})
+	h := newRouteFixtureHandler(t, func(c *config.Config) { c.Display.RawJSON = true }, backendSpec{"a", "Alpha", backend})
 	for _, p := range []string{"/raw", "/json", "/rib", "/api/raw", "/neighbors.json", "/asn-status?raw=1", "/ptr-status?ip=198.51.100.1&raw=1"} {
 		if b := get(h, p).Body.String(); strings.Contains(b, rawMarker) {
 			t.Errorf("%s exposes raw JSON", p)
@@ -217,7 +217,7 @@ func TestRawJSONIsOptIn(t *testing.T) {
 }
 
 func TestDisclosuresAreIndependentNativeDetails(t *testing.T) {
-	h := m482Handler(t, func(c *config.Config) { c.Display.RawJSON = true }, backendSpec{"a", "Alpha", serveDoc(m482Doc(m482Route("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid")))})
+	h := newRouteFixtureHandler(t, func(c *config.Config) { c.Display.RawJSON = true }, backendSpec{"a", "Alpha", serveDoc(ribFixture(routeFixture("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid")))})
 	body := get(h, "/?type=prefix&q=203.0.113.0/24&backend=a").Body.String()
 	// Two sibling <details>, neither open, in one container inside the single details row.
 	mustContain(t, body, `<div class="disclosures"><details class="d-route"><summary>Route details</summary>`, `</details><details class="d-raw"><summary>Raw JSON</summary>`)
@@ -235,9 +235,9 @@ func TestDisclosuresAreIndependentNativeDetails(t *testing.T) {
 
 func TestCardStructureSharesOneDOM(t *testing.T) {
 	long := strings.TrimSpace(strings.Repeat("64500 ", 40)) + " 395611"
-	a := m482Doc(m482Route("203.0.113.0/24", "192.0.2.1", "198.51.100.1", long, "valid", "valid"), m482Route("2001:db8:1234::/48", "2001:db8::1", "2001:db8:ffff::1", "18451 395611", "not-found", "unknown"))
-	b := m482Doc(m482Route("203.0.113.0/24", "192.0.2.9", "198.51.100.1", "64500", "valid", "invalid"))
-	h := m482Handler(t, func(c *config.Config) { c.Display.RouteColumns.Neighbor = true }, backendSpec{"a", "Alpha", serveDoc(a)}, backendSpec{"b", "Beta", serveDoc(b)}, backendSpec{"c", "Gamma", func(w http.ResponseWriter, r *http.Request) { http.Error(w, "x", 500) }})
+	a := ribFixture(routeFixture("203.0.113.0/24", "192.0.2.1", "198.51.100.1", long, "valid", "valid"), routeFixture("2001:db8:1234::/48", "2001:db8::1", "2001:db8:ffff::1", "18451 395611", "not-found", "unknown"))
+	b := ribFixture(routeFixture("203.0.113.0/24", "192.0.2.9", "198.51.100.1", "64500", "valid", "invalid"))
+	h := newRouteFixtureHandler(t, func(c *config.Config) { c.Display.RouteColumns.Neighbor = true }, backendSpec{"a", "Alpha", serveDoc(a)}, backendSpec{"b", "Beta", serveDoc(b)}, backendSpec{"c", "Gamma", func(w http.ResponseWriter, r *http.Request) { http.Error(w, "x", 500) }})
 	body := get(h, "/?type=prefix&q=203.0.113.0/24&backend=all").Body.String()
 	// One <table> per backend with routes; one <tbody class="route"> per route (IPv4 and IPv6).
 	if strings.Count(body, "<table>") != 2 || strings.Count(body, `<tbody class="route">`) != 3 {
@@ -268,7 +268,7 @@ func TestCardStructureSharesOneDOM(t *testing.T) {
 
 func TestCardsForEmptyPartialAndPagedResults(t *testing.T) {
 	// Empty result: no table, no cards.
-	h := m482Handler(t, nil, backendSpec{"a", "Alpha", serveDoc(`{"rib":[]}`)})
+	h := newRouteFixtureHandler(t, nil, backendSpec{"a", "Alpha", serveDoc(`{"rib":[]}`)})
 	if b := get(h, "/?type=prefix&q=203.0.113.0/24&backend=a").Body.String(); strings.Contains(b, "<table>") || !strings.Contains(b, "No matching routes") {
 		t.Error("empty result")
 	}
@@ -347,9 +347,9 @@ func (c *countingPTR) addrs() []string {
 	return out
 }
 
-func m482PTRHandler(t *testing.T, format string, neighbor bool, r *countingPTR, maxLookups int, specs ...backendSpec) (*Handler, http.Handler) {
+func newNeighborPTRHandler(t *testing.T, format string, neighbor bool, r *countingPTR, maxLookups int, specs ...backendSpec) (*Handler, http.Handler) {
 	t.Helper()
-	cfg := m482Config(t, func(c *config.Config) {
+	cfg := newRouteFixtureConfig(t, func(c *config.Config) {
 		c.PTREnrichment = config.PTRDefaults()
 		c.PTREnrichment.Enabled = true
 		if maxLookups > 0 {
@@ -393,7 +393,7 @@ func nbCells(body string) []string {
 }
 
 func TestNeighborNameFormats(t *testing.T) {
-	doc := m482Doc(m482Route("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid"))
+	doc := ribFixture(routeFixture("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid"))
 	for _, tc := range []struct {
 		format, wantText, wantTitle string
 	}{
@@ -403,7 +403,7 @@ func TestNeighborNameFormats(t *testing.T) {
 	} {
 		t.Run(tc.format, func(t *testing.T) {
 			r := &countingPTR{answers: map[string][]string{"198.51.100.1": {"peer1.example.net."}}, block: make(chan struct{})}
-			h, routes := m482PTRHandler(t, tc.format, true, r, 0, backendSpec{"a", "Alpha", serveDoc(doc)})
+			h, routes := newNeighborPTRHandler(t, tc.format, true, r, 0, backendSpec{"a", "Alpha", serveDoc(doc)})
 			url := "/?type=prefix&q=203.0.113.0/24&backend=a"
 			first := get(routes, url).Body.String() // DNS is held back: a pure cache miss
 			close(r.block)
@@ -441,9 +441,9 @@ func TestNeighborNameFormats(t *testing.T) {
 }
 
 func TestNeighborNameFallbacksAndNegativeCaching(t *testing.T) {
-	doc := m482Doc(m482Route("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid"), m482Route("2001:db8::/32", "2001:db8::1", "2001:db8:ffff::1", "64500", "valid", "valid"))
+	doc := ribFixture(routeFixture("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid"), routeFixture("2001:db8::/32", "2001:db8::1", "2001:db8:ffff::1", "64500", "valid", "valid"))
 	r := &countingPTR{answers: map[string][]string{"2001:db8:ffff::1": {"v6-peer.example.net."}}}
-	h, routes := m482PTRHandler(t, "name", true, r, 0, backendSpec{"a", "Alpha", serveDoc(doc)})
+	h, routes := newNeighborPTRHandler(t, "name", true, r, 0, backendSpec{"a", "Alpha", serveDoc(doc)})
 	url := "/?type=prefix&q=203.0.113.0/24&backend=a"
 	get(routes, url)
 	settlePTR(t, h, "198.51.100.1")
@@ -467,10 +467,10 @@ func TestNeighborNameFallbacksAndNegativeCaching(t *testing.T) {
 }
 
 func TestNeighborLookupTimeoutNeverBlocksRendering(t *testing.T) {
-	doc := m482Doc(m482Route("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid"))
+	doc := ribFixture(routeFixture("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid"))
 	r := &countingPTR{block: make(chan struct{})}
 	defer close(r.block)
-	_, routes := m482PTRHandler(t, "both", true, r, 0, backendSpec{"a", "Alpha", serveDoc(doc)})
+	_, routes := newNeighborPTRHandler(t, "both", true, r, 0, backendSpec{"a", "Alpha", serveDoc(doc)})
 	done := make(chan string, 1)
 	go func() { done <- get(routes, "/?type=prefix&q=203.0.113.0/24&backend=a").Body.String() }()
 	select {
@@ -486,11 +486,11 @@ func TestNeighborLookupsAreDeduplicatedAndBounded(t *testing.T) {
 	// to other neighbors: every address is looked up once.
 	var routes1, routes2 []string
 	for i := 0; i < 20; i++ {
-		routes1 = append(routes1, m482Route(fmt.Sprintf("203.0.113.%d/32", i), "192.0.2.1", "198.51.100.1", "64500", "valid", "valid"))
-		routes2 = append(routes2, m482Route(fmt.Sprintf("203.0.113.%d/32", i), "198.51.100.2", "198.51.100.1", "64500", "valid", "valid"))
+		routes1 = append(routes1, routeFixture(fmt.Sprintf("203.0.113.%d/32", i), "192.0.2.1", "198.51.100.1", "64500", "valid", "valid"))
+		routes2 = append(routes2, routeFixture(fmt.Sprintf("203.0.113.%d/32", i), "198.51.100.2", "198.51.100.1", "64500", "valid", "valid"))
 	}
 	r := &countingPTR{answers: map[string][]string{"198.51.100.1": {"peer1.example.net."}}, block: make(chan struct{})}
-	h, routes := m482PTRHandler(t, "name", true, r, 0, backendSpec{"a", "Alpha", serveDoc(m482Doc(routes1...))}, backendSpec{"b", "Beta", serveDoc(m482Doc(routes2...))})
+	h, routes := newNeighborPTRHandler(t, "name", true, r, 0, backendSpec{"a", "Alpha", serveDoc(ribFixture(routes1...))}, backendSpec{"b", "Beta", serveDoc(ribFixture(routes2...))})
 	body := get(routes, "/?type=prefix&q=203.0.113.0/24&backend=all").Body.String()
 	close(r.block)
 	settlePTR(t, h, "198.51.100.1")
@@ -515,10 +515,10 @@ func TestNeighborEnrichmentSharesThePerPageLimit(t *testing.T) {
 	// visible next hops come first, neighbors never exceed the shared cap.
 	var rs []string
 	for i := 1; i <= 3; i++ {
-		rs = append(rs, m482Route(fmt.Sprintf("203.0.113.%d/32", i), fmt.Sprintf("192.0.2.%d", i), fmt.Sprintf("198.51.100.%d", i), "64500", "valid", "valid"))
+		rs = append(rs, routeFixture(fmt.Sprintf("203.0.113.%d/32", i), fmt.Sprintf("192.0.2.%d", i), fmt.Sprintf("198.51.100.%d", i), "64500", "valid", "valid"))
 	}
 	r := &countingPTR{}
-	h, routes := m482PTRHandler(t, "name", true, r, 2, backendSpec{"a", "Alpha", serveDoc(m482Doc(rs...))})
+	h, routes := newNeighborPTRHandler(t, "name", true, r, 2, backendSpec{"a", "Alpha", serveDoc(ribFixture(rs...))})
 	get(routes, "/?type=prefix&q=203.0.113.0/24&backend=a")
 	settlePTR(t, h, "192.0.2.1")
 	settlePTR(t, h, "192.0.2.2")
@@ -528,7 +528,7 @@ func TestNeighborEnrichmentSharesThePerPageLimit(t *testing.T) {
 	}
 	// With a budget that also covers neighbors, they are looked up after the next hops.
 	r2 := &countingPTR{}
-	h2, routes2 := m482PTRHandler(t, "name", true, r2, 4, backendSpec{"a", "Alpha", serveDoc(m482Doc(rs...))})
+	h2, routes2 := newNeighborPTRHandler(t, "name", true, r2, 4, backendSpec{"a", "Alpha", serveDoc(ribFixture(rs...))})
 	get(routes2, "/?type=prefix&q=203.0.113.0/24&backend=a")
 	settlePTR(t, h2, "198.51.100.1")
 	if r2.total() != 4 || r2.count("192.0.2.1")+r2.count("192.0.2.2")+r2.count("192.0.2.3") != 3 || r2.count("198.51.100.1") != 1 {
@@ -537,9 +537,9 @@ func TestNeighborEnrichmentSharesThePerPageLimit(t *testing.T) {
 }
 
 func TestHiddenNeighborColumnDoesNoNeighborDNS(t *testing.T) {
-	doc := m482Doc(m482Route("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid"))
+	doc := ribFixture(routeFixture("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid"))
 	r := &countingPTR{answers: map[string][]string{"198.51.100.1": {"peer1.example.net."}}}
-	h, routes := m482PTRHandler(t, "both", false, r, 0, backendSpec{"a", "Alpha", serveDoc(doc)})
+	h, routes := newNeighborPTRHandler(t, "both", false, r, 0, backendSpec{"a", "Alpha", serveDoc(doc)})
 	body := get(routes, "/?type=prefix&q=203.0.113.0/24&backend=a").Body.String()
 	settlePTR(t, h, "192.0.2.1")
 	time.Sleep(50 * time.Millisecond)
@@ -555,8 +555,8 @@ func TestHiddenNeighborColumnDoesNoNeighborDNS(t *testing.T) {
 
 func TestNeighborNamesNeedPTRAndNeverChangeIdentity(t *testing.T) {
 	// ptr_enrichment disabled: names cannot exist, the address is shown, the link is unchanged.
-	doc := m482Doc(m482Route("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid"))
-	h := m482Handler(t, func(c *config.Config) {
+	doc := ribFixture(routeFixture("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid"))
+	h := newRouteFixtureHandler(t, func(c *config.Config) {
 		c.Display.RouteColumns.Neighbor = true
 		c.Display.RouteColumns.NeighborFormat = "both"
 	}, backendSpec{"a", "Alpha", serveDoc(doc)})
@@ -565,7 +565,7 @@ func TestNeighborNamesNeedPTRAndNeverChangeIdentity(t *testing.T) {
 		t.Errorf("without PTR enrichment: %v", cell)
 	}
 	// Same neighbor address on two backends: separate rows, links name their own backend.
-	h2 := m482Handler(t, func(c *config.Config) { c.Display.RouteColumns.Neighbor = true }, backendSpec{"a", "Alpha", serveDoc(doc)}, backendSpec{"b", "Beta", serveDoc(doc)})
+	h2 := newRouteFixtureHandler(t, func(c *config.Config) { c.Display.RouteColumns.Neighbor = true }, backendSpec{"a", "Alpha", serveDoc(doc)}, backendSpec{"b", "Beta", serveDoc(doc)})
 	body := get(h2, "/?type=prefix&q=203.0.113.0/24&backend=all").Body.String()
 	mustContain(t, body, `href="/?neighbor=198.51.100.1&amp;backend=a&amp;view=table"`, `href="/?neighbor=198.51.100.1&amp;backend=b&amp;view=table"`)
 }
@@ -573,7 +573,7 @@ func TestNeighborNamesNeedPTRAndNeverChangeIdentity(t *testing.T) {
 // ---- history ------------------------------------------------------------------
 
 func TestHistoryRestoreRendersTheFormFromTheCanonicalURL(t *testing.T) {
-	h := m482Handler(t, nil, backendSpec{"a", "Alpha", serveDoc(m482Doc(m482Route("2001:db8::/32", "2001:db8::1", "2001:db8:f::1", "64500", "valid", "valid")))}, backendSpec{"b", "Beta", serveDoc(m482Doc(m482Route("2001:db8::/32", "2001:db8::1", "2001:db8:f::1", "64500", "valid", "valid")))})
+	h := newRouteFixtureHandler(t, nil, backendSpec{"a", "Alpha", serveDoc(ribFixture(routeFixture("2001:db8::/32", "2001:db8::1", "2001:db8:f::1", "64500", "valid", "valid")))}, backendSpec{"b", "Beta", serveDoc(ribFixture(routeFixture("2001:db8::/32", "2001:db8::1", "2001:db8:f::1", "64500", "valid", "valid")))})
 	// htmx must not restore page snapshots (their form values are stale);
 	// every Back/Forward is re-rendered by the server from the canonical URL.
 	mustContain(t, get(h, "/").Body.String(), `"historyCacheSize":0`)

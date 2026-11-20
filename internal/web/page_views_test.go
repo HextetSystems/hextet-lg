@@ -10,7 +10,7 @@ import (
 	"github.com/HextetSystems/hextet-lg/internal/config"
 )
 
-func TestM2Pages(t *testing.T) {
+func TestPagesRenderBackendDataSafely(t *testing.T) {
 	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/neighbors", "/summary":

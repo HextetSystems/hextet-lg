@@ -24,15 +24,15 @@ import (
 	"github.com/HextetSystems/hextet-lg/internal/visibility"
 )
 
-// M5.2 security and deployment regression tests. Every backend, resolver and
-// proxy here is an in-process mock; nothing contacts a real router or DNS.
+// Security boundary tests use in-process backend, resolver and proxy mocks;
+// nothing contacts a real router or DNS.
 
-const m52XSS = `"><script>alert(1)</script><img src=x onerror=alert(2)>'&`
+const hostileText = `"><script>alert(1)</script><img src=x onerror=alert(2)>'&`
 
-// m52Rib has four visible and six hidden routes under the exclusions of
-// m52Visibility. Hidden routes carry next hops, origin ASNs and a raw-only
+// securityRouteFixture has four visible and six hidden routes under the exclusions of
+// exampleRouteVisibility. Hidden routes carry next hops, origin ASNs and a raw-only
 // marker that appear nowhere else, so a leak through any path is detectable.
-func m52Rib() string {
+func securityRouteFixture() string {
 	type rt struct{ prefix, nh, origin string }
 	routes := []rt{
 		{"192.0.2.0/24", "192.0.2.1", "3001"},                    // visible
@@ -52,8 +52,8 @@ func m52Rib() string {
 		if i > 0 {
 			b.WriteString(",")
 		}
-		fmt.Fprintf(&b, `{"prefix":%q,"aspath":"3000 %s","true_nexthop":%q,"exit_nexthop":%q,"neighbor":{"description":"peer","remote_addr":"192.0.2.250"},"valid":true,"best":true,"ovs":"valid","avs":"unknown","origin":"igp","m52_raw":"RAWONLY-%d %s"}`,
-			r.prefix, r.origin, r.nh, r.nh, i, strings.ReplaceAll(m52XSS, `"`, `\"`))
+		fmt.Fprintf(&b, `{"prefix":%q,"aspath":"3000 %s","true_nexthop":%q,"exit_nexthop":%q,"neighbor":{"description":"peer","remote_addr":"192.0.2.250"},"valid":true,"best":true,"ovs":"valid","avs":"unknown","origin":"igp","raw_only":"RAWONLY-%d %s"}`,
+			r.prefix, r.origin, r.nh, r.nh, i, strings.ReplaceAll(hostileText, `"`, `\"`))
 	}
 	b.WriteString("]}\n")
 	return b.String()
@@ -62,58 +62,58 @@ func m52Rib() string {
 var (
 	// What must never be shown: the excluded prefixes, and everything that only
 	// their routes carry (next hops, origin ASNs, raw-only markers).
-	m52HiddenPrefixes = []string{"198.51.100.", "203.0.113.0/24", "2001:db8:dead", "2001:db8:eeee::/48"}
-	m52HiddenData     = []string{"192.0.2.66", "192.0.2.67", "192.0.2.68", "2001:db8:ffff::66", "2001:db8:ffff::67", "2001:db8:ffff::68",
+	excludedPrefixes = []string{"198.51.100.", "203.0.113.0/24", "2001:db8:dead", "2001:db8:eeee::/48"}
+	excludedRouteData     = []string{"192.0.2.66", "192.0.2.67", "192.0.2.68", "2001:db8:ffff::66", "2001:db8:ffff::67", "2001:db8:ffff::68",
 		"3666", "3667", "3668", "3669", "3670", "3671",
 		"RAWONLY-1 ", "RAWONLY-2 ", "RAWONLY-3 ", "RAWONLY-6 ", "RAWONLY-7 ", "RAWONLY-8 "}
-	m52VisiblePrefixes = []string{"192.0.2.0/24", "203.0.113.128/25", "2001:db8:1::/48", "2001:db8:eeee:1::/64"}
+	visibleRoutePrefixes = []string{"192.0.2.0/24", "203.0.113.128/25", "2001:db8:1::/48", "2001:db8:eeee:1::/64"}
 )
 
-func m52Visibility() visibility.Config {
+func exampleRouteVisibility() visibility.Config {
 	return visibility.Config{Exclude: visibility.Exclusions{
 		IPv4: []visibility.Rule{{Prefix: "198.51.100.0/24", Match: "or-longer"}, {Prefix: "203.0.113.0/24", Match: "exact"}},
 		IPv6: []visibility.Rule{{Prefix: "2001:db8:dead::/48", Match: "or-longer"}, {Prefix: "2001:db8:eeee::/48", Match: "exact"}},
 	}}
 }
 
-const m52Neighbors = `{"neighbors":[{"remote_as":"3000","remote_addr":"192.0.2.250","description":"peer \"><script>alert(1)</script>","group":"g","bgpid":"192.0.2.251","state":"Established","last_updown":"01:00:00","last_updown_sec":3600,"session":{"local_addr":"10.99.99.99","holdtime":90},"m52_raw":"RAWONLY-N"}]}`
+const hostileNeighborFixture = `{"neighbors":[{"remote_as":"3000","remote_addr":"192.0.2.250","description":"peer \"><script>alert(1)</script>","group":"g","bgpid":"192.0.2.251","state":"Established","last_updown":"01:00:00","last_updown_sec":3600,"session":{"local_addr":"10.99.99.99","holdtime":90},"raw_only":"RAWONLY-N"}]}`
 
-// m52RTR uses validator addresses and ports that occur nowhere else.
-const m52RTR = `{"rtrs":[{"descr":"validator-a","remote_addr":"10.77.77.77","remote_port":8282,"local_addr":"10.88.88.88","state":"established","version":1,"session_id":7,"serial":42,"refresh":3600,"retry":600,"expire":7200},{"remote_addr":"2001:db8:7777::7","remote_port":3323,"state":"idle"}]}`
+// rtrSessionFixture uses validator addresses and ports that occur nowhere else.
+const rtrSessionFixture = `{"rtrs":[{"descr":"validator-a","remote_addr":"10.77.77.77","remote_port":8282,"local_addr":"10.88.88.88","state":"established","version":1,"session_id":7,"serial":42,"refresh":3600,"retry":600,"expire":7200},{"remote_addr":"2001:db8:7777::7","remote_port":3323,"state":"idle"}]}`
 
-var m52RTRPrivate = []string{"10.77.77.77", "2001:db8:7777::7", "8282", "3323", "10.88.88.88"}
+var rtrPrivateFields = []string{"10.77.77.77", "2001:db8:7777::7", "8282", "3323", "10.88.88.88"}
 
-// m52Backend records every upstream request URI and serves the M5.2 documents.
-type m52Backend struct {
+// recordingSecurityBackend records upstream requests and serves hostile fixtures.
+type recordingSecurityBackend struct {
 	mu   sync.Mutex
 	seen []string
 }
 
-func (b *m52Backend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (b *recordingSecurityBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	b.mu.Lock()
 	b.seen = append(b.seen, r.Method+" "+r.URL.RequestURI())
 	b.mu.Unlock()
 	switch r.URL.Path {
 	case "/rib":
-		_, _ = io.WriteString(w, m52Rib())
+		_, _ = io.WriteString(w, securityRouteFixture())
 	case "/neighbors", "/summary":
-		_, _ = io.WriteString(w, m52Neighbors)
+		_, _ = io.WriteString(w, hostileNeighborFixture)
 	case "/rtr":
-		_, _ = io.WriteString(w, m52RTR)
+		_, _ = io.WriteString(w, rtrSessionFixture)
 	default:
 		http.NotFound(w, r)
 	}
 }
 
-func (b *m52Backend) requests() []string {
+func (b *recordingSecurityBackend) requests() []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return append([]string(nil), b.seen...)
 }
 
-func m52Handler(t *testing.T, edit func(*config.Config), opts ...Option) (http.Handler, *m52Backend) {
+func newSecurityHandler(t *testing.T, edit func(*config.Config), opts ...Option) (http.Handler, *recordingSecurityBackend) {
 	t.Helper()
-	be := &m52Backend{}
+	be := &recordingSecurityBackend{}
 	cfg, closeAll := testConfig(defaults(), backendSpec{"a", "Alpha", be.ServeHTTP})
 	t.Cleanup(closeAll)
 	if edit != nil {
@@ -127,9 +127,9 @@ func m52Handler(t *testing.T, edit func(*config.Config), opts ...Option) (http.H
 	return h.Routes(), be
 }
 
-// m52Variants fetches target as a full page, an HTMX fragment and an HTMX
+// pageResponseVariants fetches a target as a full page, an HTMX fragment and an HTMX
 // history restore: the three shapes a browser can receive.
-func m52Variants(h http.Handler, target string) map[string]*httptest.ResponseRecorder {
+func pageResponseVariants(h http.Handler, target string) map[string]*httptest.ResponseRecorder {
 	return map[string]*httptest.ResponseRecorder{
 		"full":     get(h, target),
 		"fragment": get(h, target, "HX-Request", "true"),
@@ -137,12 +137,12 @@ func m52Variants(h http.Handler, target string) map[string]*httptest.ResponseRec
 	}
 }
 
-const m52CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+const expectedCSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 
 // --- HTTP security -------------------------------------------------------
 
-func TestM52SecurityHeadersOnEveryKindOfResponse(t *testing.T) {
-	h, _ := m52Handler(t, nil)
+func TestSecurityHeadersCoverEveryResponse(t *testing.T) {
+	h, _ := newSecurityHandler(t, nil)
 	for _, tc := range []struct {
 		method, target string
 		code           int
@@ -184,10 +184,10 @@ func TestM52SecurityHeadersOnEveryKindOfResponse(t *testing.T) {
 			if csp != "default-src 'none'; style-src 'unsafe-inline'; sandbox" {
 				t.Errorf("svg CSP %q", csp)
 			}
-		} else if csp != m52CSP {
+		} else if csp != expectedCSP {
 			t.Errorf("%s %s: CSP %q", tc.method, tc.target, csp)
 		}
-		if strings.Contains(m52CSP, "unsafe-inline") || strings.Contains(m52CSP, "unsafe-eval") || strings.Contains(m52CSP, "*") {
+		if strings.Contains(expectedCSP, "unsafe-inline") || strings.Contains(expectedCSP, "unsafe-eval") || strings.Contains(expectedCSP, "*") {
 			t.Fatal("page CSP was weakened")
 		}
 		for _, leak := range []string{"Server", "X-Powered-By", "Access-Control-Allow-Origin", "Set-Cookie"} {
@@ -209,8 +209,8 @@ func TestM52SecurityHeadersOnEveryKindOfResponse(t *testing.T) {
 // The embedded static files are served by exact name only (the stock file
 // server answered /static/ with a directory listing), carry a validator, and
 // are immutable only under the fingerprinted URL the templates emit.
-func TestM52StaticAssetsExactNamesValidatorsAndCaching(t *testing.T) {
-	h, _ := m52Handler(t, nil)
+func TestStaticAssetsUseExactNamesAndValidators(t *testing.T) {
+	h, _ := newSecurityHandler(t, nil)
 	for _, p := range []string{"/static/", "/static", "/static/nope.js", "/static/app.js/", "/static/sub/app.js", "/static/..", "/static/.", "/static/%2e%2e/templates/index.html", "/static/index.html"} {
 		rr := get(h, p)
 		if rr.Code == 200 || strings.Contains(rr.Body.String(), "app.css") || strings.Contains(rr.Body.String(), "<pre>") {
@@ -244,8 +244,8 @@ func TestM52StaticAssetsExactNamesValidatorsAndCaching(t *testing.T) {
 
 // --- Input validation ----------------------------------------------------
 
-func TestM52RepeatedPageControlsAreRejected(t *testing.T) {
-	h, be := m52Handler(t, nil)
+func TestRepeatedPageControlsAreRejected(t *testing.T) {
+	h, be := newSecurityHandler(t, nil)
 	for _, target := range []string{
 		"/?type=prefix&q=192.0.2.0/24&backend=a&backend=all",
 		"/?type=prefix&q=192.0.2.0/24&view=table&view=text",
@@ -256,7 +256,7 @@ func TestM52RepeatedPageControlsAreRejected(t *testing.T) {
 		"/?prefix=192.0.2.0/24&prefix=198.51.100.0/24",
 		"/?as=3000&best=1&best=1",
 	} {
-		for name, rr := range m52Variants(h, target) {
+		for name, rr := range pageResponseVariants(h, target) {
 			if rr.Code != http.StatusBadRequest {
 				t.Errorf("%s (%s): %d", target, name, rr.Code)
 			}
@@ -271,9 +271,9 @@ func TestM52RepeatedPageControlsAreRejected(t *testing.T) {
 	}
 }
 
-func TestM52HostileInputIsRejectedBeforeTheBackendAndNeverReflected(t *testing.T) {
-	h, be := m52Handler(t, nil)
-	x := url.QueryEscape(m52XSS)
+func TestHostileInputIsRejectedBeforeBackendAndNotReflected(t *testing.T) {
+	h, be := newSecurityHandler(t, nil)
+	x := url.QueryEscape(hostileText)
 	long6 := "2001:db8:" + strings.Repeat("ffff:", 300) + ":/48"
 	rejected := []string{
 		"/?type=prefix&q=" + x, "/?type=asn&q=" + x, "/?type=large-community&q=" + x, "/?type=" + x + "&q=192.0.2.1",
@@ -289,7 +289,7 @@ func TestM52HostileInputIsRejectedBeforeTheBackendAndNeverReflected(t *testing.T
 		"/?type=prefix&q=192.0.2.0/24&all=1&or-shorter=1", "/?neighbor=192.0.2.1&group=g", "/?all=1",
 	}
 	for _, target := range rejected {
-		for name, rr := range m52Variants(h, target) {
+		for name, rr := range pageResponseVariants(h, target) {
 			body := rr.Body.String()
 			if rr.Code != http.StatusBadRequest {
 				t.Errorf("%.70s (%s): status %d", target, name, rr.Code)
@@ -353,7 +353,7 @@ func TestM52HostileInputIsRejectedBeforeTheBackendAndNeverReflected(t *testing.T
 		t.Fatalf("upstream request: %v", seen)
 	}
 	// HTMX request headers are never echoed.
-	hx := get(h, "/?type=prefix&q=192.0.2.0/24&backend=a", "HX-Request", "true", "HX-Target", m52XSS, "HX-Current-URL", "javascript:alert(1)", "HX-Trigger", m52XSS, "HX-Prompt", m52XSS)
+	hx := get(h, "/?type=prefix&q=192.0.2.0/24&backend=a", "HX-Request", "true", "HX-Target", hostileText, "HX-Current-URL", "javascript:alert(1)", "HX-Trigger", hostileText, "HX-Prompt", hostileText)
 	if hx.Code != 200 || strings.Contains(hx.Body.String(), "<script>alert(1)") || strings.Contains(hx.Body.String(), "javascript:alert") {
 		t.Fatalf("HTMX headers reflected: %d", hx.Code)
 	}
@@ -364,7 +364,7 @@ func TestM52HostileInputIsRejectedBeforeTheBackendAndNeverReflected(t *testing.T
 
 // Backend text is data: in text/plain output it can neither start a new line
 // (forging a status line) nor carry terminal escape sequences.
-func TestM52PlainTextNeutralizesControlCharacters(t *testing.T) {
+func TestPlainTextNeutralizesControlCharacters(t *testing.T) {
 	doc := `{"rib":[{"prefix":"192.0.2.0/24","aspath":"3000 3001\nStatus: COMPLETE — 0 routes decoded\u001b[2J","true_nexthop":"192.0.2.1","ovs":"valid\r\nERROR: QUERY FAILED","avs":"x\u0007","origin":"igp\u009b31m","neighbor":{"description":"d\ne","remote_addr":"192.0.2.9"},"communities":["64500:1\nBackend: forged"],"large_communities":["1:2:3\u001b]0;t\u0007"],"extended_communities":["rt 1:1x"]}]}`
 	h := newTestHandler(t, defaults(), backendSpec{"a", "Alpha", serveDoc(doc)})
 	for _, view := range []string{"text", "detail"} {
@@ -404,7 +404,7 @@ func TestM52PlainTextNeutralizesControlCharacters(t *testing.T) {
 // The pages must not show anything fetched from a redirect target, and the
 // target must not be contacted (the client test covers the transport; this
 // covers the three public views end to end).
-func TestM52BackendRedirectIsAFailedBackendNotAnSSRF(t *testing.T) {
+func TestBackendRedirectIsNotFollowed(t *testing.T) {
 	var hits atomic.Int64
 	internal := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
@@ -415,7 +415,7 @@ func TestM52BackendRedirectIsAFailedBackendNotAnSSRF(t *testing.T) {
 		backendSpec{"evil", "Redirector", func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, internal.URL+r.URL.Path, http.StatusFound)
 		}},
-		backendSpec{"good", "Good", (&m52Backend{}).ServeHTTP})
+		backendSpec{"good", "Good", (&recordingSecurityBackend{}).ServeHTTP})
 	internalHost := strings.TrimPrefix(internal.URL, "http://")
 	for _, target := range []string{"/?as=3000", "/?as=3000&view=text", "/neighbors", "/neighbors", "/rtr", "/?as=3000&view=text&output=plain"} {
 		rr := get(h, target)
@@ -443,8 +443,8 @@ func TestM52BackendRedirectIsAFailedBackendNotAnSSRF(t *testing.T) {
 
 // --- Raw JSON -------------------------------------------------------------
 
-func TestM52RawJSONIsAbsentEverywhereByDefault(t *testing.T) {
-	h, _ := m52Handler(t, nil)
+func TestRawJSONIsHiddenByDefault(t *testing.T) {
+	h, _ := newSecurityHandler(t, nil)
 	targets := []string{
 		"/", "/?as=3000&backend=a", "/?as=3000&backend=a&view=text", "/?as=3000&backend=a&view=detail", "/?as=3000&backend=a&page=1",
 		"/?as=3000&backend=a&view=text&output=plain", "/?as=3000&backend=a&view=detail&output=plain",
@@ -452,9 +452,9 @@ func TestM52RawJSONIsAbsentEverywhereByDefault(t *testing.T) {
 		"/?type=prefix&q=bogus", "/?as=3000&backend=nope", "/?as=3000&page=99", // error views
 	}
 	for _, target := range targets {
-		for name, rr := range m52Variants(h, target) {
+		for name, rr := range pageResponseVariants(h, target) {
 			body := rr.Body.String()
-			for _, bad := range []string{"RAWONLY", "m52_raw", "Raw JSON", "Raw backend response", "d-raw", "local_addr", "10.99.99.99", `{"prefix"`, `{&#34;prefix`, "&#34;remote_addr&#34;"} {
+			for _, bad := range []string{"RAWONLY", "raw_only", "Raw JSON", "Raw backend response", "d-raw", "local_addr", "10.99.99.99", `{"prefix"`, `{&#34;prefix`, "&#34;remote_addr&#34;"} {
 				if strings.Contains(body, bad) {
 					t.Errorf("%s (%s): %q present with display.raw_json off", target, name, bad)
 				}
@@ -482,10 +482,10 @@ func TestM52RawJSONIsAbsentEverywhereByDefault(t *testing.T) {
 	}
 }
 
-func TestM52RawJSONWhenEnabledIsEscapedAndLimitedToItsDisclosures(t *testing.T) {
-	h, be := m52Handler(t, func(c *config.Config) { c.Display.RawJSON = true })
+func TestRawJSONOptInIsEscapedAndBounded(t *testing.T) {
+	h, be := newSecurityHandler(t, func(c *config.Config) { c.Display.RawJSON = true })
 	for _, target := range []string{"/?as=3000&backend=a", "/neighbors", "/neighbors"} {
-		for name, rr := range m52Variants(h, target) {
+		for name, rr := range pageResponseVariants(h, target) {
 			body := rr.Body.String()
 			if !strings.Contains(body, "RAWONLY") || !strings.Contains(body, "Raw JSON") {
 				t.Errorf("%s (%s): raw disclosure missing although enabled", target, name)
@@ -515,7 +515,7 @@ func TestM52RawJSONWhenEnabledIsEscapedAndLimitedToItsDisclosures(t *testing.T) 
 		}
 	}
 	// The response limit still applies with the setting on.
-	small, _ := m52Handler(t, func(c *config.Config) { c.Display.RawJSON = true; c.LookingGlass.MaxResponseBytes = 1024 })
+	small, _ := newSecurityHandler(t, func(c *config.Config) { c.Display.RawJSON = true; c.LookingGlass.MaxResponseBytes = 1024 })
 	if rr := get(small, "/?as=3000&backend=a&view=text&output=plain"); rr.Header().Get("X-Hextet-LG-Completeness") == "complete" {
 		t.Errorf("response limit not applied: %q", rr.Header().Get("X-Hextet-LG-Backends"))
 	}
@@ -523,19 +523,19 @@ func TestM52RawJSONWhenEnabledIsEscapedAndLimitedToItsDisclosures(t *testing.T) 
 
 // --- RTR validator privacy -------------------------------------------------
 
-func TestM52RTRValidatorAddressesStayPrivateByDefault(t *testing.T) {
+func TestRTRValidatorAddressesAreHiddenByDefault(t *testing.T) {
 	rec := &recordingPTR{}
 	var logs bytes.Buffer
-	h, _ := m52Handler(t, func(c *config.Config) {
+	h, _ := newSecurityHandler(t, func(c *config.Config) {
 		c.PTREnrichment = config.PTRDefaults()
 		c.PTREnrichment.Enabled = true
 		c.Display.RawJSON = true // even the raw disclosures must not carry them
 		c.Display.RouteColumns.Neighbor = true
 	}, WithPTRResolver(rec), WithLogger(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))))
 	for _, target := range []string{"/rtr", "/rtr?backend=a", "/rtr?backend=all", "/", "/neighbors", "/neighbors", "/communities", "/?as=3000&backend=a"} {
-		for name, rr := range m52Variants(h, target) {
+		for name, rr := range pageResponseVariants(h, target) {
 			body := rr.Body.String()
-			for _, private := range m52RTRPrivate {
+			for _, private := range rtrPrivateFields {
 				if strings.Contains(body, private) {
 					t.Errorf("%s (%s): RTR validator detail %q is in the response", target, name, private)
 				}
@@ -553,21 +553,21 @@ func TestM52RTRValidatorAddressesStayPrivateByDefault(t *testing.T) {
 			t.Errorf("/ptr-status %s: %d %s", ip, rr.Code, rr.Body.String())
 		}
 	}
-	m52WaitFor(t, func() bool { return len(rec.addrs()) > 0 }) // route next hops prove enrichment ran
+	waitForCondition(t, func() bool { return len(rec.addrs()) > 0 }) // route next hops prove enrichment ran
 	time.Sleep(100 * time.Millisecond)
 	for _, a := range rec.addrs() {
 		if a == "10.77.77.77" || a == "2001:db8:7777::7" || a == "10.88.88.88" {
 			t.Errorf("validator address %s was resolved", a)
 		}
 	}
-	for _, private := range m52RTRPrivate[:2] {
+	for _, private := range rtrPrivateFields[:2] {
 		if strings.Contains(logs.String(), private) {
 			t.Errorf("validator address %s was logged", private)
 		}
 	}
 }
 
-func TestM52RTRAddressesOptInChangesOnlyTheAddressColumn(t *testing.T) {
+func TestRTRAddressOptInOnlyChangesAddressDisplay(t *testing.T) {
 	rec := &recordingPTR{}
 	edit := func(on bool) func(*config.Config) {
 		return func(c *config.Config) {
@@ -576,8 +576,8 @@ func TestM52RTRAddressesOptInChangesOnlyTheAddressColumn(t *testing.T) {
 			c.PTREnrichment.Enabled = true
 		}
 	}
-	on, _ := m52Handler(t, edit(true), WithPTRResolver(rec))
-	off, _ := m52Handler(t, edit(false), WithPTRResolver(rec))
+	on, _ := newSecurityHandler(t, edit(true), WithPTRResolver(rec))
+	off, _ := newSecurityHandler(t, edit(false), WithPTRResolver(rec))
 	page := get(on, "/rtr").Body.String()
 	mustContain(t, page, "10.77.77.77:8282", "[2001:db8:7777::7]:3323", "10.88.88.88")
 	mustNotContain(t, page, "data-ptr", "RAWONLY", "Raw JSON", `"rtrs"`)
@@ -585,7 +585,7 @@ func TestM52RTRAddressesOptInChangesOnlyTheAddressColumn(t *testing.T) {
 	for _, target := range []string{"/", "/neighbors", "/neighbors", "/?as=3000&backend=a"} {
 		mustNotContain(t, get(on, target).Body.String(), "10.77.77.77", "2001:db8:7777::7", "10.88.88.88")
 	}
-	m52WaitFor(t, func() bool { return len(rec.addrs()) > 0 })
+	waitForCondition(t, func() bool { return len(rec.addrs()) > 0 })
 	time.Sleep(100 * time.Millisecond)
 	for _, a := range rec.addrs() {
 		if strings.HasPrefix(a, "10.77.") || strings.HasPrefix(a, "10.88.") || strings.HasPrefix(a, "2001:db8:7777") {
@@ -606,7 +606,7 @@ func TestM52RTRAddressesOptInChangesOnlyTheAddressColumn(t *testing.T) {
 	}
 }
 
-func m52WaitFor(t *testing.T, cond func() bool) {
+func waitForCondition(t *testing.T, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
 	for !cond() {
@@ -619,29 +619,29 @@ func m52WaitFor(t *testing.T, cond func() bool) {
 
 // --- Route visibility -------------------------------------------------------
 
-// m52ASN records the Team Cymru names that were looked up.
-type m52ASN struct {
+// recordingASNResolver records the Team Cymru names that were looked up.
+type recordingASNResolver struct {
 	mu   sync.Mutex
 	seen []string
 }
 
-func (r *m52ASN) LookupTXT(_ context.Context, name string) ([]string, error) {
+func (r *recordingASNResolver) LookupTXT(_ context.Context, name string) ([]string, error) {
 	r.mu.Lock()
 	r.seen = append(r.seen, name)
 	r.mu.Unlock()
 	return nil, errors.New("no such host")
 }
 
-func (r *m52ASN) names() []string {
+func (r *recordingASNResolver) names() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]string(nil), r.seen...)
 }
 
-func TestM52ExcludedRoutesReachNoOutputCacheOrEnrichment(t *testing.T) {
-	ptrRec, asnRec := &recordingPTR{}, &m52ASN{}
-	h, be := m52Handler(t, func(c *config.Config) {
-		c.RouteVisibility = m52Visibility()
+func TestExcludedRoutesNeverReachOutputCacheOrEnrichment(t *testing.T) {
+	ptrRec, asnRec := &recordingPTR{}, &recordingASNResolver{}
+	h, be := newSecurityHandler(t, func(c *config.Config) {
+		c.RouteVisibility = exampleRouteVisibility()
 		c.LookingGlass.PageSize = 3
 		c.LookingGlass.CacheTTL = 30 * time.Second // the second pass is served from the cache
 		c.Display.RawJSON = true                   // the widest presentation
@@ -663,13 +663,13 @@ func TestM52ExcludedRoutesReachNoOutputCacheOrEnrichment(t *testing.T) {
 	for pass := 0; pass < 2; pass++ {
 		for _, query := range queries {
 			q := query.q
-			hiddenText := m52HiddenData
+			hiddenText := excludedRouteData
 			if !query.named {
-				hiddenText = append(append([]string(nil), m52HiddenData...), m52HiddenPrefixes...)
+				hiddenText = append(append([]string(nil), excludedRouteData...), excludedPrefixes...)
 			}
 			for _, suffix := range []string{"", "&view=text", "&view=detail", "&page=2", "&page=2&view=text", "&view=text&output=plain", "&view=detail&output=plain", "&view=text&output=plain&page=2"} {
 				target := "/?" + q + "&backend=a" + suffix
-				for name, rr := range m52Variants(h, target) {
+				for name, rr := range pageResponseVariants(h, target) {
 					body := rr.Body.String()
 					if rr.Code != 200 {
 						t.Fatalf("%s (%s): %d", target, name, rr.Code)
@@ -696,14 +696,14 @@ func TestM52ExcludedRoutesReachNoOutputCacheOrEnrichment(t *testing.T) {
 	if rowCount(p1) != 3 || rowCount(p2) != 1 || strings.Count(p1+p2, `<tbody class="route"`) != 4 {
 		t.Fatalf("rows per page: %d and %d", rowCount(p1), rowCount(p2))
 	}
-	mustContain(t, p1+p2, m52VisiblePrefixes...)
+	mustContain(t, p1+p2, visibleRoutePrefixes...)
 	mustContain(t, p1+p2, "RAWONLY-0 ", "RAWONLY-4 ", "RAWONLY-5 ", "RAWONLY-9 ")
 	if !strings.Contains(p1, "Page 1 of 2") && !strings.Contains(textOf(p1), "1 of 2") {
 		t.Errorf("pager does not describe two pages of visible routes")
 	}
 
 	// Enrichment ran for visible routes and was never asked about hidden ones.
-	m52WaitFor(t, func() bool { return len(ptrRec.addrs()) >= 4 && len(asnRec.names()) >= 2 })
+	waitForCondition(t, func() bool { return len(ptrRec.addrs()) >= 4 && len(asnRec.names()) >= 2 })
 	time.Sleep(150 * time.Millisecond)
 	for _, a := range ptrRec.addrs() {
 		for _, hidden := range []string{"192.0.2.66", "192.0.2.67", "192.0.2.68", "2001:db8:ffff::66", "2001:db8:ffff::67", "2001:db8:ffff::68"} {
@@ -749,9 +749,9 @@ func (d *hostileDNS) LookupTXT(_ context.Context, name string) ([]string, error)
 	return []string{fmt.Sprintf(`%d | US | arin | 2010-07-14 | EVIL"><script>alert(1)</script><img src=x onerror=alert(2)>`, n)}, nil
 }
 
-func TestM52HostileDNSAnswersAreInert(t *testing.T) {
+func TestHostileDNSAnswersAreInert(t *testing.T) {
 	dns := &hostileDNS{}
-	h, _ := m52Handler(t, func(c *config.Config) {
+	h, _ := newSecurityHandler(t, func(c *config.Config) {
 		c.PTREnrichment = config.PTRDefaults()
 		c.PTREnrichment.Enabled = true
 		c.ASNEnrichment = config.ASNDefaults()
@@ -761,11 +761,11 @@ func TestM52HostileDNSAnswersAreInert(t *testing.T) {
 	}, WithPTRResolver(dns), WithASNResolver(dns))
 	get(h, "/?as=3000&backend=a")
 	get(h, "/neighbors")
-	m52WaitFor(t, func() bool {
+	waitForCondition(t, func() bool {
 		return strings.Contains(get(h, "/asn-status?asn=3000").Body.String(), "EVIL") && strings.Contains(get(h, "/ptr-status?ip=192.0.2.1").Body.String(), "ok-host")
 	})
 	for _, target := range []string{"/?as=3000&backend=a", "/neighbors", "/neighbors"} {
-		for name, rr := range m52Variants(h, target) {
+		for name, rr := range pageResponseVariants(h, target) {
 			body := rr.Body.String()
 			if strings.Contains(body, "<script>alert") || strings.Contains(body, "<img src=x") || strings.Contains(body, `onmouseover="alert`) {
 				t.Errorf("%s (%s): DNS answer rendered as markup", target, name)
@@ -834,7 +834,7 @@ func (d *blockedDNS) LookupTXT(ctx context.Context, n string) ([]string, error) 
 // slow can start at most max_concurrent lookups per service and queue a fixed
 // number more; nothing grows with the number of requests, and the cache-only
 // status endpoints start none.
-func TestM52PublicRequestsCannotAmplifyDNS(t *testing.T) {
+func TestPublicRequestsCannotAmplifyDNSWork(t *testing.T) {
 	const pages, perPage = 40, 50
 	backend := func(w http.ResponseWriter, r *http.Request) {
 		// Each distinct source AS yields a page of unique next hops and origins.
@@ -887,7 +887,7 @@ func TestM52PublicRequestsCannotAmplifyDNS(t *testing.T) {
 	// than the 40 pages x (50 next hops + 50 neighbors + 51 ASNs) on offer.
 	close(dns.release)
 	queueBound := limit + int64(cfg.PTREnrichment.MaxConcurrent*16+cfg.ASNEnrichment.MaxConcurrent*16)
-	m52WaitFor(t, func() bool { return dns.active.Load() == 0 })
+	waitForCondition(t, func() bool { return dns.active.Load() == 0 })
 	time.Sleep(200 * time.Millisecond)
 	if got := dns.started.Load(); got > queueBound {
 		t.Errorf("%d lookups in total; queue bound is %d", got, queueBound)
@@ -905,8 +905,8 @@ func TestM52PublicRequestsCannotAmplifyDNS(t *testing.T) {
 	}
 }
 
-func TestM52EnrichmentDisabledMeansNoEndpointsAndNoTargets(t *testing.T) {
-	h, _ := m52Handler(t, nil) // both services are off by default
+func TestDisabledEnrichmentStartsNoLookups(t *testing.T) {
+	h, _ := newSecurityHandler(t, nil) // both services are off by default
 	for _, ep := range []string{"/asn-status?asn=3000", "/ptr-status?ip=192.0.2.1"} {
 		if rr := get(h, ep); rr.Code != 404 {
 			t.Errorf("%s: %d", ep, rr.Code)
@@ -919,7 +919,7 @@ func TestM52EnrichmentDisabledMeansNoEndpointsAndNoTargets(t *testing.T) {
 
 // --- Branding ------------------------------------------------------------------
 
-func TestM52BrandingURLsServeOnlyTheConfiguredAssets(t *testing.T) {
+func TestBrandingURLsServeOnlyConfiguredAssets(t *testing.T) {
 	dir := t.TempDir()
 	secret := filepath.Join(t.TempDir(), "secret.txt")
 	if err := os.WriteFile(secret, []byte("TOP-SECRET"), 0o600); err != nil {
@@ -931,7 +931,7 @@ func TestM52BrandingURLsServeOnlyTheConfiguredAssets(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	h, _ := m52Handler(t, func(c *config.Config) {
+	h, _ := newSecurityHandler(t, func(c *config.Config) {
 		c.Site.Branding.Directory = dir
 		c.Site.Branding.Logo = "logo.svg"
 	})
@@ -980,9 +980,9 @@ func TestM52BrandingURLsServeOnlyTheConfiguredAssets(t *testing.T) {
 // The application behind a TLS-terminating reverse proxy: every URL it emits
 // is relative to the site root, forwarded headers (which an untrusted client
 // can also send) are ignored, and the rate limiter keys on the direct peer.
-func TestM52BehindAReverseProxy(t *testing.T) {
+func TestReverseProxyRequestsUseCanonicalURLs(t *testing.T) {
 	var logs bytes.Buffer
-	be := &m52Backend{}
+	be := &recordingSecurityBackend{}
 	cfg, closeAll := testConfig(defaults(), backendSpec{"a", "Alpha", be.ServeHTTP})
 	defer closeAll()
 	h, err := NewHandler(cfg, WithLogger(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))))
@@ -1041,7 +1041,7 @@ func TestM52BehindAReverseProxy(t *testing.T) {
 			t.Fatalf("%s through the proxy: %d", target, resp.StatusCode)
 		}
 		check(target, body)
-		if resp.Header.Get("Content-Security-Policy") != m52CSP {
+		if resp.Header.Get("Content-Security-Policy") != expectedCSP {
 			t.Errorf("%s: CSP lost behind the proxy", target)
 		}
 	}
@@ -1101,8 +1101,8 @@ func TestM52BehindAReverseProxy(t *testing.T) {
 
 // Forwarded identity never splits the limiter: every client behind one proxy
 // shares the proxy's bucket, so spoofing X-Forwarded-For buys nothing.
-func TestM52ForwardedIdentityCannotEvadeTheRateLimit(t *testing.T) {
-	be := &m52Backend{}
+func TestForwardedIdentityCannotBypassRateLimit(t *testing.T) {
+	be := &recordingSecurityBackend{}
 	cfg, closeAll := testConfig(defaults(), backendSpec{"a", "Alpha", be.ServeHTTP})
 	defer closeAll()
 	cfg.Server.LiveRatePerSecond, cfg.Server.LiveRateBurst = 0.001, 3
@@ -1145,7 +1145,7 @@ func TestM52ForwardedIdentityCannotEvadeTheRateLimit(t *testing.T) {
 
 // Creating, using and closing a fully featured instance leaves no goroutine
 // behind (limiter cleanup, cache timers, enrichment workers, flights).
-func TestM52CloseLeavesNoGoroutines(t *testing.T) {
+func TestCloseStopsEnrichmentWorkers(t *testing.T) {
 	transport := http.DefaultTransport.(*http.Transport)
 	settle := func() int {
 		transport.CloseIdleConnections()
@@ -1155,7 +1155,7 @@ func TestM52CloseLeavesNoGoroutines(t *testing.T) {
 	}
 	before := settle()
 	for round := 0; round < 3; round++ {
-		be := &m52Backend{}
+		be := &recordingSecurityBackend{}
 		cfg, closeAll := testConfig(defaults(), backendSpec{"a", "Alpha", be.ServeHTTP}, backendSpec{"slow", "Slow", func(w http.ResponseWriter, r *http.Request) {
 			select {
 			case <-r.Context().Done():

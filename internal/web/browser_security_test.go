@@ -17,11 +17,11 @@ import (
 	"github.com/HextetSystems/hextet-lg/internal/config"
 )
 
-// m52HostileBackend is a mock bgplgd whose every text field carries markup,
+// hostileTextBackend is a mock bgplgd whose every text field carries markup,
 // plus one marker ("RAWONLY") that exists only in raw backend objects and RTR
 // validator addresses that exist nowhere else.
-func m52HostileBackend(w http.ResponseWriter, r *http.Request) {
-	x := strings.ReplaceAll(m52XSS, `"`, `\"`)
+func hostileTextBackend(w http.ResponseWriter, r *http.Request) {
+	x := strings.ReplaceAll(hostileText, `"`, `\"`)
 	switch r.URL.Path {
 	case "/rib":
 		var b strings.Builder
@@ -30,13 +30,13 @@ func m52HostileBackend(w http.ResponseWriter, r *http.Request) {
 			if i > 0 {
 				b.WriteString(",")
 			}
-			fmt.Fprintf(&b, `{"prefix":"10.0.%d.0/24","aspath":"64500 6450%d","true_nexthop":"192.0.2.%d","exit_nexthop":"192.0.2.%d","neighbor":{"description":"peer %s","remote_addr":"192.0.2.250"},"valid":true,"best":true,"ovs":"valid","avs":"unknown","origin":"igp %s","source":"%s","communities":["64500:1","%s"],"large_communities":["64500:0:1","%s"],"m52_raw":"RAWONLY-%d %s"}`,
+			fmt.Fprintf(&b, `{"prefix":"10.0.%d.0/24","aspath":"64500 6450%d","true_nexthop":"192.0.2.%d","exit_nexthop":"192.0.2.%d","neighbor":{"description":"peer %s","remote_addr":"192.0.2.250"},"valid":true,"best":true,"ovs":"valid","avs":"unknown","origin":"igp %s","source":"%s","communities":["64500:1","%s"],"large_communities":["64500:0:1","%s"],"raw_only":"RAWONLY-%d %s"}`,
 				i, i, i+1, i+1, x, x, x, x, x, i, x)
 		}
 		b.WriteString("]}\n")
 		_, _ = io.WriteString(w, b.String())
 	case "/neighbors", "/summary":
-		fmt.Fprintf(w, `{"neighbors":[{"remote_as":"64501","remote_addr":"192.0.2.250","description":"peer %s","group":"g %s","bgpid":"192.0.2.251","state":"Established","last_updown":"01:00:00","last_updown_sec":3600,"last_error_received":"%s","last_shutdown_reason":"%s","m52_raw":"RAWONLY-N %s"}]}`, x, x, x, x, x)
+		fmt.Fprintf(w, `{"neighbors":[{"remote_as":"64501","remote_addr":"192.0.2.250","description":"peer %s","group":"g %s","bgpid":"192.0.2.251","state":"Established","last_updown":"01:00:00","last_updown_sec":3600,"last_error_received":"%s","last_shutdown_reason":"%s","raw_only":"RAWONLY-N %s"}]}`, x, x, x, x, x)
 	case "/rtr":
 		fmt.Fprintf(w, `{"rtrs":[{"descr":"validator %s","remote_addr":"10.77.77.77","remote_port":8282,"local_addr":"10.88.88.88","state":"established","version":1,"session_id":7,"serial":42,"refresh":3600,"retry":600,"expire":7200,"last_recv_error":"%s","last_recv_msg":"%s"},{"remote_addr":"2001:db8:7777::7","remote_port":3323,"state":"idle"}]}`, x, x, x)
 	default:
@@ -44,7 +44,7 @@ func m52HostileBackend(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// TestBrowserSecurity runs the M5.2 security scenarios in
+// TestBrowserSecurity runs the browser security scenarios in
 // testdata/browser/security.js with headless Chromium against isolated,
 // mock-backed instances: a default one, one with every opt-in disclosure and
 // hostile branding, and the default one again behind a reverse proxy.
@@ -77,7 +77,7 @@ func TestBrowserSecurity(t *testing.T) {
 	lg.PageSize = 3
 	lg.CacheTTL = 20 * time.Second
 	start := func(edit func(*config.Config)) *httptest.Server {
-		cfg, closeAll := testConfig(lg, backendSpec{"a", "Alpha " + m52XSS, m52HostileBackend})
+		cfg, closeAll := testConfig(lg, backendSpec{"a", "Alpha " + hostileText, hostileTextBackend})
 		t.Cleanup(closeAll)
 		cfg.Server.Title = ""
 		cfg.Site.Branding.Directory = brand

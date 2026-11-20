@@ -29,9 +29,9 @@ function check(name, ok, detail) {
 }
 
 
-// state reads everything the milestone asks to be consistent after a history
-// step: URL, title, form values, results, error text, backend selection,
-// advanced filters, footer timing.
+// state reads everything that should remain consistent after a history step:
+// URL, title, form values, results, error text, backend selection, advanced
+// filters, and footer timing.
 async function state(page) {
   return page.evaluate(() => {
     const f = document.getElementById('search-form');

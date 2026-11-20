@@ -931,9 +931,8 @@ func (h *Handler) communityPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// communityLink builds the search link for an exact definition. Patterns have
-// no single value to search for. Links follow the M4.2 search flags, so a
-// disabled search type never produces a link that would be rejected.
+// communityLink builds a search link for an exact definition. Patterns have
+// no single value to search for, and disabled search types never produce links.
 func (h *Handler) communityLink(d communities.Definition, backend string) string {
 	if !d.Exact {
 		return ""

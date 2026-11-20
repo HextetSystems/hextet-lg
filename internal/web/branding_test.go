@@ -15,11 +15,11 @@ import (
 	"github.com/HextetSystems/hextet-lg/internal/site"
 )
 
-// M4.9: operator-neutral branding and deployment identity.
+// Tests for operator-neutral branding and deployment identity.
 
-func m49Handler(t *testing.T, edit func(*config.Config)) http.Handler {
+func newBrandingHandler(t *testing.T, edit func(*config.Config)) http.Handler {
 	t.Helper()
-	return m48Handler(t, edit,
+	return newTestRoutes(t, edit,
 		backendSpec{"a", "Alpha", serveDoc(ribJSON(3, false))},
 		backendSpec{"b", "Beta", serveDoc(ribJSON(2, true))},
 	)
@@ -50,7 +50,7 @@ func footerText(t *testing.T, body string) string {
 var htmlPages = []string{"/", "/?type=prefix&q=10.0.0.0/24", "/?type=prefix&q=bad", "/neighbors", "/rtr", "/communities"}
 
 func TestGenericDefaultsNameNoOperator(t *testing.T) {
-	h := m49Handler(t, func(c *config.Config) { c.Server.Title = "" })
+	h := newBrandingHandler(t, func(c *config.Config) { c.Server.Title = "" })
 	for _, target := range htmlPages {
 		body := get(h, target).Body.String()
 		for _, bad := range []string{"AS395089", "Hextet Systems", "HEXTET", "NETWORK OPERATIONS", "Hextet Looking Glass", "Hextet's"} {
@@ -75,7 +75,7 @@ func TestGenericDefaultsNameNoOperator(t *testing.T) {
 }
 
 func TestLegacyServerTitleStillNamesTheSite(t *testing.T) {
-	h := m49Handler(t, nil) // testConfig sets server.title "Test LG"
+	h := newBrandingHandler(t, nil) // testConfig sets server.title "Test LG"
 	body := get(h, "/").Body.String()
 	mustContain(t, body, `<span class="brand-name">Test LG</span>`)
 	if got := titleOf(t, body); got != "Route Explorer · Test LG" {
@@ -84,7 +84,7 @@ func TestLegacyServerTitleStillNamesTheSite(t *testing.T) {
 }
 
 func TestSiteNameWinsOverServerTitle(t *testing.T) {
-	h := m49Handler(t, func(c *config.Config) { c.Site.Name = "Example LG"; c.Server.Title = "Legacy" })
+	h := newBrandingHandler(t, func(c *config.Config) { c.Site.Name = "Example LG"; c.Server.Title = "Legacy" })
 	body := get(h, "/").Body.String()
 	mustContain(t, body, `<span class="brand-name">Example LG</span>`)
 	if strings.Contains(body, "Legacy") || titleOf(t, body) != "Route Explorer · Example LG" {
@@ -93,7 +93,7 @@ func TestSiteNameWinsOverServerTitle(t *testing.T) {
 }
 
 func TestCustomIdentityRenders(t *testing.T) {
-	h := m49Handler(t, func(c *config.Config) {
+	h := newBrandingHandler(t, func(c *config.Config) {
 		c.Site = site.Config{
 			Name: "Example Networks LG", Subtitle: ref("Looking glass for AS64500"), Operator: "Example Networks", ASN: 64500,
 			Website: "https://example.net", Contact: "noc@example.net", Branding: site.Branding{Footer: ref("Run with care")},
@@ -132,7 +132,7 @@ func TestFooterHasNoStraySeparators(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			h := m49Handler(t, func(c *config.Config) { c.Site = tc.c })
+			h := newBrandingHandler(t, func(c *config.Config) { c.Site = tc.c })
 			body := get(h, "/").Body.String()
 			if got := footerText(t, body); got != tc.want {
 				t.Errorf("footer %q, want %q", got, tc.want)
@@ -154,7 +154,7 @@ func TestFooterHasNoStraySeparators(t *testing.T) {
 
 func TestOperatorTextIsEscapedEverywhere(t *testing.T) {
 	evil := `<img src=x onerror=alert(1)>"'&`
-	h := m49Handler(t, func(c *config.Config) {
+	h := newBrandingHandler(t, func(c *config.Config) {
 		c.Site = site.Config{Name: evil, Subtitle: ref(evil), Operator: evil, Branding: site.Branding{Footer: ref(evil)}}
 	})
 	for _, target := range htmlPages {
@@ -170,7 +170,7 @@ func TestOperatorTextIsEscapedEverywhere(t *testing.T) {
 		}
 	}
 	// The footer is plain text, not template syntax or Markdown.
-	h = m49Handler(t, func(c *config.Config) {
+	h = newBrandingHandler(t, func(c *config.Config) {
 		c.Site.Branding.Footer = ref("{{.Title}} **bold** [x](http://y) {{template \"nav\"}}")
 	})
 	body := get(h, "/").Body.String()
@@ -181,7 +181,7 @@ func TestOperatorTextIsEscapedEverywhere(t *testing.T) {
 
 func TestLongOperatorTextStaysBounded(t *testing.T) {
 	long := strings.Repeat("W", site.MaxNameRunes)
-	h := m49Handler(t, func(c *config.Config) {
+	h := newBrandingHandler(t, func(c *config.Config) {
 		c.Site = site.Config{Name: long, Operator: strings.Repeat("O", site.MaxOperatorRunes), Branding: site.Branding{Footer: ref(strings.Repeat("F", site.MaxFooterRunes))}}
 	})
 	body := get(h, "/?type=prefix&q=10.0.0.0/24").Body.String()
@@ -189,7 +189,7 @@ func TestLongOperatorTextStaysBounded(t *testing.T) {
 		t.Errorf("title %q", got)
 	}
 	// An over-long legacy title is truncated, not rejected.
-	h = m49Handler(t, func(c *config.Config) { c.Server.Title = strings.Repeat("L", 500) })
+	h = newBrandingHandler(t, func(c *config.Config) { c.Server.Title = strings.Repeat("L", 500) })
 	if got := titleOf(t, get(h, "/").Body.String()); len([]rune(got)) > len("Route Explorer · ")+site.MaxNameRunes {
 		t.Errorf("legacy title unbounded: %d", len(got))
 	}
@@ -210,7 +210,7 @@ func writeLogo(t *testing.T, dir, name string, w, h int) []byte {
 }
 
 func TestBuiltinFavicon(t *testing.T) {
-	h := m49Handler(t, nil)
+	h := newBrandingHandler(t, nil)
 	rr := get(h, "/branding/favicon")
 	if rr.Code != 200 || rr.Header().Get("Content-Type") != "image/svg+xml" {
 		t.Fatalf("%d %q", rr.Code, rr.Header().Get("Content-Type"))
@@ -243,7 +243,7 @@ func TestBuiltinFavicon(t *testing.T) {
 		t.Error("no logo is configured: /branding/logo must be 404")
 	}
 	// Built-in icon follows the configured accent.
-	h2 := m49Handler(t, func(c *config.Config) { c.Theme.Accent = "#C2410C" })
+	h2 := newBrandingHandler(t, func(c *config.Config) { c.Theme.Accent = "#C2410C" })
 	if !strings.Contains(get(h2, "/branding/favicon").Body.String(), "#C2410C") {
 		t.Error("favicon ignores theme accent")
 	}
@@ -253,7 +253,7 @@ func TestCustomLogoAndFavicon(t *testing.T) {
 	dir := t.TempDir()
 	logo := writeLogo(t, dir, "logo.png", 240, 60)
 	fav := writeLogo(t, dir, "fav.png", 32, 32)
-	h := m49Handler(t, func(c *config.Config) {
+	h := newBrandingHandler(t, func(c *config.Config) {
 		c.Site = site.Config{Name: "Example LG", Branding: site.Branding{Directory: dir, Logo: "logo.png", Favicon: "fav.png"}}
 	})
 	body := get(h, "/").Body.String()
@@ -300,7 +300,7 @@ func TestSVGLogoIsServedInert(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "logo.svg"), []byte(svg), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	h := m49Handler(t, func(c *config.Config) { c.Site.Branding = site.Branding{Directory: dir, Logo: "logo.svg"} })
+	h := newBrandingHandler(t, func(c *config.Config) { c.Site.Branding = site.Branding{Directory: dir, Logo: "logo.svg"} })
 	body := get(h, "/").Body.String()
 	if strings.Contains(body, "<svg") || strings.Contains(body, "<rect") {
 		t.Fatal("SVG must never be inlined into a page")
@@ -338,7 +338,7 @@ func TestBrandingURLsCannotReachOtherFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "secret.txt"), []byte("TOPSECRET"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	h := m49Handler(t, func(c *config.Config) { c.Site.Branding = site.Branding{Directory: dir, Logo: "logo.png"} })
+	h := newBrandingHandler(t, func(c *config.Config) { c.Site.Branding = site.Branding{Directory: dir, Logo: "logo.png"} })
 	for _, target := range []string{
 		"/branding/", "/branding/secret.txt", "/branding/logo.png", "/branding/../secret.txt", "/branding/%2e%2e/secret.txt",
 		"/branding/logo/../../etc/passwd", "/branding/..%2fsecret.txt", "/branding/logo/secret.txt", "/branding/favicon/x", "/branding/favicon?file=secret.txt",
@@ -373,7 +373,7 @@ func TestBrandingRouteIsAFixedMetricsLabel(t *testing.T) {
 // --- titles, HTMX and history with a custom site name ---
 
 func TestCustomSiteNameInEveryTitle(t *testing.T) {
-	h := m49Handler(t, func(c *config.Config) { c.Site.Name = "Example Networks LG" })
+	h := newBrandingHandler(t, func(c *config.Config) { c.Site.Name = "Example Networks LG" })
 	long := strings.Repeat("x", 300)
 	for target, want := range map[string]string{
 		"/":                                  "Route Explorer · Example Networks LG",
@@ -400,7 +400,7 @@ func TestCustomSiteNameInEveryTitle(t *testing.T) {
 func TestHTMXAndHistoryWithBranding(t *testing.T) {
 	dir := t.TempDir()
 	writeLogo(t, dir, "logo.png", 80, 20)
-	h := m49Handler(t, func(c *config.Config) {
+	h := newBrandingHandler(t, func(c *config.Config) {
 		c.Site = site.Config{Name: "Example LG", Operator: "Example Networks", ASN: 64500, Branding: site.Branding{Directory: dir, Logo: "logo.png"}}
 	})
 	target := "/?type=asn&q=64500&backend=a&view=table"
@@ -441,13 +441,13 @@ func TestOperatorASNIsDisplayOnly(t *testing.T) {
 		gotQuery = append(gotQuery, r.URL.RequestURI())
 		_, _ = w.Write([]byte(ribJSON(2, false)))
 	}}
-	plain := m48Handler(t, nil, spec)
+	plain := newTestRoutes(t, nil, spec)
 	get(plain, "/?type=prefix&q=10.0.0.0/24&backend=a")
 	get(plain, "/?type=asn&q=64500&backend=a")
 	base := append([]string(nil), gotQuery...)
 	gotQuery = nil
 
-	branded := m48Handler(t, func(c *config.Config) {
+	branded := newTestRoutes(t, func(c *config.Config) {
 		c.Site = site.Config{Name: "X", Operator: "Y", ASN: 395089, Website: "https://example.net", Contact: "a@example.net"}
 	}, spec)
 	r1 := get(branded, "/?type=prefix&q=10.0.0.0/24&backend=a")
@@ -466,7 +466,7 @@ func TestOperatorASNIsDisplayOnly(t *testing.T) {
 }
 
 func TestBrandingDoesNotChangeFeaturesOrPrivacy(t *testing.T) {
-	h := m49Handler(t, func(c *config.Config) {
+	h := newBrandingHandler(t, func(c *config.Config) {
 		c.Site = site.Config{Name: "X", Operator: "Y", ASN: 64500}
 	})
 	body := get(h, "/?type=prefix&q=10.0.0.0/24&backend=a").Body.String()

@@ -345,9 +345,8 @@ func TestReasonTransient(t *testing.T) {
 	}
 }
 
-// A backend that answers with a redirect must never move this application to
-// another address: the request stays on the configured backend, the redirect
-// target is not contacted and its content is not used (M5.2).
+// A backend redirect must not move a request to another address. The redirect
+// target is not contacted and its response is never used.
 func TestBackendRedirectsAreNeverFollowed(t *testing.T) {
 	var targetHits atomic.Int64
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

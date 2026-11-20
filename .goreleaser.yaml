@@ -40,7 +40,6 @@ archives:
       - src: README.md
       - src: INSTALL.md
       - src: docs/SECURITY.md
-      - src: docs/BRANDING.md
       - src: docs/OPENBGPD.md
       - src: docs/COMMUNITIES.md
       - src: docs/THEMING.md

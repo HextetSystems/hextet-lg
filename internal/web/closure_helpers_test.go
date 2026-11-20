@@ -1,7 +1,7 @@
 package web
 
-// Test-only instrumentation for the M3.1 safety-closure tests. Nothing here is
-// compiled into the binary or reachable over HTTP.
+// Test-only instrumentation for resource ownership and recovery checks. Nothing
+// here is compiled into the binary or reachable over HTTP.
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ import (
 )
 
 // idleSnapshot is one consistent-enough reading of every resource counter the
-// closure tests care about.
+// resource recovery checks care about.
 type idleSnapshot struct {
 	Decodes      int   // active route decodes holding an instance-wide expensive-query slot
 	Work         int   // active admitted work (renderers and overview handlers)

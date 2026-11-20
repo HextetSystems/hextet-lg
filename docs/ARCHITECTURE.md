@@ -56,17 +56,17 @@ Public pages are generated from validated, canonical GET URLs. Forms and links w
 
 Browser input is bounded and strictly validated. Unknown or repeated parameters are rejected. Backend URLs come only from validated configuration; the backend client requests fixed endpoints and does not follow redirects. Backend, operator, and DNS text remains untrusted display data. Logs avoid query values, addresses, credentials, backend URLs, headers, and response bodies. Forwarded headers do not establish client identity or influence generated URLs.
 
-The public application listener and optional metrics listener are separate. Health and readiness are served by the application; metrics are not registered on the public handler. Deployments should restrict the unauthenticated `bgplgd` API and metrics listener to trusted networks and place public TLS and client-facing controls at a reverse proxy. See [Security and deployment](docs/SECURITY.md).
+The public application listener and optional metrics listener are separate. Health and readiness are served by the application; metrics are not registered on the public handler. Deployments should restrict the unauthenticated `bgplgd` API and metrics listener to trusted networks and place public TLS and client-facing controls at a reverse proxy. See [Security and deployment](SECURITY.md).
 
 ## Configuration and deployment
 
-Runtime settings are loaded from strict YAML and validated at startup. [`examples/config.example.yaml`](examples/config.example.yaml) documents the supported settings and defaults. Keep runtime configuration and backend addresses local; do not commit them. Hextet LG and OpenBGPD are separate services, connected over a reachable private network or address.
+Runtime settings are loaded from strict YAML and validated at startup. [`examples/config.example.yaml`](../examples/config.example.yaml) documents the supported settings and defaults. Keep runtime configuration and backend addresses local; do not commit them. Hextet LG and OpenBGPD are separate services, connected over a reachable private network or address.
 
-The provided Compose deployment runs the container as a non-root user with read-only configuration and a read-only root filesystem. The public listener is on port 8080; the metrics listener, when enabled, is separate and should not be published publicly. See the [README](README.md), [OpenBGPD collector guide](docs/OPENBGPD.md), and [release and deployment guide](docs/RELEASING.md) for operational details.
+The root [`compose.yaml`](../compose.yaml) builds and runs the application from a source checkout; [`examples/compose.yaml`](../examples/compose.yaml) runs the published image. Both run as a non-root user with read-only configuration and a read-only root filesystem. The published-image example binds the public listener on port 8080 to loopback; the source-checkout Compose file publishes that port on all host interfaces by default. The optional metrics listener is separate and should not be published publicly. See the [installation guide](../INSTALL.md), [OpenBGPD collector guide](OPENBGPD.md), and [release and deployment guide](RELEASING.md) for operational details.
 
 ## Further reading
 
-- [README](README.md): features, configuration, URLs, and local development.
-- [Testing and integration checks](docs/TESTING.md): deterministic tests and opt-in browser/live checks.
-- [Community definitions](docs/COMMUNITIES.md), [session visibility](docs/SESSION_VISIBILITY.md), and [PTR enrichment](docs/PTR_ENRICHMENT.md): feature behavior and limitations.
-- [Theming](docs/THEMING.md) and [site branding](docs/BRANDING.md): appearance and deployment identity.
+- [README](../README.md): features, configuration, URLs, and local development.
+- [Testing and integration checks](TESTING.md): deterministic tests and opt-in browser/live checks.
+- [Community definitions](COMMUNITIES.md): operator-supplied route annotations.
+- [Site appearance](THEMING.md): themes and deployment identity.

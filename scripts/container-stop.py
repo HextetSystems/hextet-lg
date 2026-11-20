@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Isolated Docker stop-deadline test for the M3.1 safety closure.
+"""Isolated Docker stop-deadline stress check.
 
 Runs a SEPARATE container (never the operator's deployment) against a loopback
 mock backend, with the same restrictions as compose.yaml, keeps requests active

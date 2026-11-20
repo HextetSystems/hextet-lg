@@ -265,8 +265,7 @@ func icoBytes(payload []byte) []byte {
 	return append(b, payload...)
 }
 
-// A file whose header is valid but whose data is cut off must fail startup:
-// the header alone used to be enough (M5.2).
+// A file with a valid header but truncated data must fail startup.
 func TestRejectsTruncatedAndCorruptImages(t *testing.T) {
 	dir := t.TempDir()
 	var jb, gb, ab bytes.Buffer
@@ -389,7 +388,7 @@ func TestSVGValidation(t *testing.T) {
 		"trailing garbage":  `<svg` + ns + `/><`,
 		"expression":        `<svg` + ns + `><rect style="width:expression(alert(1))"/></svg>`,
 		"uppercase handler": `<svg` + ns + `><rect ONCLICK="x()"/></svg>`,
-		// M5.2: references the earlier checks did not see.
+		// These references must be rejected after decoding CSS escapes.
 		"xml-stylesheet":      `<?xml-stylesheet href="https://evil.example/x.css" type="text/css"?><svg` + ns + `/>`,
 		"other instruction":   `<svg` + ns + `><?php echo 1 ?></svg>`,
 		"marker url":          `<svg` + ns + `><path marker-start="url(https://evil.example/m.svg#a)"/></svg>`,

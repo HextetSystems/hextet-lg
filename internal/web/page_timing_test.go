@@ -56,11 +56,6 @@ func html_unescape(s string) string {
 	return strings.NewReplacer("&lt;", "<", "&gt;", ">", "&amp;", "&").Replace(s)
 }
 
-func m48Handler(t *testing.T, edit func(*config.Config), specs ...backendSpec) http.Handler {
-	t.Helper()
-	return m47Handler(t, edit, specs...)
-}
-
 func delayed(d time.Duration, n int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(d)
@@ -126,7 +121,7 @@ func TestPageTimingFlag(t *testing.T) {
 		want bool
 	}{"omitted": {nil, true}, "enabled": {b3(true), true}, "disabled": {b3(false), false}} {
 		t.Run(name, func(t *testing.T) {
-			h := m48Handler(t, func(c *config.Config) { c.Features.PageTiming = tc.flag }, backendSpec{"a", "Alpha", delayed(0, 2)})
+			h := newTestRoutes(t, func(c *config.Config) { c.Features.PageTiming = tc.flag }, backendSpec{"a", "Alpha", delayed(0, 2)})
 			for _, path := range []string{"/", "/?q=10.0.0.0/24&type=prefix&backend=a", "/?q=bad", "/communities", "/neighbors", "/rtr"} {
 				rr := get(h, path)
 				_, ok := generatedIn(t, rr.Body.String())
@@ -153,14 +148,14 @@ func TestPageTimingFlag(t *testing.T) {
 // ---- HTML pages ---------------------------------------------------------------
 
 func TestTimingOnEveryHTMLPageExactlyOnce(t *testing.T) {
-	h := m48Handler(t, nil, backendSpec{"a", "Alpha", func(w http.ResponseWriter, r *http.Request) {
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/rtr":
 			http.NotFound(w, r) // unsupported backend
 		case "/neighbors":
-			fmt.Fprint(w, m47Neighbors)
+			fmt.Fprint(w, neighborFixture)
 		case "/summary":
-			fmt.Fprint(w, m47Summary)
+			fmt.Fprint(w, summaryFixture)
 		default:
 			fmt.Fprint(w, ribJSON(3, false))
 		}
@@ -197,7 +192,7 @@ func TestTimingOnEveryHTMLPageExactlyOnce(t *testing.T) {
 }
 
 func TestInvalidRequestKeepsStatusAndGetsFooter(t *testing.T) {
-	h := m48Handler(t, nil, backendSpec{"a", "Alpha", delayed(0, 1)})
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", delayed(0, 1)})
 	rr := get(h, "/?type=prefix&q=not-a-prefix")
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status %d, want 400", rr.Code)
@@ -208,7 +203,7 @@ func TestInvalidRequestKeepsStatusAndGetsFooter(t *testing.T) {
 }
 
 func TestTimingIsEscapedAndOnlyDurationText(t *testing.T) {
-	h := m48Handler(t, nil, backendSpec{"a", "Alpha", delayed(0, 1)})
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", delayed(0, 1)})
 	body := get(h, "/communities?q=%3Cscript%3Ealert(1)%3C/script%3E&category=%22%3E%3Cb%3E").Body.String()
 	if strings.Contains(body, "<script>alert(1)") {
 		t.Fatal("query reflected unescaped")
@@ -341,7 +336,7 @@ func TestCacheHitMeasuresThisRequestNotTheOriginalQuery(t *testing.T) {
 	const delay = 250 * time.Millisecond
 	var calls int
 	var mu sync.Mutex
-	h := m48Handler(t, func(c *config.Config) { c.LookingGlass.CacheTTL = 30 * time.Second }, backendSpec{"a", "Alpha", func(w http.ResponseWriter, r *http.Request) {
+	h := newTestRoutes(t, func(c *config.Config) { c.LookingGlass.CacheTTL = 30 * time.Second }, backendSpec{"a", "Alpha", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		calls++
 		mu.Unlock()
@@ -376,7 +371,7 @@ func TestCacheHitMeasuresThisRequestNotTheOriginalQuery(t *testing.T) {
 
 func TestSharedFlightWaiterMeasuresItsOwnWait(t *testing.T) {
 	const delay = 600 * time.Millisecond
-	h := m48Handler(t, func(c *config.Config) { c.LookingGlass.CacheTTL = 30 * time.Second }, backendSpec{"a", "Alpha", delayed(delay, 3)})
+	h := newTestRoutes(t, func(c *config.Config) { c.LookingGlass.CacheTTL = 30 * time.Second }, backendSpec{"a", "Alpha", delayed(delay, 3)})
 	const path = "/?type=prefix&q=10.0.0.0/24&backend=a"
 	first := make(chan time.Duration, 1)
 	go func() {
@@ -400,7 +395,7 @@ func TestSharedFlightWaiterMeasuresItsOwnWait(t *testing.T) {
 
 func TestMultipleBackendsAndPartialFailure(t *testing.T) {
 	slow := 200 * time.Millisecond
-	h := m48Handler(t, func(c *config.Config) { c.LookingGlass.QueryTimeout = 600 * time.Millisecond },
+	h := newTestRoutes(t, func(c *config.Config) { c.LookingGlass.QueryTimeout = 600 * time.Millisecond },
 		backendSpec{"a", "Alpha", delayed(slow, 3)},
 		backendSpec{"b", "Beta", delayed(20*time.Millisecond, 3)},
 		backendSpec{"c", "Gamma", partialBackend(3)},
@@ -424,7 +419,7 @@ func TestMultipleBackendsAndPartialFailure(t *testing.T) {
 }
 
 func TestEmptyResultAndTimeoutKeepStatusAndFooter(t *testing.T) {
-	h := m48Handler(t, nil, backendSpec{"a", "Alpha", serveDoc("{}")})
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", serveDoc("{}")})
 	rr := get(h, "/?type=prefix&q=10.0.0.0/24&backend=a")
 	if rr.Code != 200 || !strings.Contains(rr.Body.String(), "No matching routes") {
 		t.Fatalf("status %d", rr.Code)
@@ -433,7 +428,7 @@ func TestEmptyResultAndTimeoutKeepStatusAndFooter(t *testing.T) {
 		t.Error("empty result has no timing")
 	}
 
-	h = m48Handler(t, func(c *config.Config) { c.LookingGlass.QueryTimeout = 100 * time.Millisecond },
+	h = newTestRoutes(t, func(c *config.Config) { c.LookingGlass.QueryTimeout = 100 * time.Millisecond },
 		backendSpec{"a", "Alpha", func(w http.ResponseWriter, r *http.Request) { time.Sleep(400 * time.Millisecond) }})
 	rr = get(h, "/?type=prefix&q=10.0.0.0/24&backend=a")
 	if rr.Code != http.StatusGatewayTimeout && rr.Code != http.StatusBadGateway && rr.Code != 200 && rr.Code != http.StatusServiceUnavailable {
@@ -452,7 +447,7 @@ func TestEmptyResultAndTimeoutKeepStatusAndFooter(t *testing.T) {
 func TestStatusCodesUnchangedByTimingFlag(t *testing.T) {
 	paths := []string{"/", "/?type=prefix&q=bad", "/?type=prefix&q=10.0.0.0/24&backend=a", "/?bogus=1", "/communities", "/rtr", "/nope"}
 	codes := func(flag *bool) []int {
-		h := m48Handler(t, func(c *config.Config) { c.Features.PageTiming = flag }, backendSpec{"a", "Alpha", delayed(0, 2)})
+		h := newTestRoutes(t, func(c *config.Config) { c.Features.PageTiming = flag }, backendSpec{"a", "Alpha", delayed(0, 2)})
 		var out []int
 		for _, p := range paths {
 			out = append(out, get(h, p).Code)
@@ -471,7 +466,7 @@ func TestStatusCodesUnchangedByTimingFlag(t *testing.T) {
 
 func TestHTMXFragmentCarriesOutOfBandTiming(t *testing.T) {
 	const delay = 120 * time.Millisecond
-	h := m48Handler(t, nil, backendSpec{"a", "Alpha", delayed(delay, 4)})
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", delayed(delay, 4)})
 	rr := get(h, "/?type=prefix&q=10.0.0.0/24&backend=a", "HX-Request", "true")
 	body := rr.Body.String()
 	if strings.Contains(body, "<footer") || strings.Contains(body, "<html") {
@@ -497,7 +492,7 @@ func TestHTMXFragmentCarriesOutOfBandTiming(t *testing.T) {
 // Two consecutive searches each report their own duration, in the same response
 // as their results: a response can never deliver another request's timing.
 func TestConsecutiveHTMXSearchesReportTheirOwnDuration(t *testing.T) {
-	h := m48Handler(t, nil,
+	h := newTestRoutes(t, nil,
 		backendSpec{"slow", "Slow", func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(300 * time.Millisecond)
 			fmt.Fprint(w, ribJSON(2, false))
@@ -519,7 +514,7 @@ func TestConsecutiveHTMXSearchesReportTheirOwnDuration(t *testing.T) {
 // A history-restore request is answered with a full page (new, accurate
 // measurement) and never with an out-of-band fragment.
 func TestHistoryRestoreRequestGetsFullPageTiming(t *testing.T) {
-	h := m48Handler(t, nil, backendSpec{"a", "Alpha", delayed(0, 2)})
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", delayed(0, 2)})
 	rr := get(h, "/?type=prefix&q=10.0.0.0/24&backend=a", "HX-Request", "true", "HX-History-Restore-Request", "true")
 	body := rr.Body.String()
 	if !strings.Contains(body, "<footer>") || strings.Contains(body, "hx-swap-oob") || timingCount(body) != 1 {
@@ -599,7 +594,7 @@ func TestTimingExcludesAndCoexistsWithAsyncEnrichment(t *testing.T) {
 func TestNonHTMLOutputIsUnchanged(t *testing.T) {
 	var cfgFlag *bool
 	build := func() http.Handler {
-		return m48Handler(t, func(c *config.Config) { c.Features.PageTiming = cfgFlag }, backendSpec{"a", "Alpha", delayed(0, 3)})
+		return newTestRoutes(t, func(c *config.Config) { c.Features.PageTiming = cfgFlag }, backendSpec{"a", "Alpha", delayed(0, 3)})
 	}
 	on := build()
 	cfgFlag = b3(false)

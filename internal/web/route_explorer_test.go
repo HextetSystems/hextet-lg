@@ -13,7 +13,7 @@ import (
 	"github.com/HextetSystems/hextet-lg/internal/config"
 )
 
-// M4.8.1: compact search/results layout and dynamic document titles.
+// Tests for route search layout and dynamic document titles.
 
 var titleElement = regexp.MustCompile(`(?s)<title>.*?</title>`)
 
@@ -28,16 +28,16 @@ func titleOf(t *testing.T, body string) string {
 	return html.UnescapeString(strings.TrimSuffix(strings.TrimPrefix(m[0], "<title>"), "</title>"))
 }
 
-func m481Handler(t *testing.T) http.Handler {
+func newRouteExplorerHandler(t *testing.T) http.Handler {
 	t.Helper()
-	return m48Handler(t, nil,
+	return newTestRoutes(t, nil,
 		backendSpec{"a", "Alpha", serveDoc(ribJSON(3, false))},
 		backendSpec{"b", "Beta", serveDoc(ribJSON(2, true))},
 	)
 }
 
 func TestRouteExplorerTitles(t *testing.T) {
-	h := m481Handler(t)
+	h := newRouteExplorerHandler(t)
 	long := strings.Repeat("x", 200)
 	for _, tc := range []struct {
 		name, target, want string
@@ -87,7 +87,7 @@ func TestRouteExplorerTitles(t *testing.T) {
 }
 
 func TestTitleIsEscapedAndBounded(t *testing.T) {
-	h := m481Handler(t)
+	h := newRouteExplorerHandler(t)
 	rr := get(h, "/?neighbor="+url.QueryEscape(`</title><script>alert(1)</script>`)+"&backend=all")
 	body := rr.Body.String()
 	if strings.Contains(body, "<script>alert") || !strings.Contains(body, "&lt;/title&gt;") {
@@ -121,7 +121,7 @@ func TestTitleTextSanitizes(t *testing.T) {
 }
 
 func TestPageTitlesOfOtherViews(t *testing.T) {
-	h := m481Handler(t)
+	h := newRouteExplorerHandler(t)
 	for target, want := range map[string]string{
 		"/neighbors":                "BGP Neighbors · Test LG",
 		"/neighbors?backend=a":      "BGP Neighbors @ Alpha · Test LG",
@@ -138,7 +138,7 @@ func TestPageTitlesOfOtherViews(t *testing.T) {
 }
 
 func TestSiteNameIsTheOnlyTitleSuffix(t *testing.T) {
-	h := m48Handler(t, func(c *config.Config) { c.Server.Title = "Other Name" }, backendSpec{"a", "Alpha", serveDoc(ribJSON(1, false))})
+	h := newTestRoutes(t, func(c *config.Config) { c.Server.Title = "Other Name" }, backendSpec{"a", "Alpha", serveDoc(ribJSON(1, false))})
 	for target, want := range map[string]string{
 		"/":                                   "Route Explorer · Other Name",
 		"/?type=prefix&q=10.0.0.0/24":         "10.0.0.0/24 · Other Name",
@@ -154,7 +154,7 @@ func TestSiteNameIsTheOnlyTitleSuffix(t *testing.T) {
 }
 
 func TestPagedSearchTitleNamesThePage(t *testing.T) {
-	h := m48Handler(t, nil, backendSpec{"a", "Alpha", serveDoc(ribJSON(150, false))})
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", serveDoc(ribJSON(150, false))})
 	if got := titleOf(t, get(h, "/?type=asn&q=64500&backend=a").Body.String()); got != "AS64500 @ Alpha · Test LG" {
 		t.Errorf("page 1: %q", got)
 	}
@@ -173,7 +173,7 @@ func TestPagedSearchTitleNamesThePage(t *testing.T) {
 // document); a full page, including the one served for a history restore,
 // carries exactly one in <head> and none in the body.
 func TestTitleTransportFullPageFragmentAndHistoryRestore(t *testing.T) {
-	h := m481Handler(t)
+	h := newRouteExplorerHandler(t)
 	target := "/?type=asn&q=64500&backend=all&view=table"
 	full := get(h, target).Body.String()
 	frag := get(h, target, "HX-Request", "true").Body.String()
@@ -203,7 +203,7 @@ func TestTitleTransportFullPageFragmentAndHistoryRestore(t *testing.T) {
 
 // Pushed URL and title describe the same canonical query.
 func TestFragmentTitleMatchesPushedURL(t *testing.T) {
-	h := m481Handler(t)
+	h := newRouteExplorerHandler(t)
 	rr := get(h, "/?type=asn&q=AS64500&backend=a&view=table", "HX-Request", "true")
 	push := rr.Header().Get("HX-Push-Url")
 	if !strings.Contains(push, "q=64500") || titleOf(t, rr.Body.String()) != "AS64500 @ Alpha · Test LG" {
@@ -217,7 +217,7 @@ func TestFragmentTitleMatchesPushedURL(t *testing.T) {
 }
 
 func TestTitlesDoNotLeakBackendAddressesOrRawInput(t *testing.T) {
-	h := m481Handler(t)
+	h := newRouteExplorerHandler(t)
 	for _, target := range []string{"/?type=prefix&q=10.0.0.0/24&backend=a", "/?type=prefix&q=nope&backend=a", "/neighbors?backend=a", "/?neighbor=x&backend=a&secret=1"} {
 		title := titleOf(t, get(h, target).Body.String())
 		if strings.Contains(title, "127.0.0.1") || strings.Contains(title, "http") || strings.Contains(title, "nope") || strings.Contains(title, "secret") {
@@ -229,7 +229,7 @@ func TestTitlesDoNotLeakBackendAddressesOrRawInput(t *testing.T) {
 // ---- layout -------------------------------------------------------------------
 
 func TestCompactSearchControls(t *testing.T) {
-	h := m481Handler(t)
+	h := newRouteExplorerHandler(t)
 	body := get(h, "/").Body.String()
 	form := body[strings.Index(body, `<form id="search-form"`):strings.Index(body, "</form>")]
 
@@ -283,7 +283,7 @@ func TestCompactSearchControls(t *testing.T) {
 }
 
 func TestAdvancedFiltersStayCollapsedAfterSearch(t *testing.T) {
-	h := m481Handler(t)
+	h := newRouteExplorerHandler(t)
 	body := get(h, "/?prefix=10.0.0.0/24&ovs=valid&best=1&backend=all").Body.String()
 	if !strings.Contains(body, `<details class="advanced" id="advanced" >`) || !strings.Contains(body, "(3 active)") {
 		t.Errorf("active filters are indicated but the panel is not forced open")
@@ -300,7 +300,7 @@ func TestAdvancedFiltersStayCollapsedAfterSearch(t *testing.T) {
 }
 
 func TestQueryContextIsInTheSearchPanel(t *testing.T) {
-	h := m481Handler(t)
+	h := newRouteExplorerHandler(t)
 	// Simple search: the box shows the value, the context adds Loc-RIB but never repeats it.
 	body := get(h, "/?type=prefix&q=10.0.0.0/24&backend=all").Body.String()
 	ctx := regexp.MustCompile(`(?s)<span id="query-context".*?</details></span>`).FindString(body)
@@ -341,7 +341,7 @@ func TestQueryContextIsInTheSearchPanel(t *testing.T) {
 
 // The context is outside #results, so a fragment replaces it out of band.
 func TestFragmentReplacesContextOutOfBand(t *testing.T) {
-	h := m481Handler(t)
+	h := newRouteExplorerHandler(t)
 	frag := get(h, "/?prefix=10.0.0.0/24&ovs=valid&backend=all", "HX-Request", "true").Body.String()
 	if strings.Count(frag, `<span id="query-context" class="ctx" hx-swap-oob="true">`) != 1 || strings.Count(frag, `hx-swap-oob`) != 2 {
 		t.Errorf("fragment must carry exactly the context and timing OOB elements: %d", strings.Count(frag, "hx-swap-oob"))
@@ -361,7 +361,7 @@ func TestFragmentReplacesContextOutOfBand(t *testing.T) {
 }
 
 func TestSingleBackendStatusLineAboveTable(t *testing.T) {
-	h := m481Handler(t)
+	h := newRouteExplorerHandler(t)
 	body := get(h, "/?type=prefix&q=10.0.0.0/24&backend=a").Body.String()
 	if strings.Count(body, `class="backend-line"`) != 1 || strings.Count(body, "<table>") != 1 || strings.Count(body, "COMPLETE") != 1 {
 		t.Fatalf("one status line, one table: %d %d %d", strings.Count(body, `class="backend-line"`), strings.Count(body, "<table>"), strings.Count(body, "COMPLETE"))
@@ -390,7 +390,7 @@ func TestSingleBackendStatusLineAboveTable(t *testing.T) {
 }
 
 func TestSingularRouteCount(t *testing.T) {
-	h := m48Handler(t, nil, backendSpec{"a", "Alpha", serveDoc(ribJSON(1, false))})
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", serveDoc(ribJSON(1, false))})
 	if body := get(h, "/?type=prefix&q=10.0.0.0/24&backend=a").Body.String(); !strings.Contains(body, " · 1 route ·") {
 		t.Error("one route must not read '1 routes'")
 	}
@@ -450,7 +450,7 @@ func TestMultiBackendRowsStaySeparateAndFailuresDoNotHideSuccess(t *testing.T) {
 }
 
 func TestEmptyResultIsOneCompactLine(t *testing.T) {
-	h := m48Handler(t, nil, backendSpec{"a", "Alpha", serveDoc(`{"rib":[]}`)})
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", serveDoc(`{"rib":[]}`)})
 	body := get(h, "/?type=prefix&q=10.0.0.0/24&backend=a").Body.String()
 	if !strings.Contains(body, `<div class="empty"><strong>No matching routes</strong>`) || strings.Contains(body, "<table>") || strings.Contains(body, "0 routes decoded") {
 		t.Error("empty result")
@@ -461,7 +461,7 @@ func TestEmptyResultIsOneCompactLine(t *testing.T) {
 }
 
 func TestPaginationIsOnlyShownWhenThereIsAnotherPage(t *testing.T) {
-	h := m48Handler(t, nil, backendSpec{"a", "Alpha", serveDoc(ribJSON(150, false))})
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", serveDoc(ribJSON(150, false))})
 	one := get(h, "/?type=prefix&q=10.0.0.0/24&backend=a&page=1").Body.String()
 	if strings.Count(one, `class="pager"`) != 2 || !strings.Contains(one, "Page 1 of 2") || !strings.Contains(one, `rel="next"`) || strings.Contains(one, `rel="prev"`) {
 		t.Errorf("multi-page: pagers=%d", strings.Count(one, `class="pager"`))
@@ -477,7 +477,7 @@ func TestPaginationIsOnlyShownWhenThereIsAnotherPage(t *testing.T) {
 		t.Error("page size semantics changed")
 	}
 	// A short result has no pager and no duplicated count.
-	short := m48Handler(t, nil, backendSpec{"a", "Alpha", serveDoc(ribJSON(3, false))})
+	short := newTestRoutes(t, nil, backendSpec{"a", "Alpha", serveDoc(ribJSON(3, false))})
 	if b := get(short, "/?type=prefix&q=10.0.0.0/24&backend=a").Body.String(); strings.Contains(b, `class="pager"`) || strings.Contains(b, "Page 1 of 1") || strings.Count(b, "3 routes") != 1 {
 		t.Errorf("single page: pager=%d count=%d", strings.Count(b, `class="pager"`), strings.Count(b, "3 routes"))
 	}
@@ -488,7 +488,7 @@ func TestPaginationIsOnlyShownWhenThereIsAnotherPage(t *testing.T) {
 }
 
 func TestTextViewKeepsStatusAndActions(t *testing.T) {
-	h := m481Handler(t)
+	h := newRouteExplorerHandler(t)
 	body := get(h, "/?type=prefix&q=10.0.0.0/24&backend=all&view=detail").Body.String()
 	for _, want := range []string{`<ul class="status-list">`, `class="toolbar"`, `data-copy="route-text"`, `href="/?type=prefix&amp;q=10.0.0.0%2F24&amp;backend=all&amp;view=detail&amp;output=plain"`, `id="route-text"`} {
 		if !strings.Contains(body, want) {
@@ -504,7 +504,7 @@ func TestTextViewKeepsStatusAndActions(t *testing.T) {
 }
 
 func TestFooterTimingSurvivesTheNewLayout(t *testing.T) {
-	h := m481Handler(t)
+	h := newRouteExplorerHandler(t)
 	for _, target := range []string{"/", "/?type=prefix&q=10.0.0.0/24&backend=all", "/?type=prefix&q=bad", "/?type=prefix&q=10.0.0.0/24&backend=all&view=text"} {
 		body := get(h, target).Body.String()
 		if timingCount(body) != 1 || strings.Count(body, "<footer>") != 1 || strings.Index(body, "<footer>") > strings.Index(body, `id="page-timing"`) {
@@ -525,7 +525,7 @@ func TestFooterTimingSurvivesTheNewLayout(t *testing.T) {
 		t.Errorf("fragment order title=%d context=%d timing=%d", iT, iC, iM)
 	}
 	// Disabled: no footer indicator anywhere, titles unaffected.
-	off := m48Handler(t, func(c *config.Config) { c.Features.PageTiming = b3(false) }, backendSpec{"a", "Alpha", serveDoc(ribJSON(1, false))})
+	off := newTestRoutes(t, func(c *config.Config) { c.Features.PageTiming = b3(false) }, backendSpec{"a", "Alpha", serveDoc(ribJSON(1, false))})
 	for _, hx := range []bool{false, true} {
 		rr := get(off, "/?type=prefix&q=10.0.0.0/24&backend=a")
 		if hx {
@@ -539,7 +539,7 @@ func TestFooterTimingSurvivesTheNewLayout(t *testing.T) {
 
 // The unchanged parts of a result stay unchanged.
 func TestRouteTablePreserved(t *testing.T) {
-	h := m481Handler(t)
+	h := newRouteExplorerHandler(t)
 	body := get(h, "/?type=prefix&q=10.0.0.0/24&backend=a").Body.String()
 	for _, want := range []string{"<th>Prefix</th><th>AS path</th><th>Origin ASN</th><th>Exit next hop</th><th>Local pref</th><th>MED</th><th>Age</th><th>RPKI</th><th>ASPA</th>", "BEST", "Route details", "395089%3A0%3A8", `<caption class="sr-only">Routes from Alpha</caption>`} {
 		if !strings.Contains(body, want) {

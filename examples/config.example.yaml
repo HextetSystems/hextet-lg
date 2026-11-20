@@ -36,7 +36,7 @@ server:
 # an installation without this section shows the generic defaults noted below
 # (no operator, no AS number, no logo). Nothing here influences a backend
 # query, a filter, or any route result: it is presentation only.
-# See docs/BRANDING.md.
+# See docs/THEMING.md for site identity, logos, and favicons.
 site:
   # Site name: the header and every browser tab title ("<page> · <name>").
   # Default: the legacy server.title if set, else "BGP Looking Glass".
@@ -227,7 +227,9 @@ backends:
 #   rtr_session_addresses: show RTR validator addresses, ports and local
 #                  addresses on /rtr (default false). By default validators are
 #                  identified only by their bgpd.conf "descr" or an ordinal.
-#                  See docs/SESSION_VISIBILITY.md before enabling it.
+#                  Enabling this publishes those network details to visitors;
+#                  use it only when they are safe to disclose. RTR descriptions
+#                  are also shown as written, so choose visitor-safe labels.
 #   page_timing:   show "Generated in 42.7 ms" in the footer of HTML pages
 #                  (default true). It is the server-side time from the start of
 #                  request handling until the footer is rendered: it includes
@@ -303,14 +305,21 @@ display:
     rpki: true
     aspa: true
 
-# Optional asynchronous reverse DNS for displayed next-hop addresses.
-# DNS is never required for route rendering and the cache is memory-only.
+# Optional, asynchronous reverse DNS for displayed route exit next hops (not
+# the internal true next hop) and neighbor addresses when the Neighbor column
+# uses name or both. Off by default. Pages show addresses immediately; lookups
+# never delay rendering.
+# Private and documentation addresses are eligible for DNS; loopback,
+# link-local, multicast, unspecified and zoned addresses are skipped. Enabling
+# this can disclose network addresses to DNS operators; use a trusted resolver.
+# Text and plain output do not start lookups. Cache is memory-only and is lost
+# at restart.
 ptr_enrichment:
   enabled: false
-  timeout: 2s
-  max_concurrent: 4
-  max_lookups_per_page: 64
+  timeout: 2s                # Per-lookup timeout.
+  max_concurrent: 4          # Simultaneous lookups.
+  max_lookups_per_page: 64   # Uncached addresses scheduled per page.
   cache:
-    positive_ttl: 720h
-    negative_ttl: 24h
-    max_entries: 10000
+    positive_ttl: 720h       # Cache duration for a hostname.
+    negative_ttl: 24h        # Cache duration for no usable PTR record.
+    max_entries: 10000       # Maximum cached positive and negative results.

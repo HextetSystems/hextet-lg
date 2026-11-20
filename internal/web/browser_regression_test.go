@@ -12,10 +12,10 @@ import (
 	"time"
 )
 
-// m51Mock is a deterministic mock bgplgd for browser checks. A search for the
+// browserTestBackend is a deterministic mock bgplgd for browser checks. A search for the
 // documentation prefix 203.0.113.0/24 answers with no routes; everything else
 // answers with a few routes. It never serves private routing data.
-func m51Mock(routes int) http.HandlerFunc {
+func browserTestBackend(routes int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/rib":
@@ -25,11 +25,11 @@ func m51Mock(routes int) http.HandlerFunc {
 			}
 			_, _ = io.WriteString(w, ribJSON(routes, strings.Contains(r.URL.Query().Get("prefix"), ":")))
 		case "/neighbors":
-			_, _ = io.WriteString(w, m47Neighbors)
+			_, _ = io.WriteString(w, neighborFixture)
 		case "/summary":
-			_, _ = io.WriteString(w, m47Summary)
+			_, _ = io.WriteString(w, summaryFixture)
 		case "/rtr":
-			_, _ = io.WriteString(w, m47RTR)
+			_, _ = io.WriteString(w, rtrFixture)
 		default:
 			http.NotFound(w, r)
 		}
@@ -63,8 +63,8 @@ func TestBrowserRegression(t *testing.T) {
 	lg.PageSize = 2 // five routes over two backends: three pages
 	lg.CacheTTL = 20 * time.Second
 	cfg, closeAll := testConfig(lg,
-		backendSpec{"a", "Alpha", m51Mock(3)},
-		backendSpec{"b", "Bravo", m51Mock(2)},
+		backendSpec{"a", "Alpha", browserTestBackend(3)},
+		backendSpec{"b", "Bravo", browserTestBackend(2)},
 	)
 	defer closeAll()
 	cfg.Site.Name = "Test Site"
@@ -78,7 +78,7 @@ func TestBrowserRegression(t *testing.T) {
 
 	// Second instance: the opt-in presentation settings and hostile-looking
 	// branding text, which must be shown as text and never as markup.
-	rawCfg, closeRaw := testConfig(lg, backendSpec{"a", "Alpha", m51Mock(3)})
+	rawCfg, closeRaw := testConfig(lg, backendSpec{"a", "Alpha", browserTestBackend(3)})
 	defer closeRaw()
 	rawCfg.Site.Name = "<i>Raw</i> Site"
 	rawCfg.Site.Operator = "<b>Op</b> & \"quotes\" long-operator-name"

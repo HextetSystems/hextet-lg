@@ -41,7 +41,7 @@ func mixedDoc(n int) string {
 }
 
 func TestMixedFamilyHTMLTextAndDetailAreComplete(t *testing.T) {
-	h := m48Handler(t, func(c *config.Config) { c.Display.RawJSON = true; c.Display.RouteColumns.Neighbor = true }, backendSpec{"a", "Alpha", serveDoc(mixedDoc(8))})
+	h := newTestRoutes(t, func(c *config.Config) { c.Display.RawJSON = true; c.Display.RouteColumns.Neighbor = true }, backendSpec{"a", "Alpha", serveDoc(mixedDoc(8))})
 	base := "/?large-community=395089%3A0%3A8&backend=a"
 
 	html := get(h, base+"&view=table").Body.String()

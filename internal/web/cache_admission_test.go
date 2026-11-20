@@ -1,8 +1,7 @@
 package web
 
-// M3.2: cache admission policy for partial results. Transient conditions
-// (aggregate memory capacity, queueing, cancellation) must never become
-// reusable cache entries; deterministic partials keep their M3.1 behavior.
+// Transient partial results (capacity, queueing, cancellation) must not become
+// reusable cache entries; deterministic partial results may be cached.
 
 import (
 	"context"

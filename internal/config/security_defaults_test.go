@@ -5,9 +5,8 @@ import (
 	"testing"
 )
 
-// A configuration that says nothing about the optional, disclosure-related
-// settings must come up with every one of them in its safe position (M5.2).
-func TestM52MinimalConfigHasSafeDefaults(t *testing.T) {
+// Omitted disclosure-related settings must keep their privacy-preserving defaults.
+func TestMinimalConfigUsesSafeDisclosureDefaults(t *testing.T) {
 	c, err := Decode(strings.NewReader(validConfig))
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +42,7 @@ func TestM52MinimalConfigHasSafeDefaults(t *testing.T) {
 
 // Unsafe or ambiguous values fail startup; none of them is silently ignored,
 // defaulted or coerced into something that enables a disclosure.
-func TestM52UnsafeConfigurationFailsClearly(t *testing.T) {
+func TestUnsafeConfigurationIsRejected(t *testing.T) {
 	backend := "    url: http://127.0.0.1:9099\n"
 	withURL := func(u string) string { return strings.Replace(validConfig, backend, "    url: "+u+"\n", 1) }
 	extra := func(section string) string { return validConfig + section }

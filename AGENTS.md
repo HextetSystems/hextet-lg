@@ -1,6 +1,6 @@
 # Contributor guide
 
-Hextet LG is a read-only Go web application that presents routes and session information from configured OpenBGPD `bgplgd` HTTP APIs. The interface uses Go `html/template`, embedded CSS and JavaScript, and HTMX to enhance ordinary forms and links. It has no database or persistent route store. `ARCHITECTURE.md`, `README.md`, and the focused documents under `docs/` describe behavior in more detail; keep this guide general and current.
+Hextet LG is a read-only Go web application that presents routes and session information from configured OpenBGPD `bgplgd` HTTP APIs. The interface uses Go `html/template`, embedded CSS and JavaScript, and HTMX to enhance ordinary forms and links. It has no database or persistent route store. `docs/ARCHITECTURE.md`, `README.md`, and the focused documents under `docs/` describe behavior in more detail; keep this guide general and current.
 
 ## Code organization
 
@@ -12,7 +12,8 @@ Hextet LG is a read-only Go web application that presents routes and session inf
 - `internal/{communities,site,theme,visibility,obs,version}`: focused packages for community definitions, deployment identity and assets, theme generation, route visibility, observability, and build identity.
 - `internal/web/templates` and `internal/web/static`: page templates and frontend assets, embedded through `internal/web/embed.go`.
 - `internal/*/*_test.go` and `internal/web/testdata`: Go tests, browser test scripts, and sanitized backend fixtures.
-- `examples/`: sample runtime configuration and community data. `docs/`: user, operator, security, architecture, and testing guidance.
+- `compose.yaml`: build and run the application from a source checkout. `examples/compose.yaml`: deploy the published image.
+- `examples/`: sample runtime configuration and community data. `scripts/`: container and deployment helpers. `docs/`: user, operator, security, architecture, and testing guidance.
 
 Keep functionality in the package that owns it. Keep backend transport models separate from presentation models, and avoid adding dependencies, layers, or generic abstractions without a clear need.
 
@@ -42,7 +43,9 @@ The deterministic validation commands are documented in `docs/TESTING.md` and ru
 
 ```sh
 go fmt ./...
+go mod verify
 go vet ./...
+go build ./cmd/hextet-lg
 go test ./...
 go test -race ./...
 node --test internal/web/testdata/*.test.js

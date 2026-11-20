@@ -18,13 +18,13 @@ import (
 	"github.com/HextetSystems/hextet-lg/internal/config"
 )
 
-// M5.1: regression coverage for an OpenBGPD 9.3 backend. The fixtures under
-// testdata/openbgpd93 have the exact field structure that a live OpenBGPD 9.3
-// bgplgd returned (summary, neighbors, rtr, rib), with every address replaced
-// by a documentation address, ASNs by private ASNs, and descriptions by
-// placeholders. No private routing data is committed.
+// Compatibility coverage for an OpenBGPD 9.3 backend. The fixtures under
+// testdata/openbgpd93 have the field structure of live OpenBGPD 9.3 responses:
+// summary, neighbors, RTR and RIB. They replace every address with a
+// documentation address, use private ASNs and placeholder descriptions. No
+// private routing data is committed.
 
-func m51Fixture(t *testing.T, name string) string {
+func openBGPD93Fixture(t *testing.T, name string) string {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("testdata", "openbgpd93", name))
 	if err != nil {
@@ -33,14 +33,14 @@ func m51Fixture(t *testing.T, name string) string {
 	return string(b)
 }
 
-// m51Real serves the 9.3-shaped fixtures as bgplgd would.
-func m51Real(t *testing.T) http.HandlerFunc {
+// openBGPD93Backend serves the 9.3-shaped fixtures as bgplgd would.
+func openBGPD93Backend(t *testing.T) http.HandlerFunc {
 	body := map[string]string{
-		"/summary":   m51Fixture(t, "summary.json"),
-		"/neighbors": m51Fixture(t, "neighbors.json"),
-		"/rtr":       m51Fixture(t, "rtr.json"),
+		"/summary":   openBGPD93Fixture(t, "summary.json"),
+		"/neighbors": openBGPD93Fixture(t, "neighbors.json"),
+		"/rtr":       openBGPD93Fixture(t, "rtr.json"),
 	}
-	v4, v6 := m51Fixture(t, "rib-v4.json"), m51Fixture(t, "rib-v6.json")
+	v4, v6 := openBGPD93Fixture(t, "rib-v4.json"), openBGPD93Fixture(t, "rib-v6.json")
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/rib" {
@@ -59,7 +59,7 @@ func m51Real(t *testing.T) http.HandlerFunc {
 	}
 }
 
-func m51Page(t *testing.T, h http.Handler, target string, want int) string {
+func openBGPD93Page(t *testing.T, h http.Handler, target string, want int) string {
 	t.Helper()
 	rr := get(h, target)
 	if rr.Code != want {
@@ -69,15 +69,15 @@ func m51Page(t *testing.T, h http.Handler, target string, want int) string {
 }
 
 // textOf flattens HTML to visible-ish text for substring assertions.
-var m51Tag = regexp.MustCompile(`(?s)<script.*?</script>|<[^>]+>`)
+var openBGPDHTMLTags = regexp.MustCompile(`(?s)<script.*?</script>|<[^>]+>`)
 
 func textOf(s string) string {
-	return strings.Join(strings.Fields(strings.NewReplacer("&#43;", "+", "&amp;", "&", "&#39;", "'", "&lt;", "<", "&gt;", ">").Replace(m51Tag.ReplaceAllString(s, " "))), " ")
+	return strings.Join(strings.Fields(strings.NewReplacer("&#43;", "+", "&amp;", "&", "&#39;", "'", "&lt;", "<", "&gt;", ">").Replace(openBGPDHTMLTags.ReplaceAllString(s, " "))), " ")
 }
 
 func TestOpenBGPD93RTRFixtureRendersEverythingTheBackendReports(t *testing.T) {
-	h := m47Handler(t, nil, backendSpec{"a", "Alpha", m51Real(t)})
-	page := m51Page(t, h, "/rtr", 200)
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", openBGPD93Backend(t)})
+	page := openBGPD93Page(t, h, "/rtr", 200)
 	txt := textOf(page)
 	for _, want := range []string{
 		"2 sessions", "validator-1 established v1 (min v0) 4321 80 16m56s / 10m / 2h",
@@ -93,9 +93,9 @@ func TestOpenBGPD93RTRFixtureRendersEverythingTheBackendReports(t *testing.T) {
 	// Privacy default: no validator address, port or raw document anywhere.
 	mustNotContain(t, page, "192.0.2.3", "192.0.2.4", "3323", "rtrs", "remote_addr", "Raw JSON")
 
-	addr := m47Handler(t, func(c *config.Config) { c.Features.RTRSessionAddresses = b3(true) },
-		backendSpec{"a", "Alpha", m51Real(t)})
-	mustContain(t, m51Page(t, addr, "/rtr", 200), "<code>192.0.2.3:3323</code>", "<code>192.0.2.4:3323</code>")
+	addr := newTestRoutes(t, func(c *config.Config) { c.Features.RTRSessionAddresses = b3(true) },
+		backendSpec{"a", "Alpha", openBGPD93Backend(t)})
+	mustContain(t, openBGPD93Page(t, addr, "/rtr", 200), "<code>192.0.2.3:3323</code>", "<code>192.0.2.4:3323</code>")
 }
 
 // recordingPTR records every reverse lookup the application attempts.
@@ -120,7 +120,7 @@ func (r *recordingPTR) addrs() []string {
 func TestOpenBGPD93RTRAddressesDoNotLeakThroughEnrichmentOrOtherPages(t *testing.T) {
 	// A validator address must not appear on any other page, be handed to the
 	// resolver, or be resolvable through the cache-only status endpoint.
-	cfg, closeAll := testConfig(defaults(), backendSpec{"a", "Alpha", m51Real(t)})
+	cfg, closeAll := testConfig(defaults(), backendSpec{"a", "Alpha", openBGPD93Backend(t)})
 	defer closeAll()
 	cfg.PTREnrichment = config.PTRDefaults()
 	cfg.PTREnrichment.Enabled = true
@@ -135,7 +135,7 @@ func TestOpenBGPD93RTRAddressesDoNotLeakThroughEnrichmentOrOtherPages(t *testing
 	routes := h.Routes()
 
 	for _, p := range []string{"/rtr", "/neighbors", "/?type=prefix&q=198.51.100.0/24", "/communities"} {
-		page := m51Page(t, routes, p, 200)
+		page := openBGPD93Page(t, routes, p, 200)
 		mustNotContain(t, page, "192.0.2.3", "192.0.2.4", `data-ptr="192.0.2.3"`, `data-ptr="192.0.2.4"`)
 	}
 	for _, ep := range []string{"/ptr-status?ip=192.0.2.3", "/ptr-status?ip=192.0.2.4"} {
@@ -167,8 +167,8 @@ func (noASN) LookupTXT(context.Context, string) ([]string, error) {
 }
 
 func TestOpenBGPD93NeighborAndSummaryFixture(t *testing.T) {
-	h := m47Handler(t, nil, backendSpec{"a", "Alpha", m51Real(t)})
-	nei := m51Page(t, h, "/neighbors", 200)
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", openBGPD93Backend(t)})
+	nei := openBGPD93Page(t, h, "/neighbors", 200)
 	txt := textOf(nei)
 	for _, want := range []string{
 		"192.0.2.1 example-description AS64500 Established up 01:00:37",
@@ -181,23 +181,23 @@ func TestOpenBGPD93NeighborAndSummaryFixture(t *testing.T) {
 			t.Errorf("neighbors page lacks %q\n%s", want, txt)
 		}
 	}
-	sum := textOf(m51Page(t, h, "/neighbors", 200))
+	sum := textOf(openBGPD93Page(t, h, "/neighbors", 200))
 	for _, want := range []string{"1 Sessions reported", "1 Established", "0 Other states", "192.0.2.1 example-description AS64500 Established"} {
 		if !strings.Contains(sum, want) {
 			t.Errorf("summary lacks %q\n%s", want, sum)
 		}
 	}
 	// /summary is no longer a public page.
-	m51Page(t, h, "/summary", 404)
+	openBGPD93Page(t, h, "/summary", 404)
 	// Raw JSON stays off by default and appears only when opted in.
 	mustNotContain(t, nei, "Raw JSON", "bgpid", "&#34;remote_as&#34;")
-	raw := m47Handler(t, func(c *config.Config) { c.Display.RawJSON = true }, backendSpec{"a", "Alpha", m51Real(t)})
-	mustContain(t, m51Page(t, raw, "/neighbors", 200), "Raw JSON")
+	raw := newTestRoutes(t, func(c *config.Config) { c.Display.RawJSON = true }, backendSpec{"a", "Alpha", openBGPD93Backend(t)})
+	mustContain(t, openBGPD93Page(t, raw, "/neighbors", 200), "Raw JSON")
 }
 
 func TestOpenBGPD93RIBFixtureV4AndV6(t *testing.T) {
-	h := m47Handler(t, nil, backendSpec{"a", "Alpha", m51Real(t)})
-	v4 := m51Page(t, h, "/?type=prefix&q=198.51.100.7", 200)
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", openBGPD93Backend(t)})
+	v4 := openBGPD93Page(t, h, "/?type=prefix&q=198.51.100.7", 200)
 	txt := textOf(v4)
 	for _, want := range []string{
 		"COMPLETE Alpha · Test · 1 route",
@@ -209,14 +209,14 @@ func TestOpenBGPD93RIBFixtureV4AndV6(t *testing.T) {
 			t.Errorf("IPv4 results lack %q\n%s", want, txt)
 		}
 	}
-	v6 := textOf(m51Page(t, h, "/?type=prefix&q=2001:db8:100::1", 200))
+	v6 := textOf(openBGPD93Page(t, h, "/?type=prefix&q=2001:db8:100::1", 200))
 	for _, want := range []string{"COMPLETE Alpha · Test · 1 route", "2001:db8:100::/48 BEST 64501 64502 AS64502 2001:db8::1", "valid unknown"} {
 		if !strings.Contains(v6, want) {
 			t.Errorf("IPv6 results lack %q\n%s", want, v6)
 		}
 	}
 	// The family comes from the prefix, never from next hop or neighbor.
-	mustContain(t, m51Page(t, h, "/?type=prefix&q=2001:db8:100::1", 200), `Address family</span><strong>IPv6`)
+	mustContain(t, openBGPD93Page(t, h, "/?type=prefix&q=2001:db8:100::1", 200), `Address family</span><strong>IPv6`)
 	mustContain(t, v4, `Address family</span><strong>IPv4`)
 	// Default display: Neighbor column hidden, raw JSON absent.
 	mustNotContain(t, v4, "<th>Neighbor</th>", "Raw JSON", "&#34;attributes&#34;")
@@ -224,7 +224,7 @@ func TestOpenBGPD93RIBFixtureV4AndV6(t *testing.T) {
 }
 
 // pills extracts (class, text) of the RPKI and ASPA cells of every route row.
-func m51Pills(page, col string) [][2]string {
+func validationStatusPills(page, col string) [][2]string {
 	re := regexp.MustCompile(`class="c-` + col + `"[^>]*><span class="pill (\w+)">([^<]*)</span>`)
 	var out [][2]string
 	for _, m := range re.FindAllStringSubmatch(page, -1) {
@@ -239,7 +239,7 @@ func TestRPKIAndASPAStatesAreNotConflated(t *testing.T) {
 	var doc struct {
 		Rib []map[string]any `json:"rib"`
 	}
-	if err := json.Unmarshal([]byte(m51Fixture(t, "rib-v4.json")), &doc); err != nil {
+	if err := json.Unmarshal([]byte(openBGPD93Fixture(t, "rib-v4.json")), &doc); err != nil {
 		t.Fatal(err)
 	}
 	base := doc.Rib[0]
@@ -265,14 +265,14 @@ func TestRPKIAndASPAStatesAreNotConflated(t *testing.T) {
 		mk("198.51.103.0/24", "-", "-"),
 	}
 	body, _ := json.Marshal(doc)
-	h := m47Handler(t, nil, backendSpec{"a", "Alpha", serveDoc(string(body))})
-	page := m51Page(t, h, "/?type=prefix&q=198.51.100.0/22&all=1", 200)
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", serveDoc(string(body))})
+	page := openBGPD93Page(t, h, "/?type=prefix&q=198.51.100.0/22&all=1", 200)
 	wantOVS := [][2]string{{"good", "valid"}, {"bad", "invalid"}, {"muted", "not-found"}, {"muted", "—"}}
 	wantAVS := [][2]string{{"good", "valid"}, {"bad", "invalid"}, {"muted", "unknown"}, {"muted", "—"}}
-	if got := m51Pills(page, "rpki"); fmt.Sprint(got) != fmt.Sprint(wantOVS) {
+	if got := validationStatusPills(page, "rpki"); fmt.Sprint(got) != fmt.Sprint(wantOVS) {
 		t.Errorf("RPKI pills %v, want %v", got, wantOVS)
 	}
-	if got := m51Pills(page, "aspa"); fmt.Sprint(got) != fmt.Sprint(wantAVS) {
+	if got := validationStatusPills(page, "aspa"); fmt.Sprint(got) != fmt.Sprint(wantAVS) {
 		t.Errorf("ASPA pills %v, want %v", got, wantAVS)
 	}
 	// Route qualification is hidden by default and can be enabled explicitly.
@@ -281,9 +281,9 @@ func TestRPKIAndASPAStatesAreNotConflated(t *testing.T) {
 
 // ---- multi-backend matrix ----
 
-type m51Counter struct{ rib, rtr atomic.Int64 }
+type backendQueryCounters struct{ rib, rtr atomic.Int64 }
 
-func (c *m51Counter) wrap(h http.HandlerFunc) http.HandlerFunc {
+func (c *backendQueryCounters) wrap(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/rib":
@@ -297,11 +297,12 @@ func (c *m51Counter) wrap(h http.HandlerFunc) http.HandlerFunc {
 
 func abort(w http.ResponseWriter) { panic(http.ErrAbortHandler) }
 
-// m51Backends returns the ten-scenario backend set of milestone 5.1 section 8.
-func m51Backends(t *testing.T) (specs []backendSpec, counters map[string]*m51Counter) {
-	counters = map[string]*m51Counter{}
+// multiBackendFixtures builds backends with independent success, failure,
+// delay, route, and RTR responses for multi-backend behavior checks.
+func multiBackendFixtures(t *testing.T) (specs []backendSpec, counters map[string]*backendQueryCounters) {
+	counters = map[string]*backendQueryCounters{}
 	add := func(id string, h http.HandlerFunc) {
-		c := &m51Counter{}
+		c := &backendQueryCounters{}
 		counters[id] = c
 		specs = append(specs, backendSpec{id, "B-" + id, c.wrap(h)})
 	}
@@ -317,9 +318,9 @@ func m51Backends(t *testing.T) (specs []backendSpec, counters map[string]*m51Cou
 				}
 				fmt.Fprint(w, rtr)
 			case "/neighbors":
-				fmt.Fprint(w, m47Neighbors)
+				fmt.Fprint(w, neighborFixture)
 			case "/summary":
-				fmt.Fprint(w, m47Summary)
+				fmt.Fprint(w, summaryFixture)
 			default:
 				http.NotFound(w, r)
 			}
@@ -328,7 +329,7 @@ func m51Backends(t *testing.T) (specs []backendSpec, counters map[string]*m51Cou
 	doc := func(s string) http.HandlerFunc {
 		return func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, s) }
 	}
-	fix := m51Fixture(t, "rtr.json")
+	fix := openBGPD93Fixture(t, "rtr.json")
 
 	add("ok", full(doc(ribJSON(3, false)), fix))                                             // 1 healthy, RTR sessions
 	add("down", func(w http.ResponseWriter, r *http.Request) { abort(w) })                   // 2 unavailable
@@ -352,30 +353,30 @@ func m51Backends(t *testing.T) (specs []backendSpec, counters map[string]*m51Cou
 }
 
 var (
-	m51SectionSplit = regexp.MustCompile(`<section class="(?:panel result-group|result-group panel)">`)
-	m51SectionName  = regexp.MustCompile(`class="bname"[^>]*>([^<]+)<|<h2>([^<]+?) <small>`)
+	backendSectionPattern = regexp.MustCompile(`<section class="(?:panel result-group|result-group panel)">`)
+	backendNamePattern  = regexp.MustCompile(`class="bname"[^>]*>([^<]+)<|<h2>([^<]+?) <small>`)
 )
 
-// m51Sections splits a route, neighbor or RTR page into its per-backend
+// splitBackendSections splits a route, neighbor or RTR page into its per-backend
 // sections, keyed by backend name.
-func m51Sections(page string) map[string]string {
+func splitBackendSections(page string) map[string]string {
 	out := map[string]string{}
-	for _, s := range m51SectionSplit.Split(page, -1)[1:] {
+	for _, s := range backendSectionPattern.Split(page, -1)[1:] {
 		if i := strings.Index(s, "</section>"); i >= 0 {
 			s = s[:i]
 		}
-		if m := m51SectionName.FindStringSubmatch(s); m != nil {
+		if m := backendNamePattern.FindStringSubmatch(s); m != nil {
 			out[m[1]+m[2]] = s
 		}
 	}
 	return out
 }
 
-func m51Matrix(t *testing.T, ttl time.Duration) (http.Handler, map[string]*m51Counter) {
+func newMultiBackendHandler(t *testing.T, ttl time.Duration) (http.Handler, map[string]*backendQueryCounters) {
 	lg := defaults()
 	lg.QueryTimeout = 400 * time.Millisecond
 	lg.CacheTTL = ttl
-	specs, counters := m51Backends(t)
+	specs, counters := multiBackendFixtures(t)
 	cfg, closeAll := testConfig(lg, specs...)
 	t.Cleanup(closeAll)
 	h, err := NewHandler(cfg)
@@ -387,9 +388,9 @@ func m51Matrix(t *testing.T, ttl time.Duration) (http.Handler, map[string]*m51Co
 }
 
 func TestMultiBackendMatrixKeepsEveryOutcomeSeparateAndAttributed(t *testing.T) {
-	h, _ := m51Matrix(t, 0)
-	page := m51Page(t, h, "/?type=prefix&q=10.0.0.0/24&backend=all", 200)
-	sec := m51Sections(page)
+	h, _ := newMultiBackendHandler(t, 0)
+	page := openBGPD93Page(t, h, "/?type=prefix&q=10.0.0.0/24&backend=all", 200)
+	sec := splitBackendSections(page)
 	if len(sec) != 8 {
 		t.Fatalf("%d backend sections, want 8: %v", len(sec), keys(sec))
 	}
@@ -456,11 +457,11 @@ func keys(m map[string]string) []string {
 }
 
 func TestMultiBackendMatrixCacheKeysAreBackendAwareAndFailuresAreNotCached(t *testing.T) {
-	h, c := m51Matrix(t, 20*time.Second)
+	h, c := newMultiBackendHandler(t, 20*time.Second)
 	target := "/?type=prefix&q=10.0.0.0/24&backend=all"
-	first := m51Page(t, h, target, 200)
-	second := m51Page(t, h, target, 200)
-	sec1, sec2 := m51Sections(first), m51Sections(second)
+	first := openBGPD93Page(t, h, target, 200)
+	second := openBGPD93Page(t, h, target, 200)
+	sec1, sec2 := splitBackendSections(first), splitBackendSections(second)
 	for _, name := range []string{"B-ok", "B-empty", "B-part", "B-v6"} {
 		if strings.Contains(sec1[name], "cached") {
 			t.Errorf("%s: a cold search must not be labelled cached", name)
@@ -483,8 +484,8 @@ func TestMultiBackendMatrixCacheKeysAreBackendAwareAndFailuresAreNotCached(t *te
 	// A different backend selection is a different cache key: asking only the
 	// healthy backend must not return the other backends' cached routes, and
 	// one backend's cached entry never answers for another.
-	one := m51Page(t, h, "/?type=prefix&q=10.0.0.0/24&backend=ok", 200)
-	if s := m51Sections(one); len(s) != 1 || s["B-ok"] == "" {
+	one := openBGPD93Page(t, h, "/?type=prefix&q=10.0.0.0/24&backend=ok", 200)
+	if s := splitBackendSections(one); len(s) != 1 || s["B-ok"] == "" {
 		t.Errorf("backend=ok produced sections %v", keys(s))
 	}
 	mustNotContain(t, one[strings.Index(one, `id="results"`):], "2001:db8", "B-v6", "B-down")
@@ -492,7 +493,7 @@ func TestMultiBackendMatrixCacheKeysAreBackendAwareAndFailuresAreNotCached(t *te
 		t.Errorf("single-backend request re-queried the cached backend (%d queries)", got)
 	}
 	// Same query, different prefix: cache miss for every backend.
-	m51Page(t, h, "/?type=prefix&q=10.9.9.0/24&backend=ok", 200)
+	openBGPD93Page(t, h, "/?type=prefix&q=10.9.9.0/24&backend=ok", 200)
 	if got := c["ok"].rib.Load(); got != 2 {
 		t.Errorf("new query was not sent upstream (%d)", got)
 	}
@@ -507,10 +508,10 @@ func TestMultiBackendMatrixPaginationIsPerBackend(t *testing.T) {
 		{"none", "None", serveDoc("{\n\n}\n")},      // no routes
 	}
 	h := newTestHandler(t, lg, specs...)
-	p1 := m51Page(t, h, "/?type=prefix&q=10.0.0.0/24&backend=all", 200)
+	p1 := openBGPD93Page(t, h, "/?type=prefix&q=10.0.0.0/24&backend=all", 200)
 	// Pages are numbered over the combined list; every backend section stays
 	// its own and says what it is showing.
-	sec := m51Sections(p1)
+	sec := splitBackendSections(p1)
 	if len(sec) != 3 {
 		t.Fatalf("sections %v", keys(sec))
 	}
@@ -524,16 +525,16 @@ func TestMultiBackendMatrixPaginationIsPerBackend(t *testing.T) {
 		t.Error("routes crossed backends")
 	}
 	// Page 2 continues the combined list: the empty backend keeps its empty status.
-	p2 := m51Page(t, h, "/?type=prefix&q=10.0.0.0/24&backend=all&page=2", 200)
+	p2 := openBGPD93Page(t, h, "/?type=prefix&q=10.0.0.0/24&backend=all&page=2", 200)
 	mustContain(t, p2, "Page 2 of 4")
 	// A single backend is paged on its own.
-	b := m51Page(t, h, "/?type=prefix&q=10.0.0.0/24&backend=two&page=3", 200)
+	b := openBGPD93Page(t, h, "/?type=prefix&q=10.0.0.0/24&backend=two&page=3", 200)
 	mustContain(t, b, "Page 3 of 3")
-	if s := m51Sections(b); len(s) != 1 {
+	if s := splitBackendSections(b); len(s) != 1 {
 		t.Errorf("backend=two page 3 sections %v", keys(s))
 	}
 	// Out of range and invalid pages.
-	mustContain(t, m51Page(t, h, "/?type=prefix&q=10.0.0.0/24&backend=two&page=9", 200), "Page 9 does not exist")
+	mustContain(t, openBGPD93Page(t, h, "/?type=prefix&q=10.0.0.0/24&backend=two&page=9", 200), "Page 9 does not exist")
 	for _, bad := range []string{"0", "-1", "x", "1.5"} {
 		rr := get(h, "/?type=prefix&q=10.0.0.0/24&backend=two&page="+bad)
 		if rr.Code != 400 {
@@ -541,14 +542,14 @@ func TestMultiBackendMatrixPaginationIsPerBackend(t *testing.T) {
 		}
 	}
 	// Exactly one page: no pager.
-	one := m51Page(t, h, "/?type=prefix&q=10.0.0.0/24&backend=none", 200)
+	one := openBGPD93Page(t, h, "/?type=prefix&q=10.0.0.0/24&backend=none", 200)
 	mustNotContain(t, one, `class="pager"`)
 }
 
 func TestMultiBackendRTRStatesStaySeparatePerBackend(t *testing.T) {
-	h, c := m51Matrix(t, 0)
-	page := m51Page(t, h, "/rtr", 200)
-	sec := m51Sections(page)
+	h, c := newMultiBackendHandler(t, 0)
+	page := openBGPD93Page(t, h, "/rtr", 200)
+	sec := splitBackendSections(page)
 	want := map[string]string{
 		"B-ok":    "2 sessions",
 		"B-down":  "unavailable",
@@ -597,13 +598,13 @@ func TestMultiBackendRTRStatesStaySeparatePerBackend(t *testing.T) {
 // ---- browser history: server contract for a rejected search ----
 
 func TestHistoryRestoreOfRejectedSearchKeepsHTTP400AndServesTheFullPage(t *testing.T) {
-	// Root cause of the M4.9 report: HTMX 2 swaps a history-restore response
-	// only for 2xx/3xx, so a rejected search (400) left the old page under the
+	// HTMX 2 swaps a history-restore response only for 2xx/3xx, so a rejected
+	// search (400) left the old page under the
 	// restored URL. The server contract is unchanged and must stay so: the
 	// status remains 400 (never masked as success) and the body is a complete,
 	// self-sufficient document; app.js falls back to an ordinary navigation of
 	// the URL (testdata/history.test.js, testdata/browser/regression.js).
-	h := m47Handler(t, nil, backendSpec{"a", "Alpha", m51Real(t)})
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", openBGPD93Backend(t)})
 	bad := "/?backend=all&type=prefix&q=999.1.1.1&view=table&prefix=&as="
 	for name, hdr := range map[string][]string{
 		"history restore":  {"HX-Request", "true", "HX-History-Restore-Request", "true"},
@@ -640,12 +641,12 @@ func TestHistoryRestoreOfRejectedSearchKeepsHTTP400AndServesTheFullPage(t *testi
 }
 
 func TestHistoryFallbackScriptIsServedAndHistorySnapshotsStayDisabled(t *testing.T) {
-	h := m47Handler(t, nil, backendSpec{"a", "Alpha", m51Real(t)})
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", openBGPD93Backend(t)})
 	js := get(h, "/static/app.js")
 	if js.Code != 200 || !strings.Contains(js.Body.String(), "htmx:historyCacheMissLoadError") {
 		t.Fatalf("app.js does not carry the history fallback (status %d)", js.Code)
 	}
-	mustContain(t, m51Page(t, h, "/", 200), `"historyCacheSize":0`)
+	mustContain(t, openBGPD93Page(t, h, "/", 200), `"historyCacheSize":0`)
 }
 
 // ---- hostile strings, read-only access ----
@@ -655,7 +656,7 @@ func TestHostileBackendTextIsEscapedEndToEnd(t *testing.T) {
 	var doc struct {
 		Rib []map[string]any `json:"rib"`
 	}
-	if err := json.Unmarshal([]byte(m51Fixture(t, "rib-v4.json")), &doc); err != nil {
+	if err := json.Unmarshal([]byte(openBGPD93Fixture(t, "rib-v4.json")), &doc); err != nil {
 		t.Fatal(err)
 	}
 	r := doc.Rib[0]
@@ -700,14 +701,14 @@ func TestHostileBackendTextIsEscapedEndToEnd(t *testing.T) {
 func TestOnlyReadOnlyEndpointsReachTheBackend(t *testing.T) {
 	var mu sync.Mutex
 	seen := map[string]bool{}
-	inner := m51Real(t)
+	inner := openBGPD93Backend(t)
 	rec := func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		seen[r.Method+" "+r.URL.Path] = true
 		mu.Unlock()
 		inner(w, r)
 	}
-	h := m47Handler(t, nil, backendSpec{"a", "Alpha", rec})
+	h := newTestRoutes(t, nil, backendSpec{"a", "Alpha", rec})
 	for _, p := range []string{
 		"/", "/?type=prefix&q=198.51.100.0/24", "/?type=asn&q=64502", "/?type=large-community&q=64500:0:8",
 		"/?prefix=198.51.100.0/24&all=1", "/?prefix=198.51.100.0/24&view=text&output=plain", "/neighbors", "/summary", "/rtr",

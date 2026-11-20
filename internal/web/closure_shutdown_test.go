@@ -1,6 +1,6 @@
 package web
 
-// Acceptance A: graceful shutdown with shared queries and slow writers.
+// Graceful shutdown with shared queries and slow writers.
 // Every test drives the real Handler.Shutdown sequence used by main, over real
 // TCP connections, with short configurable grace periods.
 

@@ -1,6 +1,6 @@
 package web
 
-// M3.2: admission counters, client-disconnect handling, shutdown logging.
+// Tests for admission counters, client disconnect handling, and shutdown logs.
 
 import (
 	"context"
