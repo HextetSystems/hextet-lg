@@ -354,7 +354,7 @@ func multiBackendFixtures(t *testing.T) (specs []backendSpec, counters map[strin
 
 var (
 	backendSectionPattern = regexp.MustCompile(`<section class="(?:panel result-group|result-group panel)">`)
-	backendNamePattern  = regexp.MustCompile(`class="bname"[^>]*>([^<]+)<|<h2>([^<]+?) <small>`)
+	backendNamePattern    = regexp.MustCompile(`class="bname"[^>]*>([^<]+)<|<h2>([^<]+?) <small>`)
 )
 
 // splitBackendSections splits a route, neighbor or RTR page into its per-backend

@@ -62,8 +62,8 @@ func securityRouteFixture() string {
 var (
 	// What must never be shown: the excluded prefixes, and everything that only
 	// their routes carry (next hops, origin ASNs, raw-only markers).
-	excludedPrefixes = []string{"198.51.100.", "203.0.113.0/24", "2001:db8:dead", "2001:db8:eeee::/48"}
-	excludedRouteData     = []string{"192.0.2.66", "192.0.2.67", "192.0.2.68", "2001:db8:ffff::66", "2001:db8:ffff::67", "2001:db8:ffff::68",
+	excludedPrefixes  = []string{"198.51.100.", "203.0.113.0/24", "2001:db8:dead", "2001:db8:eeee::/48"}
+	excludedRouteData = []string{"192.0.2.66", "192.0.2.67", "192.0.2.68", "2001:db8:ffff::66", "2001:db8:ffff::67", "2001:db8:ffff::68",
 		"3666", "3667", "3668", "3669", "3670", "3671",
 		"RAWONLY-1 ", "RAWONLY-2 ", "RAWONLY-3 ", "RAWONLY-6 ", "RAWONLY-7 ", "RAWONLY-8 "}
 	visibleRoutePrefixes = []string{"192.0.2.0/24", "203.0.113.128/25", "2001:db8:1::/48", "2001:db8:eeee:1::/64"}
