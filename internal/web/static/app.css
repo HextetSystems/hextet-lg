@@ -28,7 +28,6 @@ nav a[aria-current=page]{border-bottom:2px solid var(--color-accent-text);paddin
 
 /* Page structure */
 main{max-width:1240px;margin:0 auto;padding:18px 28px 20px}
-.page-tools{display:flex;justify-content:flex-end;margin-bottom:8px}
 .intro{margin-bottom:14px}
 .page-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 16px;margin:0 0 10px}
 .page-head h1{margin:0}
