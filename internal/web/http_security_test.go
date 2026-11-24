@@ -64,7 +64,6 @@ var (
 	// their routes carry (next hops, origin ASNs, raw-only markers).
 	excludedPrefixes  = []string{"198.51.100.", "203.0.113.0/24", "2001:db8:dead", "2001:db8:eeee::/48"}
 	excludedRouteData = []string{"192.0.2.66", "192.0.2.67", "192.0.2.68", "2001:db8:ffff::66", "2001:db8:ffff::67", "2001:db8:ffff::68",
-		"3666", "3667", "3668", "3669", "3670", "3671",
 		"RAWONLY-1 ", "RAWONLY-2 ", "RAWONLY-3 ", "RAWONLY-6 ", "RAWONLY-7 ", "RAWONLY-8 "}
 	visibleRoutePrefixes = []string{"192.0.2.0/24", "203.0.113.128/25", "2001:db8:1::/48", "2001:db8:eeee:1::/64"}
 )
@@ -679,6 +678,11 @@ func TestExcludedRoutesNeverReachOutputCacheOrEnrichment(t *testing.T) {
 							t.Errorf("pass %d %s (%s): excluded route data %q is visible", pass, target, name, hidden)
 						}
 					}
+					for _, hiddenASN := range []string{"3666", "3667", "3668", "3669", "3670", "3671"} {
+						if containsASNToken(body, hiddenASN) {
+							t.Errorf("pass %d %s (%s): excluded route ASN %q is visible", pass, target, name, hiddenASN)
+						}
+					}
 					// Counts describe visible routes only.
 					if got := rr.Header().Get("X-Hextet-LG-Routes"); got != "4" {
 						t.Errorf("%s (%s): %s routes counted, want the 4 visible ones", target, name, got)
@@ -730,6 +734,31 @@ func TestExcludedRoutesNeverReachOutputCacheOrEnrichment(t *testing.T) {
 			t.Errorf("unexpected upstream request %q", r)
 		}
 	}
+}
+
+// containsASNToken finds an ASN rendered in the table (AS123) or as a token
+// in an AS path/raw JSON. Route map URLs contain compressed data, so searching
+// the whole HTML for bare ASN digits can match unrelated encoded bytes.
+func containsASNToken(body, asn string) bool {
+	for offset := 0; offset < len(body); {
+		i := strings.Index(body[offset:], asn)
+		if i < 0 {
+			return false
+		}
+		i += offset
+		end := i + len(asn)
+		leftBoundary := i == 0 || !isASCIIAlphaNum(body[i-1]) || (i >= 2 && body[i-2:i] == "AS")
+		rightBoundary := end == len(body) || !isASCIIAlphaNum(body[end])
+		if leftBoundary && rightBoundary {
+			return true
+		}
+		offset = end
+	}
+	return false
+}
+
+func isASCIIAlphaNum(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9'
 }
 
 // --- External enrichment -----------------------------------------------------
