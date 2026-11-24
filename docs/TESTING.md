@@ -1,6 +1,6 @@
 # Testing
 
-The default test suite uses mock backends and does not require a running OpenBGPD service or external network access. CI runs the standard checks below, builds and smoke-tests the container, validates the source-checkout Compose file with default and digest-pinned image values, and checks the release archive. The container smoke test uses the example configuration and does not contact a backend at startup.
+The default test suite uses mock backends and does not require a running OpenBGPD service or external network access. Pull request CI runs the standard checks below, builds and smoke-tests the container, validates the source-checkout Compose file with default and digest-pinned image values, and checks the release archive. Pushes to `main` run the standard Go and JavaScript checks; release packaging has already been validated on the pull request, and the release workflow requires successful CI for the exact main commit. The container smoke test uses the example configuration and does not contact a backend at startup.
 
 ## Standard checks
 

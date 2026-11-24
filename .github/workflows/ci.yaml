@@ -3,9 +3,9 @@
 # smoke test uses the committed example configuration (nothing contacts a
 # backend at startup).
 #
-# Triggers: pull requests and pushes to main. Before publishing a tag,
-# release.yaml requires a successful main run for that exact commit instead of
-# rerunning the full CI suite.
+# Triggers: pull requests and pushes to main. Pull requests validate Go,
+# container/Compose, and release packaging. Main pushes run the Go checks; the
+# release workflow requires those checks for the exact commit before publishing.
 name: CI
 
 on:
@@ -58,6 +58,7 @@ jobs:
         run: go test -race ./...
 
   docker:
+    if: github.event_name == 'pull_request'
     name: Docker image and Compose
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -96,9 +97,9 @@ jobs:
           HEXTET_LG_IMAGE=ghcr.io/hextetsystems/hextet-lg@sha256:0000000000000000000000000000000000000000000000000000000000000000 docker compose config -q
 
   goreleaser:
-    # Validate release packaging on PRs and on the exact main commit that a
-    # release tag will require. The tag workflow only performs the real release.
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    # Validate release packaging before merge. The tag workflow performs the
+    # real release after the main Go checks have passed.
+    if: github.event_name == 'pull_request'
     name: GoReleaser configuration and snapshot
     runs-on: ubuntu-latest
     timeout-minutes: 20
