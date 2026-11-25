@@ -49,7 +49,7 @@ func TestNeighborNavigationAndVisibility(t *testing.T) {
 	defer h.Close()
 	handler := h.Routes()
 	page := get(handler, "/neighbors?backend=all").Body.String()
-	for _, want := range []string{`href="/?neighbor=192.0.2.1&amp;backend=a&amp;view=table"`, `href="/?neighbor=192.0.2.1&amp;backend=b&amp;view=table"`, `neighbor=2001%3Adb8%3Affff%3A1234%3A5678%3Aabcd%3Aef01%3A2345&amp;backend=a`, `title="edge &#34;&lt;script&gt; — 192.0.2.1 — AS64500"`, `>missing</td>`, `>bad-address</code>`} {
+	for _, want := range []string{`href="/?neighbor=192.0.2.1&amp;backend=a&amp;view=table"`, `href="/?neighbor=192.0.2.1&amp;backend=b&amp;view=table"`, `neighbor=2001%3Adb8%3Affff%3A1234%3A5678%3Aabcd%3Aef01%3A2345&amp;backend=a`, `title="edge &#34;&lt;script&gt; — 192.0.2.1 — AS64500"`, `>missing</td>`, `>bad-address</code>`, `Selecting a neighbor address loads all routes from that neighbor and may take some time.`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("overview missing %q", want)
 		}
@@ -64,7 +64,7 @@ func TestNeighborNavigationAndVisibility(t *testing.T) {
 		if rr.Code != 200 || rr.Header().Get("HX-Push-Url") != target || strings.Contains(body, "10.1.0.0/16") || strings.Contains(body, "fd12::/16") || !strings.Contains(body, "2001:db8::/32") {
 			t.Fatalf("fragment %s %d %s", target, rr.Code, body)
 		}
-		if !strings.Contains(body, `title="edge &#34;&lt;script&gt; — `) || !strings.Contains(body, `>edge &#34;&lt;script&gt; <a href=`) {
+		if !strings.Contains(body, `>edge &#34;&lt;script&gt; <code class="nb"><span>`) {
 			t.Fatalf("description/escaping: %s", body)
 		}
 		if strings.Contains(body, `neighbor=198.51.100.1`) {
@@ -89,13 +89,14 @@ func TestNeighborNavigationAndVisibility(t *testing.T) {
 	}
 }
 
-func TestNeighborLinkDropsSearchContext(t *testing.T) {
+func TestRouteNeighborIsNotLinked(t *testing.T) {
 	h := newTestRoutes(t, func(c *config.Config) { c.Display.RouteColumns.Neighbor = true }, backendSpec{"a", "Alpha", serveDoc(`[{"prefix":"2001:db8::/32","true_nexthop":"198.51.100.1","neighbor":{"remote_addr":"192.0.2.1","description":"example"}}]`)})
-	rr := get(h, "/?prefix=2001%3Adb8%3A%3A%2F32&af=ipv6&backend=all&view=table", "HX-Request", "true")
-	body := rr.Body.String()
-	want := `href="/?neighbor=192.0.2.1&amp;backend=a&amp;view=table"`
-	if rr.Code != 200 || strings.Count(body, want) != 2 || !strings.Contains(body, `<code class="nb"><span>192.0.2.1</span></code></a>`) || !strings.Contains(body, `>example <a href=`) {
-		t.Fatalf("route links: %s", body)
+	for _, headers := range [][]string{nil, {"HX-Request", "true"}} {
+		rr := get(h, "/?prefix=2001%3Adb8%3A%3A%2F32&af=ipv6&backend=all&view=table", headers...)
+		body := rr.Body.String()
+		if rr.Code != 200 || strings.Contains(body, `href="/?neighbor=192.0.2.1`) || strings.Count(body, `<code class="nb"><span>192.0.2.1</span></code>`) != 2 || !strings.Contains(body, `>example <code class="nb">`) {
+			t.Fatalf("route neighbor: %s", body)
+		}
 	}
 }
 

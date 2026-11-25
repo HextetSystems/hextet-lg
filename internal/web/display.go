@@ -1,6 +1,8 @@
 package web
 
 import (
+	"net/netip"
+
 	"github.com/HextetSystems/hextet-lg/internal/bgp"
 	"github.com/HextetSystems/hextet-lg/internal/config"
 )
@@ -34,11 +36,9 @@ func (h *Handler) routeCols() RouteCols {
 	return c
 }
 
-// NeighborCell is the presentation of one route's neighbor: the link to the
-// neighbor's routes plus the visible label. The label is display text only;
-// the link always targets the backend-supplied address and the source backend.
+// NeighborCell is the presentation of one route's neighbor label.
 type NeighborCell struct {
-	URL, LinkTitle string
+	ValidAddress bool
 	// Text and Title describe the label. Title is set when a reverse DNS name
 	// replaced or accompanies the address, so the numeric address stays
 	// reachable as a tooltip.
@@ -54,8 +54,9 @@ type NeighborCell struct {
 // the shared PTR cache only (never blocking on DNS) and only while the
 // Neighbor column is shown with the name or both format: otherwise the label
 // is the plain address.
-func (h *Handler) neighborCell(r bgp.Route, backend string) NeighborCell {
-	c := NeighborCell{URL: neighborURL(r.NeighborAddress, backend), LinkTitle: neighborTitle(r.NeighborDescription, r.NeighborAddress, ""), Text: r.NeighborAddress, Fallback: r.Neighbor}
+func (h *Handler) neighborCell(r bgp.Route) NeighborCell {
+	_, err := netip.ParseAddr(r.NeighborAddress)
+	c := NeighborCell{ValidAddress: err == nil, Text: r.NeighborAddress, Fallback: r.Neighbor}
 	if c.Fallback == "" {
 		c.Fallback = "—"
 	}

@@ -412,7 +412,7 @@ func TestNeighborNameFormats(t *testing.T) {
 				t.Fatalf("neighbor cells: %d", len(cell))
 			}
 			// Cache miss: the page never waits for DNS and shows the address.
-			mustContain(t, cell[0], `<a class="neighbor-address" href="/?neighbor=198.51.100.1&amp;backend=a&amp;view=table"`, ">198.51.100.1</span>")
+			mustContain(t, cell[0], `<span class="neighbor-address">`, ">198.51.100.1</span>")
 			if tc.format == "ip" {
 				mustNotContain(t, cell[0], "data-ptr")
 				if r.count("198.51.100.1") != 0 {
@@ -422,13 +422,10 @@ func TestNeighborNameFormats(t *testing.T) {
 			}
 			mustContain(t, cell[0], `data-ptr="198.51.100.1" data-ptr-format="`+tc.format+`"`)
 			settlePTR(t, h, "198.51.100.1")
-			// Cache hit: name rendered by the server, no enrichment target left, link unchanged.
+			// Cache hit: name rendered by the server, no enrichment target left.
 			cell = nbCells(get(routes, url).Body.String())
-			mustContain(t, cell[0], `<span title="`+tc.wantTitle+`">`+tc.wantText+`</span>`, `href="/?neighbor=198.51.100.1&amp;backend=a&amp;view=table"`)
+			mustContain(t, cell[0], `<span title="`+tc.wantTitle+`">`+tc.wantText+`</span>`)
 			mustNotContain(t, cell[0], "data-ptr")
-			if strings.Contains(strings.SplitN(cell[0], ">", 2)[0], "peer1") {
-				t.Error("hostname leaked into the link")
-			}
 			if r.count("198.51.100.1") != 1 {
 				t.Errorf("lookups: %d, want 1 (cache reuse)", r.count("198.51.100.1"))
 			}
@@ -457,7 +454,7 @@ func TestNeighborNameFallbacksAndNegativeCaching(t *testing.T) {
 		t.Errorf("negative fallback: %s", cells[0])
 	}
 	// IPv6 neighbor resolves like IPv4.
-	if !strings.Contains(cells[1], `<span title="v6-peer.example.net (2001:db8:ffff::1)">v6-peer.example.net</span>`) || !strings.Contains(cells[1], "/?neighbor=2001%3Adb8%3Affff%3A%3A1&amp;backend=a") {
+	if !strings.Contains(cells[1], `<span title="v6-peer.example.net (2001:db8:ffff::1)">v6-peer.example.net</span>`) {
 		t.Errorf("ipv6: %s", cells[1])
 	}
 	get(routes, url)
@@ -546,15 +543,15 @@ func TestHiddenNeighborColumnDoesNoNeighborDNS(t *testing.T) {
 	if r.count("198.51.100.1") != 0 {
 		t.Error("a hidden Neighbor column must not trigger neighbor lookups")
 	}
-	// Route details still show the neighbor, as its plain address and link.
-	mustContain(t, body, "<span>Neighbor</span>", `href="/?neighbor=198.51.100.1&amp;backend=a&amp;view=table"`)
+	// Route details still show the neighbor, as its plain address.
+	mustContain(t, body, "<span>Neighbor</span>", `<code class="nb"><span>198.51.100.1</span></code>`)
 	mustNotContain(t, body, `data-ptr="198.51.100.1"`, `data-ptr-format`)
 	// The description is escaped data.
 	mustContain(t, body, "peer &lt;b&gt;x&lt;/b&gt;")
 }
 
 func TestNeighborNamesNeedPTRAndNeverChangeIdentity(t *testing.T) {
-	// ptr_enrichment disabled: names cannot exist, the address is shown, the link is unchanged.
+	// ptr_enrichment disabled: names cannot exist, the address is shown.
 	doc := ribFixture(routeFixture("203.0.113.0/24", "192.0.2.1", "198.51.100.1", "64500", "valid", "valid"))
 	h := newRouteFixtureHandler(t, func(c *config.Config) {
 		c.Display.RouteColumns.Neighbor = true
@@ -564,10 +561,12 @@ func TestNeighborNamesNeedPTRAndNeverChangeIdentity(t *testing.T) {
 	if len(cell) != 1 || !strings.Contains(cell[0], ">198.51.100.1</span>") || strings.Contains(cell[0], "data-ptr") {
 		t.Errorf("without PTR enrichment: %v", cell)
 	}
-	// Same neighbor address on two backends: separate rows, links name their own backend.
+	// Same neighbor address on two backends: separate rows retain their labels.
 	h2 := newRouteFixtureHandler(t, func(c *config.Config) { c.Display.RouteColumns.Neighbor = true }, backendSpec{"a", "Alpha", serveDoc(doc)}, backendSpec{"b", "Beta", serveDoc(doc)})
 	body := get(h2, "/?type=prefix&q=203.0.113.0/24&backend=all").Body.String()
-	mustContain(t, body, `href="/?neighbor=198.51.100.1&amp;backend=a&amp;view=table"`, `href="/?neighbor=198.51.100.1&amp;backend=b&amp;view=table"`)
+	if strings.Count(body, `<span class="neighbor-address">`) != 2 || strings.Contains(body, `href="/?neighbor=198.51.100.1`) {
+		t.Errorf("neighbor labels: %s", body)
+	}
 }
 
 // ---- history ------------------------------------------------------------------

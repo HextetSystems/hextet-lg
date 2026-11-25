@@ -21,4 +21,4 @@
 
 {{/* The span is the only neighbor-name enrichment target; a late name replaces its text in place (see app.js). */}}
 {{define "nblabel"}}<code class="nb{{if .Format}} nb-{{.Format}}{{end}}"><span{{if .PTR}} data-ptr="{{.PTR}}" data-ptr-format="{{.Format}}"{{end}}{{with .Title}} title="{{.}}"{{end}}>{{.Text}}</span></code>{{end}}
-{{define "nbcell"}}{{if .URL}}<a class="neighbor-address" href="{{.URL}}" title="{{.LinkTitle}}">{{template "nblabel" .}}</a>{{else}}{{.Fallback}}{{end}}{{end}}
+{{define "nbcell"}}{{if .ValidAddress}}<span class="neighbor-address">{{template "nblabel" .}}</span>{{else}}{{.Fallback}}{{end}}{{end}}
